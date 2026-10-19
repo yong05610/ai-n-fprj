@@ -39,3 +39,6 @@ Thumbs.db
 
 # Temporary reference project; keep it out of the PaceMate repository
 /reference-AI NATIVE M -2/
+
+# Local session notes; not a project deliverable
+/대화기록.md

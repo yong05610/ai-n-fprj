@@ -43,18 +43,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       try {
-        let current = await restoreSession();
+        const current = await restoreSession();
         if (!current) {
-          current = await startAnonymousSession();
-          await recordConsent(current);
-        } else {
-          try {
-            await apiRequest("/api/user/profile", { token: await current.getToken() });
-          } catch (error) {
-            // Server-side consent missing (e.g. records deleted): re-record the consent already given.
-            if (error instanceof ApiError && error.code === "CONSENT_REQUIRED") await recordConsent(current);
-            else throw error;
-          }
+          // The stored consent flag doesn't match any live session (e.g. IndexedDB was cleared).
+          // Don't mint a new UID/consent record behind the user's back - send them back through the modal.
+          clearConsent();
+          if (!cancelled) setStatus("needs-consent");
+          return;
+        }
+        try {
+          await apiRequest("/api/user/profile", { token: await current.getToken() });
+        } catch (error) {
+          // Server-side consent missing (e.g. records deleted): re-record the consent already given.
+          if (error instanceof ApiError && error.code === "CONSENT_REQUIRED") await recordConsent(current);
+          else throw error;
         }
         if (!cancelled) {
           setSession(current);

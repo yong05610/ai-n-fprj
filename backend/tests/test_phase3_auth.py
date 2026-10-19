@@ -8,9 +8,9 @@ CONSENT = {"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": Tru
 GOAL = {
     "field": "Python 개발",
     "course": "기본문법",
-    "current_level_num": 1,
+    "current_level_order": 1,
     "current_level_name": "입문",
-    "target_level_num": 3,
+    "target_level_order": 3,
     "target_level_name": "실무 기초",
     "weekly_hours": 7,
     "target_date": "2026-12-31",
@@ -79,6 +79,26 @@ class TestConsent:
     def test_consent_requires_token(self, client: TestClient):
         assert client.post("/api/consent", json=CONSENT).status_code == 401
 
+    def test_consent_is_idempotent_for_same_version(self, client: TestClient, mock_auth_headers):
+        first = client.post("/api/consent", json=CONSENT, headers=mock_auth_headers)
+        assert first.status_code == 201
+        first_id = first.json()["id"]
+
+        second = client.post("/api/consent", json=CONSENT, headers=mock_auth_headers)
+        assert second.status_code == 200
+        assert second.json()["id"] == first_id
+
+    def test_consent_creates_new_record_when_terms_version_changes(self, client: TestClient, mock_auth_headers, monkeypatch):
+        import main
+
+        assert client.post("/api/consent", json=CONSENT, headers=mock_auth_headers).status_code == 201
+
+        monkeypatch.setattr(main, "CURRENT_TERMS_VERSION", "v1.1")
+        bumped = {**CONSENT, "terms_version": "v1.1"}
+        response = client.post("/api/consent", json=bumped, headers=mock_auth_headers)
+        assert response.status_code == 201
+        assert response.json()["terms_version"] == "v1.1"
+
 
 class TestGoalsAndTasks:
     def test_goal_crud_and_active_goal(self, client: TestClient, consented_headers):
@@ -107,8 +127,23 @@ class TestGoalsAndTasks:
         assert goal["user_id"] == "test-uid-alice"
 
     def test_goal_level_order_validated(self, client: TestClient, consented_headers):
-        payload = {**GOAL, "current_level_num": 4, "target_level_num": 2}
-        assert client.post("/api/goals", json=payload, headers=consented_headers).status_code == 400
+        lower = {**GOAL, "current_level_order": 4, "target_level_order": 2}
+        assert client.post("/api/goals", json=lower, headers=consented_headers).status_code == 400
+
+        same = {**GOAL, "current_level_order": 3, "target_level_order": 3}
+        assert client.post("/api/goals", json=same, headers=consented_headers).status_code == 400
+
+        higher = {**GOAL, "current_level_order": 1, "target_level_order": 2}
+        assert client.post("/api/goals", json=higher, headers=consented_headers).status_code == 201
+
+    def test_goal_target_date_in_past_rejected(self, client: TestClient, consented_headers):
+        payload = {**GOAL, "target_date": "2020-01-01"}
+        response = client.post("/api/goals", json=payload, headers=consented_headers)
+        assert response.status_code == 400
+
+    def test_goal_blank_field_or_course_rejected(self, client: TestClient, consented_headers):
+        assert client.post("/api/goals", json={**GOAL, "field": "   "}, headers=consented_headers).status_code == 422
+        assert client.post("/api/goals", json={**GOAL, "course": "   "}, headers=consented_headers).status_code == 422
 
     def test_task_crud_and_filters(self, client: TestClient, consented_headers):
         goal = client.post("/api/goals", json=GOAL, headers=consented_headers).json()
@@ -140,6 +175,11 @@ class TestGoalsAndTasks:
     def test_invalid_weekday_rejected(self, client: TestClient, consented_headers):
         goal = client.post("/api/goals", json=GOAL, headers=consented_headers).json()
         response = client.post("/api/tasks", json=_task(goal["id"], suggested_weekday="monday"), headers=consented_headers)
+        assert response.status_code == 422
+
+    def test_blank_task_title_rejected(self, client: TestClient, consented_headers):
+        goal = client.post("/api/goals", json=GOAL, headers=consented_headers).json()
+        response = client.post("/api/tasks", json=_task(goal["id"], title="   "), headers=consented_headers)
         assert response.status_code == 422
 
     def test_goal_delete_cascades_tasks(self, client: TestClient, consented_headers):
@@ -189,3 +229,22 @@ class TestDataDeletion:
         assert client.get("/api/goals", headers=consented_headers).json() == []
 
         assert len(client.get("/api/goals", headers=bob).json()) == 1
+
+    def test_delete_data_separates_auth_cleanup_failure(self, client: TestClient, consented_headers, monkeypatch):
+        import main
+
+        client.post("/api/goals", json=GOAL, headers=consented_headers)
+
+        def _boom(uid: str) -> None:
+            raise RuntimeError("firebase unavailable")
+
+        monkeypatch.setattr(main, "delete_auth_user", _boom)
+
+        response = client.post("/api/user/delete-data", headers=consented_headers)
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "auth_cleanup_pending"
+
+        # Firestore-side data must still be gone even though the account cleanup failed.
+        monkeypatch.undo()
+        assert client.get("/api/goals", headers=consented_headers).status_code == 403

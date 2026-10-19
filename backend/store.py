@@ -129,6 +129,12 @@ def store_backend() -> str:
     return os.getenv("STORE_BACKEND", "firestore").strip().lower()
 
 
+def assert_safe_store_config() -> None:
+    """Fail fast if the in-memory store is enabled on a deployed environment."""
+    if store_backend() == "memory" and os.getenv("RENDER"):
+        raise RuntimeError("STORE_BACKEND=memory must not be used in a deployed (Render) environment.")
+
+
 @lru_cache(maxsize=1)
 def get_store():
     if store_backend() == "memory":

@@ -2,7 +2,7 @@ import os
 from datetime import date, datetime, timezone
 from typing import Any, Optional, List
 
-from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi import FastAPI, HTTPException, Depends, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials
@@ -38,11 +38,12 @@ from schemas import (
     ConsentCreateRequest,
     ConsentResponse,
 )
-from store import USER_OWNED_COLLECTIONS, get_store
+from store import USER_OWNED_COLLECTIONS, assert_safe_store_config, get_store
 
 CURRENT_TERMS_VERSION = "v1.0"
 
 assert_safe_auth_config()
+assert_safe_store_config()
 
 
 def _allowed_origins() -> list[str]:
@@ -133,9 +134,11 @@ def _changes(payload) -> dict[str, Any]:
 
 
 def _validate_goal(goal: dict[str, Any]) -> None:
-    if goal["target_level_num"] < goal["current_level_num"]:
-        raise bad_request("목표 수준은 현재 수준보다 낮을 수 없습니다.", {"field": "target_level_num"})
-    _parse_date(goal["target_date"], "target_date")
+    if goal["target_level_order"] <= goal["current_level_order"]:
+        raise bad_request("목표 수준은 현재 수준보다 높은 수준만 선택할 수 있습니다.", {"field": "target_level_order"})
+    target_date = _parse_date(goal["target_date"], "target_date")
+    if target_date < date.today():
+        raise bad_request("목표 완료 희망일은 오늘 이후여야 합니다.", {"field": "target_date"})
 
 
 def _validate_week_start(value: str) -> None:
@@ -157,7 +160,12 @@ def _delete_task_children(db, uid: str, task_id: str) -> None:
     tags=["user"],
     summary="서비스 이용 안내 동의 기록 (익명 UID 발급 직후 호출)",
 )
-def create_consent(payload: ConsentCreateRequest, uid: str = Depends(get_current_uid), db=Depends(get_db)):
+def create_consent(
+    payload: ConsentCreateRequest,
+    response: Response,
+    uid: str = Depends(get_current_uid),
+    db=Depends(get_db),
+):
     if payload.terms_version != CURRENT_TERMS_VERSION:
         raise api_error(
             status.HTTP_400_BAD_REQUEST,
@@ -167,6 +175,14 @@ def create_consent(payload: ConsentCreateRequest, uid: str = Depends(get_current
         )
     if not (payload.privacy_agreed and payload.ai_use_agreed):
         raise bad_request("필수 안내 항목에 모두 동의해야 시작할 수 있습니다.")
+
+    existing = next(
+        (r for r in db.find("consent_records", user_id=uid) if r.get("terms_version") == payload.terms_version),
+        None,
+    )
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return existing
 
     now = _now_iso()
     record = db.create(
@@ -201,9 +217,10 @@ def create_consent(payload: ConsentCreateRequest, uid: str = Depends(get_current
 # NOTE: 핸들러 내부 로직은 Phase 1 범위에 따라 501 Not Implemented를 반환하며 실제 동작을 가장하지 않습니다.
 
 def _not_implemented():
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Phase 1 schema skeleton - business logic will be implemented in future phases.",
+    raise api_error(
+        status.HTTP_501_NOT_IMPLEMENTED,
+        "NOT_IMPLEMENTED",
+        "Phase 1 schema skeleton - business logic will be implemented in future phases.",
     )
 
 
@@ -328,23 +345,23 @@ def delete_task(task_id: str, uid: str = Depends(require_consented_uid), db=Depe
 async def list_study_logs(
     task_id: Optional[str] = Query(None, description="과제 ID 필터"),
     period: Optional[str] = Query("week", description="조회 기간 (week | all)"),
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
 ):
     _not_implemented()
 
 
 @app.post("/api/study-logs", response_model=StudyLogResponse, status_code=status.HTTP_201_CREATED, tags=["study-logs"], summary="학습 실행 기록 및 회고 생성")
-async def create_study_log(payload: StudyLogCreateRequest, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+async def create_study_log(payload: StudyLogCreateRequest, uid: str = Depends(require_consented_uid)):
     _not_implemented()
 
 
 @app.patch("/api/study-logs/{log_id}", response_model=StudyLogResponse, tags=["study-logs"], summary="학습 실행 기록 및 회고 수정")
-async def update_study_log(log_id: str, payload: StudyLogUpdateRequest, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+async def update_study_log(log_id: str, payload: StudyLogUpdateRequest, uid: str = Depends(require_consented_uid)):
     _not_implemented()
 
 
 @app.delete("/api/study-logs/{log_id}", tags=["study-logs"], summary="학습 실행 기록 삭제 (회고 포함, 과제 유지)")
-async def delete_study_log(log_id: str, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+async def delete_study_log(log_id: str, uid: str = Depends(require_consented_uid)):
     _not_implemented()
 
 
@@ -357,7 +374,7 @@ async def delete_study_log(log_id: str, token: Optional[HTTPAuthorizationCredent
 )
 async def get_data_summary(
     keywords: Optional[str] = Query(None, description="질문 관련 회고 검색 키워드"),
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
 ):
     _not_implemented()
 
@@ -368,7 +385,7 @@ async def get_data_summary(
     tags=["summary"],
     summary="대시보드 화면용 종합 집계 (4대 지표, 오늘 과제, 주간 hit, 인사이트)",
 )
-async def get_dashboard_summary(token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+async def get_dashboard_summary(uid: str = Depends(require_consented_uid)):
     _not_implemented()
 
 
@@ -382,7 +399,7 @@ async def get_dashboard_summary(token: Optional[HTTPAuthorizationCredentials] = 
 )
 async def create_conversation(
     payload: ConversationCreateRequest,
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
 ):
     _not_implemented()
 
@@ -393,7 +410,7 @@ async def create_conversation(
     tags=["conversations"],
     summary="최근 대화 세션 목록 조회 (메시지 본문 제외)",
 )
-async def list_conversations(token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+async def list_conversations(uid: str = Depends(require_consented_uid)):
     _not_implemented()
 
 
@@ -405,7 +422,7 @@ async def list_conversations(token: Optional[HTTPAuthorizationCredentials] = Dep
 )
 async def get_conversation(
     conversation_id: str,
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
 ):
     _not_implemented()
 
@@ -419,17 +436,18 @@ async def get_conversation(
 async def send_message(
     conversation_id: str,
     payload: SendMessageRequest,
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
 ):
     _not_implemented()
 
 
 # 8. Resources
+# 결정: 사전 검토된 공용 자료 카탈로그이며 사용자 소유 데이터가 아니므로 인증 없이 공개한다.
 @app.get(
     "/api/resources",
     response_model=ResourceListResponse,
     tags=["resources"],
-    summary="사전 검토된 읽기 전용 참고자료 검색 및 목록 조회",
+    summary="사전 검토된 읽기 전용 참고자료 검색 및 목록 조회 (공개, 인증 불필요)",
 )
 async def list_resources(
     search: Optional[str] = Query(None, description="검색어"),
@@ -468,5 +486,13 @@ def delete_user_data(uid: str = Depends(get_current_uid), db=Depends(get_db)):
     for collection in USER_OWNED_COLLECTIONS:
         db.delete_where(collection, user_id=uid)
     db.delete("users", uid)
-    delete_auth_user(uid)
+    try:
+        delete_auth_user(uid)
+    except Exception:
+        # Data is already gone at this point; only the Firebase account cleanup failed
+        # (and can be retried safely). Do not report this to the caller as a failure.
+        return DataDeleteResponse(
+            status="auth_cleanup_pending",
+            message="학습 데이터는 모두 삭제되었습니다. 계정 정리만 남아 있으며 다시 시도할 수 있습니다.",
+        )
     return DataDeleteResponse()

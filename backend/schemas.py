@@ -1,5 +1,5 @@
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Weekday = Literal["none", "mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 GoalStatus = Literal["active", "completed", "archived"]
@@ -22,37 +22,45 @@ class ErrorResponse(BaseModel):
 # --- 1. Path Recommendation (FR-02 Step 1) ---
 
 class LevelItem(BaseModel):
-    level: int = Field(..., ge=1, le=5, description="수준 단계 (1~5)")
-    name: str = Field(..., description="수준명 (예: Python 입문자)")
-    description: str = Field(..., description="수준 상세 설명")
+    order: int = Field(..., ge=1, le=20, description="같은 과정 안에서의 순서 등급 (높을수록 상위). 간격 계산·비교에 쓰지 않는다")
+    name: str = Field(..., description="수준명 (예: Python 입문자). 화면에는 이 이름만 표시하고 번호는 표시하지 않는다")
+    description: str = Field(..., description="수준 상세 설명 (서술형, AI 해석용)")
 
 
 class CourseItem(BaseModel):
     id: str = Field(..., description="세부 과정 고유 ID 또는 슬러그")
     title: str = Field(..., description="세부 과정명 (예: 기본문법, 자료구조와 알고리즘)")
     description: str = Field(..., description="과정 개요")
+    levels: List[LevelItem] = Field(..., min_length=1, description="이 과정에 한정된 수준 체계 (과정마다 다를 수 있음)")
 
 
 class PathRecommendationRequest(BaseModel):
     field: str = Field(..., min_length=1, max_length=100, description="학습하고 싶은 분야 (자유 입력)")
-    user_context: Optional[str] = Field(None, description="학습자의 추가 배경 또는 목표")
+    goal: Optional[str] = Field(None, max_length=200, description="학습 목표 (자유 입력, 선택)")
+    user_context: Optional[str] = Field(None, description="학습자의 추가 배경 (선택)")
+
+    @field_validator("field")
+    @classmethod
+    def _field_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("field는 공백만으로 구성될 수 없습니다.")
+        return value
 
 
 class PathRecommendationResponse(BaseModel):
     field: str = Field(..., description="요청된 학습 분야")
-    courses: List[CourseItem] = Field(..., description="AI가 제안한 세부 과정 목록")
-    levels: List[LevelItem] = Field(..., description="AI가 제안한 분야별 1~5단계 수준 체계")
+    courses: List[CourseItem] = Field(..., min_length=1, description="AI가 제안한 세부 과정 목록 (과정별 수준 체계 포함)")
+    suggested_roles: List[str] = Field(default_factory=list, max_length=5, description="AI가 제안한 직무/역할명 목록 (최대 5개, 선택)")
 
 
 # --- 2. Plan Generation (FR-02 Step 2) ---
 
 class WeeklyTaskPlanItem(BaseModel):
     id: Optional[str] = Field(None, description="과제 식별자 (초안 시 임시 ID)")
-    week_number: int = Field(1, description="주차 번호 (기본 1주차)")
     title: str = Field(..., description="학습 과업명")
     description: str = Field(..., description="과업 세부 내용")
     estimated_minutes: int = Field(..., ge=1, description="예상 학습 시간 (분)")
-    suggested_weekday: Optional[str] = Field("none", description="선택적 추천 요일 (none, mon, tue, wed, thu, fri, sat, sun)")
+    suggested_weekday: Optional[Weekday] = Field("none", description="선택적 추천 요일 (마감일 아님)")
 
 
 class AdviceItem(BaseModel):
@@ -68,10 +76,12 @@ class ResourceReferenceItem(BaseModel):
 
 
 class PlanGenerateRequest(BaseModel):
+    goal_id: str = Field(..., min_length=1, description="연결할 학습 목표 ID (사전에 POST /api/goals로 생성된 문서)")
     field: str = Field(..., description="학습 분야")
-    selected_courses: List[str] = Field(..., min_length=1, description="선택한 세부 과정 목록")
-    current_level: int = Field(..., ge=1, le=5, description="현재 수준 번호")
-    target_level: int = Field(..., ge=1, le=5, description="목표 수준 번호 (current_level 이상)")
+    course: str = Field(..., min_length=1, description="선택한 세부 과정 (목표당 1개)")
+    selected_role: Optional[str] = Field(None, description="1단계에서 추천받은 직무명 중 선택한 값 (선택)")
+    current_level_order: int = Field(..., ge=1, le=20, description="현재 수준의 과정 내 순서 등급 (계산에 쓰지 않음)")
+    target_level_order: int = Field(..., ge=1, le=20, description="목표 수준의 과정 내 순서 등급 (current_level_order보다 커야 함)")
     weekly_hours: int = Field(..., ge=1, le=100, description="주당 학습 가능 시간 (시간 단위)")
     target_date: str = Field(..., description="목표 완료 희망일 (YYYY-MM-DD)")
     plan_week_start: Optional[str] = Field(None, description="계획 주간 시작일 (YYYY-MM-DD, 기본 이번 주 월요일)")
@@ -88,27 +98,49 @@ class PlanGenerateResponse(BaseModel):
 
 # --- 3. Goals CRUD ---
 
+def _not_blank(value: Optional[str]) -> Optional[str]:
+    if value is not None and not value.strip():
+        raise ValueError("공백만으로 구성될 수 없습니다.")
+    return value
+
+
 class GoalCreateRequest(BaseModel):
     field: str = Field(..., min_length=1, max_length=100, description="학습 분야")
-    course: str = Field(..., min_length=1, max_length=100, description="선택 세부 과정")
-    current_level_num: int = Field(..., ge=1, le=5)
+    course: str = Field(..., min_length=1, max_length=100, description="선택 세부 과정 (목표당 1개)")
+    current_level_order: int = Field(..., ge=1, le=20, description="현재 수준의 과정 내 순서 등급")
     current_level_name: str = Field(..., min_length=1, max_length=100)
-    target_level_num: int = Field(..., ge=1, le=5)
+    current_level_description: Optional[str] = Field(None, max_length=2000, description="현재 수준 설명 스냅샷 (선택)")
+    target_level_order: int = Field(..., ge=1, le=20, description="목표 수준의 과정 내 순서 등급 (current_level_order보다 커야 함)")
     target_level_name: str = Field(..., min_length=1, max_length=100)
+    target_level_description: Optional[str] = Field(None, max_length=2000, description="목표 수준 설명 스냅샷 (선택)")
     weekly_hours: int = Field(..., ge=1, le=100)
-    target_date: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD")
+    target_date: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD (오늘 이후)")
+
+    @field_validator("field", "course")
+    @classmethod
+    def _goal_fields_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("공백만으로 구성될 수 없습니다.")
+        return value
 
 
 class GoalUpdateRequest(BaseModel):
     field: Optional[str] = Field(None, min_length=1, max_length=100)
     course: Optional[str] = Field(None, min_length=1, max_length=100)
-    current_level_num: Optional[int] = Field(None, ge=1, le=5)
+    current_level_order: Optional[int] = Field(None, ge=1, le=20)
     current_level_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    target_level_num: Optional[int] = Field(None, ge=1, le=5)
+    current_level_description: Optional[str] = Field(None, max_length=2000)
+    target_level_order: Optional[int] = Field(None, ge=1, le=20)
     target_level_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    target_level_description: Optional[str] = Field(None, max_length=2000)
     weekly_hours: Optional[int] = Field(None, ge=1, le=100)
     target_date: Optional[str] = Field(None, pattern=DATE_PATTERN)
     status: Optional[GoalStatus] = Field(None, description="active | completed | archived")
+
+    @field_validator("field", "course")
+    @classmethod
+    def _goal_fields_not_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _not_blank(value)
 
 
 class GoalResponse(BaseModel):
@@ -116,10 +148,12 @@ class GoalResponse(BaseModel):
     user_id: str
     field: str
     course: str
-    current_level_num: int
+    current_level_order: int
     current_level_name: str
-    target_level_num: int
+    current_level_description: Optional[str] = None
+    target_level_order: int
     target_level_name: str
+    target_level_description: Optional[str] = None
     weekly_hours: int
     target_date: str
     status: str
@@ -138,6 +172,13 @@ class TaskCreateRequest(BaseModel):
     suggested_weekday: Optional[Weekday] = "none"
     order_index: Optional[int] = Field(0, ge=0)
 
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("title은 공백만으로 구성될 수 없습니다.")
+        return value
+
 
 class TaskUpdateRequest(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -146,6 +187,11 @@ class TaskUpdateRequest(BaseModel):
     suggested_weekday: Optional[Weekday] = None
     status: Optional[TaskStatus] = Field(None, description="pending | completed")
     order_index: Optional[int] = Field(None, ge=0)
+
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _not_blank(value)
 
 
 class TaskResponse(BaseModel):
@@ -185,6 +231,8 @@ class StudyLogCreateRequest(BaseModel):
     study_date: str = Field(..., description="YYYY-MM-DD")
     minutes: int = Field(..., ge=1, description="학습 시간 (분)")
     activity: str = Field(..., description="실행 내용")
+    started_at: Optional[str] = Field(None, description="타이머 시작 시각 (ISO 8601, 선택)")
+    ended_at: Optional[str] = Field(None, description="타이머 종료 시각 (ISO 8601, 선택)")
     reflection: Optional[ReflectionCreateRequest] = Field(None, description="동반 작성할 회고")
 
 
@@ -192,6 +240,8 @@ class StudyLogUpdateRequest(BaseModel):
     study_date: Optional[str] = None
     minutes: Optional[int] = None
     activity: Optional[str] = None
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
     reflection: Optional[ReflectionCreateRequest] = None
 
 
@@ -203,6 +253,8 @@ class StudyLogResponse(BaseModel):
     study_date: str
     minutes: int
     activity: str
+    started_at: Optional[str] = None
+    ended_at: Optional[str] = None
     reflection: Optional[ReflectionResponse] = None
     created_at: str
     updated_at: str
