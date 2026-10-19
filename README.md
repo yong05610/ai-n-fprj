@@ -24,10 +24,10 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
-python -m uvicorn main:app --reload
+python -m uvicorn main:app --reload --port 8001 --env-file .env
 ```
 
-The API health endpoint is `http://localhost:8000/health`; Swagger UI is `http://localhost:8000/docs`.
+The API health endpoint is `http://localhost:8001/health`; Swagger UI is `http://localhost:8001/docs`.
 
 ### Frontend
 
@@ -39,6 +39,10 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. The frontend reads `NEXT_PUBLIC_API_BASE_URL`; configure `CORS_ORIGINS` on the backend to include the exact frontend origin.
+
+## Reference project
+
+`reference-AI NATIVE M -2/` is a temporary reference copy of a separate project. It is for reading and comparison only; it is excluded from this repository and is not part of PaceMate's source, install, or deployment steps. Remove the folder and its `.gitignore` entry when it is no longer needed. Do not copy its secrets or environment files into this project.
 
 ## Secrets
 

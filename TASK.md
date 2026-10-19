@@ -35,15 +35,15 @@
 
 ## Phase 0 — 기술 환경 점검·구축 (ENV · P0)
 
-- [ ] 0.1 저장소 위치·기준 브랜치·Git 규칙·프로젝트 구조·.gitignore를 확인한다.
+- [x] 0.1 저장소 위치·기준 브랜치·Git 규칙·프로젝트 구조·.gitignore를 확인한다.
 - [ ] 0.2 Node.js LTS, Python 3.11 이상, Git 및 사용할 패키지 관리자를 확인하고 버전을 고정한다.
-- [ ] 0.3 Next.js·TypeScript 프론트엔드와 FastAPI 백엔드의 최소 실행 골격을 만든다.
+- [x] 0.3 Next.js·TypeScript 프론트엔드와 FastAPI 백엔드의 최소 실행 골격을 만든다.
 - [ ] 0.4 Python 가상환경과 프론트·백엔드 의존성 파일/잠금 방식을 준비한다.
 - [ ] 0.5 Firebase Authentication·Firestore, OpenAI API, Vercel, Render의 프로젝트·계정·권한을 확인한다.
-- [ ] 0.6 로컬과 배포 환경변수의 이름·주입 위치를 정리한다. Firebase 서비스 계정 키와 API 비밀값은 코드에 하드코딩하지 않고 환경 변수/플랫폼 비밀 저장소로 관리한다. 예시 파일만 Git에 올리고 실제 비밀값은 출력하거나 커밋하지 않는다.
-- [ ] 0.7 프론트 기본 페이지와 백엔드 health 경로가 로컬에서 실행되도록 한다.
-- [ ] 0.8 로컬 개발 Origin과 배포 도메인 기반 CORS 설정 위치를 정한다.
-- [ ] 0.9 [BE] FastAPI 앱을 초기화하고 허용 Origin만 지정한 CORS 미들웨어, health 경로, OpenAPI/Swagger UI(`/docs`)를 설정한다. 로컬에서 `uvicorn main:app --reload` 또는 프로젝트 진입점에 맞는 명령으로 실행되는지 확인한다.
+- [x] 0.6 로컬과 배포 환경변수의 이름·주입 위치를 정리한다. Firebase 서비스 계정 키와 API 비밀값은 코드에 하드코딩하지 않고 환경 변수/플랫폼 비밀 저장소로 관리한다. 예시 파일만 Git에 올리고 실제 비밀값은 출력하거나 커밋하지 않는다.
+- [x] 0.7 프론트 기본 페이지와 백엔드 health 경로가 로컬에서 실행되도록 한다.
+- [x] 0.8 로컬 개발 Origin과 배포 도메인 기반 CORS 설정 위치를 정한다.
+- [x] 0.9 [BE] FastAPI 앱을 초기화하고 허용 Origin만 지정한 CORS 미들웨어, health 경로, OpenAPI/Swagger UI(`/docs`)를 설정한다. 로컬에서 `uvicorn main:app --reload` 또는 프로젝트 진입점에 맞는 명령으로 실행되는지 확인한다.
 
 **완료 기준:** 팀원이 안내에 따라 프론트·백엔드를 실행할 수 있고, 필요한 계정 권한/담당자와 비밀값 관리 방법이 확정되어 있다.
 

@@ -1,30 +1,41 @@
-# Node / Next.js
-node_modules/
-.next/
-out/
-build/
-dist/
-*.tsbuildinfo
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-
-# Secrets and local config
+# Environment variables and secrets
 .env
 .env.*
 !.env.example
 !.env.*.example
 *.pem
 *.key
+firebase-service-account*.json
+*firebase-adminsdk*.json
+serviceAccountKey.json
 service-account*.json
 
-# Editors / OS
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# Frontend dependencies and build output
+node_modules/
+.next/
+dist/
+out/
+build/
+*.tsbuildinfo
+
+# Editor and operating system files
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Temporary reference project; keep it out of the PaceMate repository
+/reference-AI NATIVE M -2/
