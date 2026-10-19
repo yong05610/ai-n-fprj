@@ -136,10 +136,36 @@ class TestGoalsAndTasks:
         higher = {**GOAL, "current_level_order": 1, "target_level_order": 2}
         assert client.post("/api/goals", json=higher, headers=consented_headers).status_code == 201
 
-    def test_goal_target_date_in_past_rejected(self, client: TestClient, consented_headers):
+    def test_goal_target_date_in_past_rejected_on_create(self, client: TestClient, consented_headers):
         payload = {**GOAL, "target_date": "2020-01-01"}
         response = client.post("/api/goals", json=payload, headers=consented_headers)
         assert response.status_code == 400
+
+    def test_goal_target_date_in_past_rejected_when_explicitly_changed(self, client: TestClient, consented_headers):
+        goal = client.post("/api/goals", json=GOAL, headers=consented_headers).json()
+        response = client.patch(f"/api/goals/{goal['id']}", json={"target_date": "2020-01-01"}, headers=consented_headers)
+        assert response.status_code == 400
+
+    def test_goal_with_past_deadline_can_still_be_completed_or_archived(self, client: TestClient, consented_headers):
+        from store import get_store
+
+        goal = client.post("/api/goals", json=GOAL, headers=consented_headers).json()
+        # Simulate a goal whose deadline has since passed (can't create one directly: creation itself
+        # rejects a past target_date). Unrelated edits must not re-trigger that past-date check.
+        get_store().update("goals", goal["id"], {"target_date": "2020-01-01"})
+
+        completed = client.patch(f"/api/goals/{goal['id']}", json={"status": "completed"}, headers=consented_headers)
+        assert completed.status_code == 200
+        assert completed.json()["status"] == "completed"
+
+        archived = client.patch(f"/api/goals/{goal['id']}", json={"status": "archived"}, headers=consented_headers)
+        assert archived.status_code == 200
+        assert archived.json()["status"] == "archived"
+
+        # Editing an unrelated field (not status, not target_date) must also go through.
+        hours_updated = client.patch(f"/api/goals/{goal['id']}", json={"weekly_hours": 5}, headers=consented_headers)
+        assert hours_updated.status_code == 200
+        assert hours_updated.json()["weekly_hours"] == 5
 
     def test_goal_blank_field_or_course_rejected(self, client: TestClient, consented_headers):
         assert client.post("/api/goals", json={**GOAL, "field": "   "}, headers=consented_headers).status_code == 422

@@ -79,6 +79,12 @@
 - **저장소 위생:** `대화기록.md`를 `.gitignore`에 추가(비밀값 없음 확인).
 - **보류(여유 권장 사항, 미반영):** 루트/백엔드 `pytest.ini` 통합, `require_consented_uid`의 `users` 문서 재조회 캐싱, `delete_goal`의 N+1 쿼리 최적화, 프론트 `apiRequest` 타임아웃·재시도. 모두 동작에 영향 없는 개선이라 범위 밖으로 남겨둠.
 
+### 결함 수정 (N-1, 검증팀 2차 리뷰)
+
+- **증상:** `target_date` 과거 거부 검증이 `PATCH /api/goals`에서 병합된 전체 값에 대해 호출되어, 마감일이 지난 목표는 `status`만 바꾸려 해도(완료/보관 처리) 400이 발생했다.
+- **수정:** 과거 날짜 검증(`_validate_target_date_not_past`)을 생성 시와 `target_date`를 실제로 바꾸는 요청에만 적용하도록 분리했다. 수준 순서 검증(`_validate_goal_levels`)은 기존대로 병합된 값 전체에 계속 적용한다.
+- **테스트:** 마감일이 지난 목표를 완료/보관/다른 필드 수정이 모두 200으로 통과하는지, `target_date`를 과거로 바꾸는 요청은 여전히 400인지 검증 추가 (`backend/tests/test_phase3_auth.py`).
+
 ## 6. 미완료·사용자 조치 필요
 
 - **Firebase 프로젝트 연결 (Task 0.5):** 실제 Firebase 모드 검증에는 다음이 필요하다.

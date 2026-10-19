@@ -133,11 +133,19 @@ def _changes(payload) -> dict[str, Any]:
     return payload.model_dump(exclude_unset=True, exclude_none=True)
 
 
-def _validate_goal(goal: dict[str, Any]) -> None:
+def _validate_goal_levels(goal: dict[str, Any]) -> None:
     if goal["target_level_order"] <= goal["current_level_order"]:
         raise bad_request("목표 수준은 현재 수준보다 높은 수준만 선택할 수 있습니다.", {"field": "target_level_order"})
-    target_date = _parse_date(goal["target_date"], "target_date")
-    if target_date < date.today():
+
+
+def _validate_target_date_not_past(target_date: str) -> None:
+    """Only call this when target_date is being set/changed by the caller.
+
+    A goal's deadline naturally moves into the past over time; re-checking it on every
+    unrelated update (e.g. marking an old goal completed/archived) would make goals past
+    their deadline permanently un-editable.
+    """
+    if _parse_date(target_date, "target_date") < date.today():
         raise bad_request("목표 완료 희망일은 오늘 이후여야 합니다.", {"field": "target_date"})
 
 
@@ -262,7 +270,8 @@ def list_goals(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
 @app.post("/api/goals", response_model=GoalResponse, status_code=status.HTTP_201_CREATED, tags=["goals"], summary="학습 목표 저장")
 def create_goal(payload: GoalCreateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
     data = payload.model_dump()
-    _validate_goal(data)
+    _validate_goal_levels(data)
+    _validate_target_date_not_past(data["target_date"])
     now = _now_iso()
     goal = db.create("goals", {**data, "user_id": uid, "status": "active", "created_at": now, "updated_at": now})
     user = db.get("users", uid)
@@ -280,7 +289,9 @@ def get_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends
 def update_goal(goal_id: str, payload: GoalUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
     goal = _get_owned(db, "goals", goal_id, uid)
     changes = _changes(payload)
-    _validate_goal({**goal, **changes})
+    _validate_goal_levels({**goal, **changes})
+    if "target_date" in changes:
+        _validate_target_date_not_past(changes["target_date"])
     return db.update("goals", goal_id, {**changes, "updated_at": _now_iso()})
 
 
