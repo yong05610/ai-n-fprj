@@ -8,11 +8,12 @@
 
 ```mermaid
 erDiagram
-    users ||--o{ consent_records : "1:N"
+    direction LR
     users ||--o{ goals : "1:N"
     goals ||--o{ tasks : "1:N"
     tasks ||--o{ study_logs : "1:N"
     study_logs ||--o| reflections : "1:0..1"
+    users ||--o{ consent_records : "1:N"
     users ||--o{ conversations : "1:N"
 
     users {
