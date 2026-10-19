@@ -26,3 +26,17 @@ ul { margin: 0; padding-left: 20px; color: #475569; line-height: 1.7; font-size:
 .modal p { color: #64748b; font-size: 14px; line-height: 1.6; }
 .consent-check { display: flex; gap: 8px; align-items: flex-start; margin-top: 18px; font-size: 14px; line-height: 1.5; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+.field { display: grid; gap: 5px; margin: 10px 0; }
+.field label { font-size: 13px; color: #475569; font-weight: 700; }
+.field input, .field select, .field textarea { width: 100%; border: 1px solid #e2e8f0; background: #fff; border-radius: 9px; padding: 9px 10px; color: #17253b; font-size: 14px; font-family: inherit; }
+.field textarea { min-height: 60px; resize: vertical; }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn.small { padding: 6px 10px; font-size: 12px; }
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.chip { border: 1px solid #e2e8f0; background: #fff; color: #64748b; border-radius: 20px; padding: 7px 12px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.chip.on { border-color: #b7c2ff; background: #eef1ff; color: #5374d8; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid #e2e8f0; margin: 14px 0 12px; }
+.tab { border: 0; border-bottom: 2px solid transparent; background: none; color: #94a3b8; padding: 8px 10px; font-size: 13px; font-weight: 700; cursor: pointer; }
+.tab.active { color: #5374d8; border-color: #5374d8; }
+.task-edit-row { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; margin-bottom: 8px; display: grid; gap: 6px; }

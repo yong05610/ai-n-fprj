@@ -14,12 +14,22 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   token?: string;
+  /** Default 20s; AI endpoints (path/recommend, plan/generate) pass a longer budget. */
+  timeoutMs?: number;
 };
 
-export async function apiRequest<T>(path: string, { method = "GET", body, token }: RequestOptions = {}): Promise<T> {
+const DEFAULT_TIMEOUT_MS = 20_000;
+
+export async function apiRequest<T>(
+  path: string,
+  { method = "GET", body, token, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions = {},
+): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let response: Response;
   try {
@@ -27,9 +37,15 @@ export async function apiRequest<T>(path: string, { method = "GET", body, token 
       method,
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new ApiError(0, "REQUEST_TIMEOUT", "요청이 시간 안에 끝나지 않았습니다. 다시 시도해 주세요.");
+    }
     throw new ApiError(0, "NETWORK_ERROR", "서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+  } finally {
+    clearTimeout(timer);
   }
 
   const data = await response.json().catch(() => null);

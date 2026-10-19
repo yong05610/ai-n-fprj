@@ -22,6 +22,7 @@ def test_openapi_json(client: TestClient):
         "/health",
         "/api/path/recommend",
         "/api/plan/generate",
+        "/api/plan/confirm",
         "/api/goals",
         "/api/goals/{goal_id}",
         "/api/tasks",

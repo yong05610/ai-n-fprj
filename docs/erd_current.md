@@ -117,7 +117,7 @@ erDiagram
 | 2 | 타이머 시각 | `study_logs`에 `study_date`, `minutes`만 있음 | **결정:** `started_at`, `ended_at`을 선택 필드로 스키마에 추가 완료. 실제 타이머 상태 머신·검증 로직은 Phase 5에서 구현 (`studied_at`은 `study_date`와 중복이라 추가하지 않음) |
 | 3 | 목표당 과정 수 | `goals.course`는 단일 문자열, 플랜 요청 `selected_courses`는 목록 | **결정:** 1목표 1과정으로 통일. `PlanGenerateRequest.selected_courses`(목록) → `course`(단일 문자열)로 변경, `goal_id`를 추가해 사전 생성된 목표에 연결 |
 | 4 | 필드명 기준 | PRD §6은 `domain`, `due_date`, `selected_process`, `text` | **결정:** 구현 이름(`field`, `target_date`, `course`, `content`)을 기준으로 유지한다. Phase 1에서 이미 합의·테스트된 DTO를 바꾸는 비용이 더 크다고 판단. PRD §6 쪽을 구현 이름에 맞춰 갱신 필요(문서 작업, 코드 변경 아님) |
-| 5 | `users` 필드 | 구현에 `active_goal_id`, `consent_version` 존재, 설계 ERD에는 없음 | 미정 — `docs/phase1_design.md`의 설계 ERD 갱신은 별도 문서 작업으로 남겨둔다 |
+| 5 | `users` 필드 | 구현에 `active_goal_id`, `consent_version` 존재, 설계 ERD에는 없음 | **반영 완료(Phase 4 착수 전 정리):** `docs/phase1_design.md` 설계 ERD의 `users`에 두 필드 추가. `goals`/`study_logs` 블록도 `*_level_order`, 수준 설명 스냅샷, `started_at`/`ended_at`으로 함께 갱신 |
 | 6 | 수준 범위 | `level`은 1~5 고정, 목표는 현재와 같은 수준도 허용 | **결정:** 단계 수 고정(5단계) 폐지, `ge=1, le=20`의 안전 상한만 유지(분야마다 단계 수가 다를 수 있음). 목표 수준은 현재 수준보다 **높아야만** 허용(동일 수준도 거부)하도록 변경. `LevelItem.level` → `order`, `*_num` → `*_order`로 이름도 변경(점수처럼 읽히는 문제 해결) |
 
 **검증:** `backend/tests` 53건 통과(Phase 3 리뷰 반영분 19건 신규), 프론트 `npm run typecheck` / `npm run build` 통과.

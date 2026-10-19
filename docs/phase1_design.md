@@ -85,6 +85,8 @@ erDiagram
     users {
         string uid PK "Firebase 익명 UID"
         string role "learner"
+        string active_goal_id "현재 활성 목표 (goals.id, 선택)"
+        string consent_version "최신 동의 버전 (Phase 3)"
         timestamp created_at "최초 접속일"
         timestamp last_active_at "최종 활동일"
     }
@@ -102,13 +104,15 @@ erDiagram
         string id PK
         string user_id FK "users.uid"
         string field "학습 분야 (자유입력)"
-        string course "선택 세부 과정"
-        int current_level_num "현재 수준 번호 (1..5)"
+        string course "선택 세부 과정 (목표당 1개)"
+        int current_level_order "현재 수준의 과정 내 순서 등급 (1..20, 계산에 쓰지 않음)"
         string current_level_name "현재 수준명"
-        int target_level_num "목표 수준 번호 (1..5)"
+        string current_level_description "현재 수준 설명 스냅샷 (선택)"
+        int target_level_order "목표 수준의 과정 내 순서 등급 (current_level_order보다 커야 함)"
         string target_level_name "목표 수준명"
+        string target_level_description "목표 수준 설명 스냅샷 (선택)"
         int weekly_hours "주당 학습 가능 시간"
-        date target_date "완료 희망일"
+        date target_date "완료 희망일 (생성/변경 시점 기준 오늘 이후)"
         string status "active | completed | archived"
         timestamp created_at
         timestamp updated_at
@@ -137,6 +141,8 @@ erDiagram
         date study_date "학습 실행 날짜"
         int minutes "학습 시간 (분)"
         string activity "실행 내용"
+        timestamp started_at "타이머 시작 시각 (선택, Phase 5에서 사용)"
+        timestamp ended_at "타이머 종료 시각 (선택, Phase 5에서 사용)"
         timestamp created_at
         timestamp updated_at
     }

@@ -37,7 +37,7 @@ class CourseItem(BaseModel):
 class PathRecommendationRequest(BaseModel):
     field: str = Field(..., min_length=1, max_length=100, description="학습하고 싶은 분야 (자유 입력)")
     goal: Optional[str] = Field(None, max_length=200, description="학습 목표 (자유 입력, 선택)")
-    user_context: Optional[str] = Field(None, description="학습자의 추가 배경 (선택)")
+    user_context: Optional[str] = Field(None, max_length=2000, description="학습자의 추가 배경 (선택)")
 
     @field_validator("field")
     @classmethod
@@ -49,7 +49,7 @@ class PathRecommendationRequest(BaseModel):
 
 class PathRecommendationResponse(BaseModel):
     field: str = Field(..., description="요청된 학습 분야")
-    courses: List[CourseItem] = Field(..., min_length=1, description="AI가 제안한 세부 과정 목록 (과정별 수준 체계 포함)")
+    courses: List[CourseItem] = Field(..., min_length=1, max_length=10, description="AI가 제안한 세부 과정 목록 (과정별 수준 체계 포함)")
     suggested_roles: List[str] = Field(default_factory=list, max_length=5, description="AI가 제안한 직무/역할명 목록 (최대 5개, 선택)")
 
 
@@ -76,24 +76,38 @@ class ResourceReferenceItem(BaseModel):
 
 
 class PlanGenerateRequest(BaseModel):
-    goal_id: str = Field(..., min_length=1, description="연결할 학습 목표 ID (사전에 POST /api/goals로 생성된 문서)")
-    field: str = Field(..., description="학습 분야")
-    course: str = Field(..., min_length=1, description="선택한 세부 과정 (목표당 1개)")
-    selected_role: Optional[str] = Field(None, description="1단계에서 추천받은 직무명 중 선택한 값 (선택)")
+    # Decision (docs/phase4_dev_prompt.md "열린 결정 1"): no goal_id here. A goal is only
+    # ever persisted once the user confirms (see PlanConfirmRequest below), matching PRD
+    # FR-02 "사용자가 확정한 과정·수준·계획만 Firestore에 저장한다".
+    field: str = Field(..., min_length=1, max_length=100, description="학습 분야")
+    course: str = Field(..., min_length=1, max_length=100, description="선택한 세부 과정 (목표당 1개)")
+    selected_role: Optional[str] = Field(None, max_length=100, description="1단계에서 추천받은 직무명 중 선택한 값 (선택)")
     current_level_order: int = Field(..., ge=1, le=20, description="현재 수준의 과정 내 순서 등급 (계산에 쓰지 않음)")
+    current_level_name: str = Field(..., min_length=1, max_length=100)
+    current_level_description: Optional[str] = Field(None, max_length=2000)
     target_level_order: int = Field(..., ge=1, le=20, description="목표 수준의 과정 내 순서 등급 (current_level_order보다 커야 함)")
+    target_level_name: str = Field(..., min_length=1, max_length=100)
+    target_level_description: Optional[str] = Field(None, max_length=2000)
     weekly_hours: int = Field(..., ge=1, le=100, description="주당 학습 가능 시간 (시간 단위)")
-    target_date: str = Field(..., description="목표 완료 희망일 (YYYY-MM-DD)")
-    plan_week_start: Optional[str] = Field(None, description="계획 주간 시작일 (YYYY-MM-DD, 기본 이번 주 월요일)")
+    target_date: str = Field(..., pattern=DATE_PATTERN, description="목표 완료 희망일 (YYYY-MM-DD, 오늘 이후)")
+    plan_week_start: Optional[str] = Field(None, pattern=DATE_PATTERN, description="계획 주간 시작일 (YYYY-MM-DD, 기본 이번 주 월요일)")
+
+    @field_validator("field", "course")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("공백만으로 구성될 수 없습니다.")
+        return value
 
 
 class PlanGenerateResponse(BaseModel):
     plan_week_start: str = Field(..., description="계획 주간 시작일 (YYYY-MM-DD)")
     plan_week_end: str = Field(..., description="계획 주간 종료일 (YYYY-MM-DD)")
     total_estimated_minutes: int = Field(..., description="과업 총 예상 시간 (분)")
-    tasks: List[WeeklyTaskPlanItem] = Field(..., description="주간 학습 과제 목록")
+    tasks: List[WeeklyTaskPlanItem] = Field(..., description="주간 학습 과제 목록 (초안, 미저장)")
     advice: AdviceItem = Field(..., description="AI 학습 조언")
-    references: List[ResourceReferenceItem] = Field(..., description="관련 참고자료 목록")
+    references: List[ResourceReferenceItem] = Field(..., description="관련 참고자료 목록 (검토된 카탈로그에서만 선택)")
+    references_notice: Optional[str] = Field(None, description="검토 자료를 찾지 못했을 때의 안내 및 검색 키워드 제안")
 
 
 # --- 3. Goals CRUD ---
@@ -207,6 +221,51 @@ class TaskResponse(BaseModel):
     order_index: int
     created_at: str
     updated_at: str
+
+
+# --- 4b. Plan Confirmation (FR-02 Step 2 save; resolves "열린 결정 1") ---
+# Saves the goal and its edited draft tasks in a single request, so nothing is
+# persisted until the user confirms the plan (PRD FR-02).
+
+class PlanConfirmTaskItem(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field("", max_length=2000)
+    estimated_minutes: int = Field(..., ge=1, le=6000)
+    suggested_weekday: Optional[Weekday] = "none"
+
+    @field_validator("title")
+    @classmethod
+    def _title_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("title은 공백만으로 구성될 수 없습니다.")
+        return value
+
+
+class PlanConfirmRequest(BaseModel):
+    field: str = Field(..., min_length=1, max_length=100)
+    course: str = Field(..., min_length=1, max_length=100)
+    current_level_order: int = Field(..., ge=1, le=20)
+    current_level_name: str = Field(..., min_length=1, max_length=100)
+    current_level_description: Optional[str] = Field(None, max_length=2000)
+    target_level_order: int = Field(..., ge=1, le=20)
+    target_level_name: str = Field(..., min_length=1, max_length=100)
+    target_level_description: Optional[str] = Field(None, max_length=2000)
+    weekly_hours: int = Field(..., ge=1, le=100)
+    target_date: str = Field(..., pattern=DATE_PATTERN)
+    plan_week_start: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD (월요일)")
+    tasks: List[PlanConfirmTaskItem] = Field(..., min_length=1)
+
+    @field_validator("field", "course")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("공백만으로 구성될 수 없습니다.")
+        return value
+
+
+class PlanConfirmResponse(BaseModel):
+    goal: GoalResponse
+    tasks: List[TaskResponse]
 
 
 # --- 5. Study Logs & Reflections CRUD ---

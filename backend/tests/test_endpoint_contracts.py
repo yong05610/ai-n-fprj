@@ -2,26 +2,33 @@ from fastapi.testclient import TestClient
 
 
 class TestEndpointContracts:
-    """Endpoints not yet implemented (Phase 4~6) return 501 once past auth/consent; unauthenticated
-    calls to personal-data endpoints must fail with 401 before ever reaching the 501 stub."""
+    """Endpoints not yet implemented (Phase 5~6) return 501 once past auth/consent; unauthenticated
+    calls to personal-data endpoints must fail with 401 before ever reaching the 501 stub.
+    Phase 4 endpoints (path/recommend, plan/generate, plan/confirm) are implemented - their
+    auth/consent gating is covered here, behavior is covered in test_phase4_plan.py."""
 
-    def test_path_recommend_contract(self, client: TestClient):
-        response = client.post("/api/path/recommend", json={"field": "Python 개발"})
-        assert response.status_code == 501
-        assert response.json()["detail"]["code"] == "NOT_IMPLEMENTED"
+    def test_path_recommend_requires_auth(self, client: TestClient):
+        assert client.post("/api/path/recommend", json={"field": "Python 개발"}).status_code == 401
 
-    def test_plan_generate_contract(self, client: TestClient):
+    def test_path_recommend_requires_consent(self, client: TestClient, mock_auth_headers):
+        response = client.post("/api/path/recommend", json={"field": "Python 개발"}, headers=mock_auth_headers)
+        assert response.status_code == 403
+
+    def test_plan_generate_requires_auth(self, client: TestClient):
         payload = {
-            "goal_id": "goal_123",
             "field": "Python 개발",
             "course": "기본문법",
             "current_level_order": 1,
+            "current_level_name": "입문",
             "target_level_order": 4,
+            "target_level_name": "실무 기초",
             "weekly_hours": 7,
             "target_date": "2026-11-30",
         }
-        response = client.post("/api/plan/generate", json=payload)
-        assert response.status_code == 501
+        assert client.post("/api/plan/generate", json=payload).status_code == 401
+
+    def test_plan_confirm_requires_auth(self, client: TestClient):
+        assert client.post("/api/plan/confirm", json={}).status_code == 401
 
     def test_goals_endpoints_require_auth(self, client: TestClient):
         assert client.get("/api/goals").status_code == 401

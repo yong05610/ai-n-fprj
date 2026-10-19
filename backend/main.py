@@ -1,20 +1,30 @@
 import os
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, List
 
 from fastapi import FastAPI, HTTPException, Depends, Query, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials
 
-from auth import assert_safe_auth_config, delete_auth_user, get_current_uid, security
+import clock
+from ai_client import AIClient, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
+from ai_schemas import AIPathRecommendation, AIPlanDraft
+from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
+from prompts import PATH_RECOMMEND_SYSTEM_PROMPT, PLAN_GENERATE_SYSTEM_PROMPT
+from resources_catalog import match_references, no_match_notice
 from schemas import (
     ErrorResponse,
     PathRecommendationRequest,
     PathRecommendationResponse,
+    CourseItem,
     PlanGenerateRequest,
     PlanGenerateResponse,
+    WeeklyTaskPlanItem,
+    AdviceItem,
+    ResourceReferenceItem,
+    PlanConfirmRequest,
+    PlanConfirmResponse,
     GoalCreateRequest,
     GoalUpdateRequest,
     GoalResponse,
@@ -145,13 +155,38 @@ def _validate_target_date_not_past(target_date: str) -> None:
     unrelated update (e.g. marking an old goal completed/archived) would make goals past
     their deadline permanently un-editable.
     """
-    if _parse_date(target_date, "target_date") < date.today():
+    if _parse_date(target_date, "target_date") < clock.today():
         raise bad_request("목표 완료 희망일은 오늘 이후여야 합니다.", {"field": "target_date"})
 
 
 def _validate_week_start(value: str) -> None:
     if _parse_date(value, "plan_week_start").weekday() != 0:
         raise bad_request("계획 주간 시작일은 월요일이어야 합니다.", {"field": "plan_week_start"})
+
+
+def _validate_week_within_target(week_start: date, target_date: date) -> None:
+    if week_start > target_date:
+        raise bad_request("계획 주간이 목표 완료 희망일을 넘습니다.", {"field": "plan_week_start"})
+
+
+def _validate_task_time_budget(
+    db,
+    uid: str,
+    goal: dict[str, Any],
+    plan_week_start: str,
+    estimated_minutes: int,
+    exclude_task_id: Optional[str] = None,
+) -> None:
+    """Shared by POST /api/tasks and PATCH /api/tasks/{id}: the same weekly time-budget
+    rule AI-generated plans follow must also apply to tasks created/edited by hand,
+    so the manual path can't bypass it (docs/phase4_dev_prompt.md 4.5)."""
+    existing = db.find("tasks", user_id=uid, goal_id=goal["id"], plan_week_start=plan_week_start)
+    total = sum(t["estimated_minutes"] for t in existing if t["id"] != exclude_task_id) + estimated_minutes
+    if total > goal["weekly_hours"] * 60:
+        raise bad_request(
+            "이번 주 과업 총 예상 시간이 주당 가능 시간을 초과합니다.",
+            {"field": "estimated_minutes"},
+        )
 
 
 def _delete_task_children(db, uid: str, task_id: str) -> None:
@@ -232,6 +267,38 @@ def _not_implemented():
     )
 
 
+def _ai_error_response(exc: Exception) -> HTTPException:
+    if isinstance(exc, AITimeoutError):
+        return api_error(status.HTTP_504_GATEWAY_TIMEOUT, "AI_TIMEOUT", "AI 응답이 지연되고 있습니다. 다시 시도해 주세요.")
+    if isinstance(exc, AISchemaError):
+        return api_error(status.HTTP_502_BAD_GATEWAY, "AI_SCHEMA_ERROR", "AI 결과를 해석하지 못했습니다. 다시 시도해 주세요.")
+    return api_error(status.HTTP_503_SERVICE_UNAVAILABLE, "AI_UNAVAILABLE", "AI 서비스를 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+
+
+def _validate_ai_path(parsed: AIPathRecommendation) -> None:
+    if len(parsed.suggested_roles) > 5:
+        raise ValueError("직무명은 5개 이하여야 합니다.")
+    for course in parsed.courses:
+        if not course.title.strip() or not course.description.strip():
+            raise ValueError("과정 이름/설명이 비어 있습니다.")
+        orders = [lvl.order for lvl in course.levels]
+        if orders != sorted(orders) or len(orders) != len(set(orders)):
+            raise ValueError("수준 순서(order)가 과정 안에서 중복 없이 오름차순이어야 합니다.")
+        for lvl in course.levels:
+            if not lvl.name.strip() or not lvl.description.strip():
+                raise ValueError("수준 이름/설명이 비어 있습니다.")
+
+
+def _validate_ai_plan(parsed: AIPlanDraft, weekly_hours: int) -> None:
+    if sum(t.estimated_minutes for t in parsed.tasks) > weekly_hours * 60:
+        raise ValueError("총 예상 시간이 주당 가능 시간을 초과합니다.")
+    for t in parsed.tasks:
+        if not t.title.strip() or not t.description.strip():
+            raise ValueError("과업 제목/설명이 비어 있습니다.")
+    if not parsed.advice_title.strip() or not parsed.advice_content.strip():
+        raise ValueError("조언 제목/내용이 비어 있습니다.")
+
+
 # 1. Path Recommendation
 @app.post(
     "/api/path/recommend",
@@ -239,25 +306,155 @@ def _not_implemented():
     tags=["path"],
     summary="1단계: 분야 입력 기반 세부 과정 및 수준 체계 추천",
 )
-async def recommend_path(
+def recommend_path(
     payload: PathRecommendationRequest,
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
+    ai: AIClient = Depends(get_ai_client),
 ):
-    _not_implemented()
+    user_payload = {"field": payload.field, "goal": payload.goal, "user_context": payload.user_context}
+    try:
+        parsed = ai.generate(PATH_RECOMMEND_SYSTEM_PROMPT, user_payload, AIPathRecommendation, validator=_validate_ai_path)
+    except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
+        raise _ai_error_response(exc)
+
+    courses = [
+        CourseItem(id=f"course-{i + 1}", title=c.title, description=c.description, levels=c.levels)
+        for i, c in enumerate(parsed.courses)
+    ]
+    return PathRecommendationResponse(field=payload.field, courses=courses, suggested_roles=parsed.suggested_roles)
 
 
-# 2. Plan Generation
+# 2. Plan Generation (draft only - nothing is persisted here; see /api/plan/confirm)
 @app.post(
     "/api/plan/generate",
     response_model=PlanGenerateResponse,
     tags=["plan"],
-    summary="2단계: 주간 학습 과업·조언·참고자료 생성",
+    summary="2단계: 주간 학습 과업·조언·참고자료 생성 (초안, 미저장)",
 )
-async def generate_plan(
+def generate_plan(
     payload: PlanGenerateRequest,
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
+    ai: AIClient = Depends(get_ai_client),
 ):
-    _not_implemented()
+    if payload.target_level_order <= payload.current_level_order:
+        raise bad_request("목표 수준은 현재 수준보다 높은 수준만 선택할 수 있습니다.", {"field": "target_level_order"})
+    target_date = _parse_date(payload.target_date, "target_date")
+    if target_date < clock.today():
+        raise bad_request("목표 완료 희망일은 오늘 이후여야 합니다.", {"field": "target_date"})
+
+    week_start_str = payload.plan_week_start or clock.week_monday(clock.today()).isoformat()
+    _validate_week_start(week_start_str)
+    week_start = _parse_date(week_start_str, "plan_week_start")
+    _validate_week_within_target(week_start, target_date)
+    week_end = week_start + timedelta(days=6)
+
+    user_payload = {
+        "field": payload.field,
+        "course": payload.course,
+        "selected_role": payload.selected_role,
+        "current_level_name": payload.current_level_name,
+        "current_level_description": payload.current_level_description,
+        "target_level_name": payload.target_level_name,
+        "target_level_description": payload.target_level_description,
+        "weekly_hours": payload.weekly_hours,
+    }
+    try:
+        draft = ai.generate(
+            PLAN_GENERATE_SYSTEM_PROMPT,
+            user_payload,
+            AIPlanDraft,
+            validator=lambda parsed: _validate_ai_plan(parsed, payload.weekly_hours),
+        )
+    except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
+        raise _ai_error_response(exc)
+
+    matches = match_references(payload.field, payload.course)
+    references = [
+        ResourceReferenceItem(title=m["title"], category=m["category"], url=m["url"], is_verified=bool(m.get("verified")))
+        for m in matches
+    ]
+    references_notice = None if matches else no_match_notice(payload.field)
+
+    tasks = [
+        WeeklyTaskPlanItem(
+            title=t.title,
+            description=t.description,
+            estimated_minutes=t.estimated_minutes,
+            suggested_weekday=t.suggested_weekday or "none",
+        )
+        for t in draft.tasks
+    ]
+    return PlanGenerateResponse(
+        plan_week_start=week_start.isoformat(),
+        plan_week_end=week_end.isoformat(),
+        total_estimated_minutes=sum(t.estimated_minutes for t in tasks),
+        tasks=tasks,
+        advice=AdviceItem(title=draft.advice_title, content=draft.advice_content),
+        references=references,
+        references_notice=references_notice,
+    )
+
+
+# 2b. Plan Confirmation - saves the goal and its edited draft tasks together (see
+# PlanConfirmRequest docstring / docs/phase4_dev_prompt.md "열린 결정 1").
+@app.post(
+    "/api/plan/confirm",
+    response_model=PlanConfirmResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["plan"],
+    summary="편집한 계획 초안을 학습 목표·과제로 함께 저장",
+)
+def confirm_plan(payload: PlanConfirmRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    goal_data = {
+        "field": payload.field,
+        "course": payload.course,
+        "current_level_order": payload.current_level_order,
+        "current_level_name": payload.current_level_name,
+        "current_level_description": payload.current_level_description,
+        "target_level_order": payload.target_level_order,
+        "target_level_name": payload.target_level_name,
+        "target_level_description": payload.target_level_description,
+        "weekly_hours": payload.weekly_hours,
+        "target_date": payload.target_date,
+    }
+    # Validate everything before writing anything, so a rejected request never leaves a
+    # partial save (the store layer has no multi-document transaction to roll back).
+    _validate_goal_levels(goal_data)
+    _validate_target_date_not_past(goal_data["target_date"])
+    _validate_week_start(payload.plan_week_start)
+    target_date = _parse_date(payload.target_date, "target_date")
+    week_start = _parse_date(payload.plan_week_start, "plan_week_start")
+    _validate_week_within_target(week_start, target_date)
+    total_minutes = sum(t.estimated_minutes for t in payload.tasks)
+    if total_minutes > payload.weekly_hours * 60:
+        raise bad_request("과업 총 예상 시간이 주당 가능 시간을 초과합니다.", {"field": "tasks"})
+
+    now = _now_iso()
+    goal = db.create("goals", {**goal_data, "user_id": uid, "status": "active", "created_at": now, "updated_at": now})
+    user = db.get("users", uid)
+    if user and not user.get("active_goal_id"):
+        db.update("users", uid, {"active_goal_id": goal["id"]})
+
+    tasks = []
+    for idx, t in enumerate(payload.tasks):
+        task_data = t.model_dump()
+        task_data["description"] = task_data["description"] or ""
+        task_data["suggested_weekday"] = task_data["suggested_weekday"] or "none"
+        task = db.create(
+            "tasks",
+            {
+                **task_data,
+                "goal_id": goal["id"],
+                "user_id": uid,
+                "plan_week_start": payload.plan_week_start,
+                "status": "pending",
+                "order_index": idx,
+                "created_at": now,
+                "updated_at": now,
+            },
+        )
+        tasks.append(task)
+    return PlanConfirmResponse(goal=goal, tasks=tasks)
 
 
 # 3. Goals CRUD
@@ -327,8 +524,10 @@ def list_tasks(
 
 @app.post("/api/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED, tags=["tasks"], summary="학습 과제 생성")
 def create_task(payload: TaskCreateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
-    _get_owned(db, "goals", payload.goal_id, uid)
+    goal = _get_owned(db, "goals", payload.goal_id, uid)
     _validate_week_start(payload.plan_week_start)
+    _validate_week_within_target(_parse_date(payload.plan_week_start, "plan_week_start"), _parse_date(goal["target_date"], "target_date"))
+    _validate_task_time_budget(db, uid, goal, payload.plan_week_start, payload.estimated_minutes)
     now = _now_iso()
     data = payload.model_dump()
     data["description"] = data["description"] or ""
@@ -339,8 +538,14 @@ def create_task(payload: TaskCreateRequest, uid: str = Depends(require_consented
 
 @app.patch("/api/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"], summary="과제 상태/추천요일 수정")
 def update_task(task_id: str, payload: TaskUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
-    _get_owned(db, "tasks", task_id, uid)
-    return db.update("tasks", task_id, {**_changes(payload), "updated_at": _now_iso()})
+    task = _get_owned(db, "tasks", task_id, uid)
+    changes = _changes(payload)
+    if "estimated_minutes" in changes:
+        goal = _get_owned(db, "goals", task["goal_id"], uid)
+        _validate_task_time_budget(
+            db, uid, goal, task["plan_week_start"], changes["estimated_minutes"], exclude_task_id=task_id
+        )
+    return db.update("tasks", task_id, {**changes, "updated_at": _now_iso()})
 
 
 @app.delete("/api/tasks/{task_id}", tags=["tasks"], summary="과제 삭제 (하위 기록·회고 포함)")

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ConsentModal } from "@/components/ConsentModal";
 import { DeleteDataSection } from "@/components/DeleteDataSection";
+import { LearningPathWizard } from "@/components/LearningPathWizard";
 import { apiRequest } from "@/lib/api";
 
 type Goal = { id: string; field: string; course: string; target_level_name: string; status: string };
@@ -44,6 +45,8 @@ function GoalList() {
 
 export default function Home() {
   const { status, session, errorMessage, accept, decline, reopenConsent } = useAuth();
+  const [view, setView] = useState<"home" | "wizard">("home");
+  const [goalListKey, setGoalListKey] = useState(0);
 
   if (status === "checking") {
     return (
@@ -84,6 +87,19 @@ export default function Home() {
     );
   }
 
+  if (view === "wizard") {
+    return (
+      <main className="shell stack">
+        <LearningPathWizard
+          onClose={() => {
+            setView("home");
+            setGoalListKey((k) => k + 1);
+          }}
+        />
+      </main>
+    );
+  }
+
   return (
     <main className="shell stack">
       <section className="card">
@@ -95,8 +111,11 @@ export default function Home() {
             익명 계정으로 시작했습니다 · UID <code>{session?.uid.slice(0, 8)}…</code>
           </span>
         </div>
+        <button className="btn" style={{ marginTop: 16 }} onClick={() => setView("wizard")}>
+          ＋ 학습 경로 만들기
+        </button>
       </section>
-      <GoalList />
+      <GoalList key={goalListKey} />
       <DeleteDataSection />
     </main>
   );

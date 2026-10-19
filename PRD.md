@@ -234,10 +234,10 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 |---|---|---|
 | users | UID, 동의 완료 상태, 생성 시각 | 문서 ID = Firebase UID |
 | consent_records | UID, 동의 문구 버전, 동의 시각 | 사용자 본인 |
-| goals | title, domain, selected_process, current_level, target_level, due_date, weekly_hours, created_at | UID 필드 필수 |
+| goals | field, course, current_level_order/name/description, target_level_order/name/description, target_date, weekly_hours, status, created_at | UID 필드 필수 |
 | tasks | goal_id, plan_week_start, title, description, estimated_minutes, suggested_weekday(선택), status | UID 필드 필수 |
-| study_logs | task_id, status, started_at, ended_at, studied_at, minutes, activity_note, created_at, updated_at | UID 필드 필수 |
-| reflections | study_log_id, text, tags, created_at, updated_at | UID 필드 필수 |
+| study_logs | task_id, study_date, minutes, activity, started_at(선택), ended_at(선택), created_at, updated_at | UID 필드 필수 |
+| reflections | study_log_id, content, tags, created_at, updated_at | UID 필드 필수 |
 | conversations | UID, title, messages: [{ role, content, timestamp }], created_at, updated_at | UID 필드 필수; 본인만 읽기·변경 가능 |
 
 **핵심 관계:** `users 1:N goals`, `goals 1:N tasks`, `tasks 1:N study_logs`, `study_logs 1:0..1 reflections`, `users 1:N conversations`. 실적은 WBS 과업 ID로 연결하며, 회고는 해당 실적을 참조한다. `conversations`는 세션 단위 대화 이력을 보관한다. MVP에서는 각 세션에 메시지 배열을 포함하며 role은 `user` 또는 `assistant`로 제한한다.

@@ -85,26 +85,29 @@ class TestSchemaValidation:
 
     def test_plan_generate_request_validation(self):
         valid = PlanGenerateRequest(
-            goal_id="goal_123",
             field="Python 개발",
             course="기본문법",
             current_level_order=1,
+            current_level_name="입문",
             target_level_order=4,
+            target_level_name="실무 기초",
             weekly_hours=7,
             target_date="2026-11-30",
         )
         assert valid.current_level_order == 1
         assert valid.target_level_order == 4
         assert valid.weekly_hours == 7
+        assert not hasattr(valid, "goal_id")  # no pre-existing goal required to draft a plan
 
-        # Invalid: missing goal_id
+        # Invalid: blank course
         with pytest.raises(ValidationError):
             PlanGenerateRequest(
-                goal_id="",
                 field="Python 개발",
-                course="기본문법",
+                course="   ",
                 current_level_order=1,
+                current_level_name="입문",
                 target_level_order=4,
+                target_level_name="실무 기초",
                 weekly_hours=7,
                 target_date="2026-11-30",
             )
