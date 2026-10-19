@@ -11,7 +11,7 @@ PaceMate는 독학 학습자를 위한 AI 학습 플래너(14일 MVP)다. 이 �
 ## 진행 원칙
 - TASK.md 의 Phase 를 한 번에 하나만 진행한다. 끝나면 보고하고 멈춘다. 검증과 사용자 지시 후에만 다음 Phase 로 간다. 다음 Phase 의 뼈대나 스키마도 미리 만들지 않는다.
 - TASK.md 체크박스는 직접 검증한 항목만 체크한다. 확인하지 못한 것은 "미검증"이라고 적는다.
-- 현재 상태(2026-10-20): Phase 3, 4 는 검증 승인됨(dev 모드 기준). Phase 5 는 구현 보고를 받았고 검증팀 수정 지시(docs/phase5_fix_instructions.md)를 처리하는 중이다. Phase 6 은 아직 시작하지 않았다. Firebase 실연동, 브라우저 화면 조작, 배포는 미검증이다. 최신 상태는 docs/ 의 phaseN_report.md, phaseN_fix_instructions.md 를 본다.
+- 현재 상태(2026-10-20): Phase 3, 4 는 검증 승인됨(dev 모드 기준). Phase 5 는 수정까지 검증팀이 확인해 승인했다(dev 모드 기준, 커밋 86a8da4). Phase 6 은 사용자 지시와 검증팀 지시서(docs/phase6_dev_prompt.md)가 나오기 전에는 시작하지 않는다. Firebase 실연동, 브라우저 화면 조작, 배포는 미검증이다. 최신 상태는 docs/ 의 phaseN_report.md, phaseN_fix_instructions.md 를 본다.
 - MVP 에서 제외한 항목과 사용자 테스트 후 후보는 docs/post_mvp_backlog.md 에 있다(예: 타이머 일시정지).
 
 ## 소통 방식

@@ -21,15 +21,10 @@
 - 사용자가 붙여넣은 개발팀 글이 중간에 잘려 보이면 추측하지 말고 해당 docs 파일을 읽는다.
 
 ## 4. 지금 해야 할 일
-1. 개발팀의 Phase 5 수정이 끝나면 docs/phase5_fix_report.md 가 생긴다. 그 전에는 개발팀이 작업 중이다(작업 폴더에 커밋되지 않은 수정이 있을 수 있다).
-2. 보고가 오면 docs/phase5_fix_instructions.md 의 항목별로 검증한다.
-   - backend 에서 python -m pytest, frontend 에서 npm run typecheck, npm test, npm run build
-   - P5-1: 타이머 시작 후 종료(201), 같은 client_request_id 로 종료 재시도 시 200 과 같은 기록이 와야 한다.
-   - P5-2: 활성 타이머가 있는 과제의 목표를 삭제한 뒤 GET /api/timer/active 가 비활성이어야 하고, 삭제된 과제의 타이머를 종료하면 기록 없이 거부되어야 한다.
-   - P5-3, P5-4, P5-5: 코드와 화면 로직을 읽어 확인한다(대시보드 토글 후 지표 갱신, 완료 과제가 목록에 is_completed 로 남고 해제 가능, 타이머 취소 버튼).
-   - 새 결함이 없는지 이전과 같은 방식으로 다시 탐색한다.
-3. 승인하면 Phase 5 를 승인 처리하고, 사용자에게 브라우저 확인 시나리오(docs/phase5_report.md §8 과 지시서의 추가 항목)를 직접 눌러 보도록 요청한다. 사용자가 Firebase 설정(docs/firebase_setup_guide.md)을 마쳤다고 하면 실제 인증과 저장을 검증한다(비밀값은 출력하지 않는다).
-4. 사용자 지시가 있으면 다음 Phase 의 개발팀 지시서를 docs/phase6_dev_prompt.md 로 작성한다. Phase 6 은 RAG 와 회고 메모리 튜터이며 이 프로젝트의 필수 기술이다. 기준은 TASK.md Phase 6, PRD FR-04, FR-05, FR-06 의 인사이트 부분이다. 실제 OpenAI 호출이 필요하므로 사용자가 backend/.env 에 넣은 키를 쓰되 값은 출력하지 않는다.
+1. Phase 5 는 승인되었다(커밋 86a8da4 기준, dev 모드). 이전 검증 세션이 docs/phase5_fix_report.md 를 재검증했다: pytest 185건, typecheck, npm test 통과, P5-1(타이머 종료 멱등 재시도 200), P5-2(목표 삭제 시 활성 타이머 정리, 삭제된 과제 타이머 종료는 409 TIMER_TASK_GONE), P5-4(완료 과제 is_completed 와 해제), 타 UID 격리를 직접 재현해 확인했다. 새 결함은 없었다. 이 결과를 근거로 사용자에게 승인 상태를 확인해 준다.
+2. 브라우저 화면 직접 확인은 아무도 하지 못했다. 사용자에게 docs/phase5_report.md §8 의 1~9번과 docs/phase5_fix_report.md §4 의 10~12번 시나리오를 눌러 보도록 요청하고, 결과를 듣는다. 화면 결함이 나오면 수정 지시서를 docs/ 에 작성한다.
+3. 사용자가 Firebase 설정(docs/firebase_setup_guide.md)을 마쳤다고 하면 실제 인증과 저장을 검증한다(비밀값은 출력하지 않는다).
+4. 사용자 지시가 있으면 Phase 6 개발팀 지시서를 docs/phase6_dev_prompt.md 로 작성한다. Phase 6 은 RAG 와 회고 메모리 튜터이며 이 프로젝트의 필수 기술이다. 기준은 TASK.md Phase 6, PRD FR-04, FR-05, FR-06 의 인사이트 부분이다. 실제 OpenAI 호출이 필요하므로 사용자가 backend/.env 에 넣은 키를 쓰되 값은 출력하지 않는다. 지시서에는 이전 Phase 에서 얻은 교훈(CLAUDE.md, 이 문서의 6번 체크리스트)을 반영한다. 사용자 지시 전에 시작하지 않는다.
 
 ## 5. 검증 방법과 도구
 - 실제 서버 확인: 이미 떠 있는 서버를 건드리지 않고 빈 포트(예: 8013)에 uvicorn 을 --env-file .env 로 띄워 dev 토큰(Bearer dev-<uid>)으로 호출하고 끝나면 프로세스를 종료한다. 이 프로젝트는 AUTH_MODE=dev, STORE_BACKEND=memory 로 키 없이 돈다. AI 호출만 OPENAI_API_KEY 가 필요하다.
@@ -49,7 +44,7 @@
 - 개발팀 보고의 "테스트 통과 수" 와 실제 실행 결과 불일치
 
 ## 7. 현재 열린 항목
-- Phase 5 수정 대기 중(위 4번). 타이머 일시정지는 사용자 결정으로 MVP 제외, docs/post_mvp_backlog.md 에 기록되어 있다.
+- Phase 6 시작 지시 대기. 타이머 일시정지는 사용자 결정으로 MVP 제외, docs/post_mvp_backlog.md 에 기록되어 있다.
 - 미검증: Firebase 실연동(Task 0.5), 브라우저 화면 직접 조작, 배포.
 - 잔여 경미 항목: 참고자료 매칭이 분야 첫 단어 일치 방식이라 "웹 디자인"이 "웹 개발" 자료에 붙는 한계(수용됨), 요청마다 users 문서를 읽는 비용(일부 개선), Firestore 배치/트랜잭션(Firebase 연결 후).
 - 사용자 몫: Firebase 콘솔 설정과 .env 입력, 이후 Render 와 Vercel 환경 설정(Phase 7 직전에 안내), 테스터 5명 모집과 익명 설문(Phase 2 의 2.5, 2.6), 브라우저 화면 확인.
