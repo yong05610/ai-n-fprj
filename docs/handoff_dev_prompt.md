@@ -17,6 +17,13 @@
 - 그동안 할 일: 위 1번 문서들을 읽고 코드베이스를 숙지한다. backend/main.py, schemas.py, store.py, ai_client.py, resources_catalog.py, frontend/components 를 읽어 두고, 이해한 구조와 궁금한 점을 사용자에게 짧게 보고한 뒤 지시를 기다린다. 코드를 수정하지 않는다.
 - 작업 폴더에 커밋되지 않은 수정이 있으면(git status) 이전 개발팀 세션의 것일 수 있으니 건드리지 말고 사용자에게 알린다.
 
+## 3. 현재 상태 (2026-10-20, 커밋 86a8da4 이후)
+- Phase 0~2: 완료(사용자 몫 항목은 TASK.md 참고). Phase 3, 4, 5: 검증 승인됨(dev 모드 기준). Phase 4 는 실제 OpenAI 호출까지 확인했다.
+- Phase 5: 구현 후 검증에서 결함이 발견되어 수정했고, 수정까지 검증팀이 직접 재현해 확인했다(타이머 종료 멱등 재시도, 목표 삭제 시 타이머 정리, 대시보드 완료 과제 표시와 지표 갱신, 타이머 취소 버튼 등). 타이머 일시정지는 사용자 결정으로 MVP 에서 제외했고 docs/post_mvp_backlog.md 에 기록되어 있다.
+- 테스트 기준선: backend pytest 185건, frontend typecheck, npm test 6건, build 통과.
+- 미검증: Firebase 실연동(사용자가 콘솔 설정 중), 브라우저 화면 직접 조작(사용자가 눌러 볼 예정), 배포.
+- 다음: 사용자 지시와 docs/phase6_dev_prompt.md 가 나오면 Phase 6 시작.
+
 ## 4. 이 프로젝트에서 지켜온 규칙 (요약, 자세한 것은 CLAUDE.md)
 - 한 번에 한 Phase 만 한다. 끝나면 보고하고 멈춘다.
 - 확인하지 못한 것은 체크하지 말고 "미검증"이라고 적는다. 실제 HTTP 로 확인했는지, 가짜 AI 로만 확인했는지를 구분해 쓴다.
