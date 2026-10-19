@@ -25,6 +25,7 @@ type DashboardSummary = {
   weekly_target_minutes: number;
   total_study_log_count: number;
   today_tasks: TodayTask[];
+  all_tasks_completed_this_week: boolean;
   weekly_hits: DailyHit[];
   insight: Insight;
 };
@@ -36,14 +37,15 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
-  // Optimistic per-task toggle overlay: stays checked locally even though a completed
-  // task drops out of today_tasks on the next real refetch (avoids it vanishing mid-click).
   const [toggling, setToggling] = useState<Record<string, "pending" | "error">>({});
+  // Optimistic overlay used only while a toggle's own PATCH+refetch is in flight; once the
+  // refetch lands, summary.today_tasks[].is_completed (now accurate - P5-4) is the source
+  // of truth again, so the override is cleared rather than kept forever.
   const [checkedOverride, setCheckedOverride] = useState<Record<string, boolean>>({});
 
-  async function load() {
+  async function load(opts: { silent?: boolean } = {}) {
     if (!session) return;
-    setStatus("loading");
+    if (!opts.silent) setStatus("loading");
     setError(null);
     try {
       const token = await session.getToken();
@@ -69,12 +71,19 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
     try {
       const token = await session.getToken();
       await apiRequest(`/api/tasks/${taskId}`, { method: "PATCH", token, body: { status: next ? "completed" : "pending" } });
+      // P5-3: re-fetch so completed_task_count/progress_percentage update too, not just
+      // the checkbox. `silent: true` keeps the whole dashboard from flashing a loading
+      // screen - the optimistic checkmark already shows the right thing meanwhile.
+      await load({ silent: true });
       setToggling((prev) => {
         const { [taskId]: _removed, ...rest } = prev;
         return rest;
       });
+      setCheckedOverride((prev) => {
+        const { [taskId]: _removed, ...rest } = prev;
+        return rest;
+      });
     } catch {
-      // Roll back on failure.
       setCheckedOverride((prev) => ({ ...prev, [taskId]: currentlyChecked }));
       setToggling((prev) => ({ ...prev, [taskId]: "error" }));
     }
@@ -94,7 +103,7 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
         <p className="error" role="alert">
           {error}
         </p>
-        <button className="btn" onClick={load}>
+        <button className="btn" onClick={() => load()}>
           다시 시도
         </button>
       </section>
@@ -114,6 +123,11 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
       </section>
     );
   }
+
+  const weeklyAchievementPercent =
+    summary.weekly_target_minutes > 0
+      ? Math.round((summary.weekly_study_minutes / summary.weekly_target_minutes) * 100)
+      : 0;
 
   return (
     <div className="stack">
@@ -144,9 +158,9 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
           <small>전체 기간</small>
         </article>
         <article className="card stat">
-          <label>진행률</label>
-          <strong>{summary.progress_percentage}%</strong>
-          <small>완료 과제 기준</small>
+          <label>주간 목표 달성률</label>
+          <strong>{weeklyAchievementPercent}%</strong>
+          <small>이번 주 학습 시간 기준</small>
         </article>
       </div>
 
@@ -155,6 +169,9 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
           <h2>오늘의 추천 과제</h2>
           <p className="small muted">추천 과제는 필수 일정이 아닙니다. 미완료 과제는 주간 계획에 그대로 남습니다.</p>
         </div>
+        {summary.all_tasks_completed_this_week && (
+          <p className="description">이번 주 과제를 모두 완료했어요 🎉</p>
+        )}
         {summary.today_tasks.length === 0 && <p className="description">이번 주 추천 과제가 없습니다.</p>}
         <div className="task-list">
           {summary.today_tasks.map((t) => {

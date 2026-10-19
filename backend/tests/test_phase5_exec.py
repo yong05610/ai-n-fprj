@@ -108,6 +108,35 @@ class TestStudyLogCrud:
         assert len(tasks) == 1
         assert tasks[0]["id"] == task["id"]
 
+    def test_reflections_are_attached_correctly_in_bulk(self, client: TestClient, consented_headers, goal_and_task):
+        # P5-6: list_study_logs now batches the reflections lookup; this guards that the
+        # batched grouping still attaches each log's own reflection, not a mismatched one.
+        _, task = goal_and_task
+        client.post("/api/study-logs", json=_log_payload(task["id"], activity="회고 있음", reflection={"content": "첫 회고"}), headers=consented_headers)
+        client.post("/api/study-logs", json=_log_payload(task["id"], activity="회고 없음"), headers=consented_headers)
+        logs = {log["activity"]: log for log in client.get("/api/study-logs", headers=consented_headers).json()}
+        assert logs["회고 있음"]["reflection"]["content"] == "첫 회고"
+        assert logs["회고 없음"]["reflection"] is None
+
+    def test_list_response_flags_truncation_header_when_over_the_cap(
+        self, client: TestClient, consented_headers, goal_and_task, monkeypatch
+    ):
+        import main
+
+        _, task = goal_and_task
+        monkeypatch.setattr(main, "STUDY_LOG_LIST_LIMIT", 2)
+        for i in range(3):
+            client.post("/api/study-logs", json=_log_payload(task["id"], activity=f"기록 {i}"), headers=consented_headers)
+        response = client.get("/api/study-logs", headers=consented_headers)
+        assert len(response.json()) == 2
+        assert response.headers.get("x-study-logs-truncated") == "true"
+
+    def test_list_response_has_no_truncation_header_under_the_cap(self, client: TestClient, consented_headers, goal_and_task):
+        _, task = goal_and_task
+        client.post("/api/study-logs", json=_log_payload(task["id"]), headers=consented_headers)
+        response = client.get("/api/study-logs", headers=consented_headers)
+        assert "x-study-logs-truncated" not in response.headers
+
 
 class TestStudyLogValidation:
     def test_future_study_date_rejected(self, client: TestClient, consented_headers, goal_and_task):
@@ -370,6 +399,55 @@ class TestTimer:
 
         assert client.get("/api/timer/active", headers=consented_headers).json()["active"] is False
 
+    def test_finish_retry_with_same_client_request_id_returns_200_not_409(
+        self, client: TestClient, consented_headers, goal_and_task
+    ):
+        # P5-1 repro: a client that never saw the first finish's response retries with the
+        # same client_request_id. It must get the saved record back (200), not 409
+        # TIMER_NOT_RUNNING (the first call already cleared the active timer).
+        _, task = goal_and_task
+        client.post("/api/timer/start", json={"task_id": task["id"]}, headers=consented_headers)
+        payload = {"activity": "한 번만 쓸 내용", "minutes": 20, "client_request_id": "finish-key-1"}
+        first = client.post("/api/timer/finish", json=payload, headers=consented_headers)
+        assert first.status_code == 201
+        first_id = first.json()["id"]
+
+        retry = client.post("/api/timer/finish", json=payload, headers=consented_headers)
+        assert retry.status_code == 200
+        assert retry.json()["id"] == first_id
+
+        logs = client.get("/api/study-logs", params={"task_id": task["id"]}, headers=consented_headers).json()
+        assert len(logs) == 1
+
+    def test_finish_without_active_timer_and_without_matching_client_request_id_still_409(
+        self, client: TestClient, consented_headers
+    ):
+        # Regression guard: a client_request_id that doesn't match any saved log must not
+        # bypass the "is a timer even running" check.
+        response = client.post(
+            "/api/timer/finish", json={"activity": "x", "client_request_id": "never-used-key"}, headers=consented_headers
+        )
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "TIMER_NOT_RUNNING"
+
+    def test_finish_rejects_when_active_timers_task_was_deleted_out_from_under_it(
+        self, client: TestClient, consented_headers, goal_and_task
+    ):
+        # P5-2 defense-in-depth: simulate a dangling active_timer (normal delete_task/
+        # delete_goal paths already clean this up - this covers any path that doesn't).
+        from store import get_store
+
+        _, task = goal_and_task
+        client.post("/api/timer/start", json={"task_id": task["id"]}, headers=consented_headers)
+        get_store().update("tasks", task["id"], {})  # no-op touch; task still exists here
+        get_store().delete("tasks", task["id"])  # now simulate the task having vanished
+
+        response = client.post("/api/timer/finish", json={"activity": "x"}, headers=consented_headers)
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "TIMER_TASK_GONE"
+        assert client.get("/api/timer/active", headers=consented_headers).json()["active"] is False
+        assert client.get("/api/study-logs", headers=consented_headers).json() == []
+
     def test_finish_without_minutes_override_computes_from_elapsed(self, client: TestClient, consented_headers, goal_and_task, monkeypatch):
         import main
 
@@ -398,6 +476,14 @@ class TestTimer:
         _, task = goal_and_task
         client.post("/api/timer/start", json={"task_id": task["id"]}, headers=consented_headers)
         client.delete(f"/api/tasks/{task['id']}", headers=consented_headers)
+        assert client.get("/api/timer/active", headers=consented_headers).json()["active"] is False
+
+    def test_deleting_the_goal_clears_a_timer_on_one_of_its_tasks(self, client: TestClient, consented_headers, goal_and_task):
+        # P5-2 repro: deleting the goal (which cascades to its tasks) previously left
+        # users.active_timer pointing at a task that no longer exists.
+        goal, task = goal_and_task
+        client.post("/api/timer/start", json={"task_id": task["id"]}, headers=consented_headers)
+        assert client.delete(f"/api/goals/{goal['id']}", headers=consented_headers).status_code == 200
         assert client.get("/api/timer/active", headers=consented_headers).json()["active"] is False
 
     def test_data_deletion_clears_active_timer(self, client: TestClient, consented_headers, goal_and_task):
@@ -444,6 +530,41 @@ class TestDashboardSummary:
         assert body["completed_task_count"] == 1
         assert body["progress_percentage"] == 50
         assert body["weekly_target_minutes"] == goal["weekly_hours"] * 60
+
+    def test_completed_task_stays_visible_with_is_completed_true(self, client: TestClient, consented_headers, goal_and_task):
+        # P5-4 repro: a completed task previously vanished from today_tasks entirely, and
+        # is_completed was hardcoded False even when it hadn't been filtered out yet.
+        _, task = goal_and_task
+        client.patch(f"/api/tasks/{task['id']}", json={"status": "completed"}, headers=consented_headers)
+        body = client.get("/api/dashboard/summary", headers=consented_headers).json()
+        matching = next((t for t in body["today_tasks"] if t["id"] == task["id"]), None)
+        assert matching is not None
+        assert matching["is_completed"] is True
+
+    def test_uncompleting_a_task_flips_is_completed_back(self, client: TestClient, consented_headers, goal_and_task):
+        _, task = goal_and_task
+        client.patch(f"/api/tasks/{task['id']}", json={"status": "completed"}, headers=consented_headers)
+        client.patch(f"/api/tasks/{task['id']}", json={"status": "pending"}, headers=consented_headers)
+        body = client.get("/api/dashboard/summary", headers=consented_headers).json()
+        matching = next(t for t in body["today_tasks"] if t["id"] == task["id"])
+        assert matching["is_completed"] is False
+
+    def test_all_tasks_completed_this_week_flag(self, client: TestClient, consented_headers, goal_and_task):
+        _, task = goal_and_task
+        assert client.get("/api/dashboard/summary", headers=consented_headers).json()["all_tasks_completed_this_week"] is False
+        client.patch(f"/api/tasks/{task['id']}", json={"status": "completed"}, headers=consented_headers)
+        assert client.get("/api/dashboard/summary", headers=consented_headers).json()["all_tasks_completed_this_week"] is True
+
+    def test_incomplete_tasks_keep_priority_over_completed_within_the_display_cap(
+        self, client: TestClient, consented_headers, goal_and_task
+    ):
+        goal, first_task = goal_and_task
+        client.patch(f"/api/tasks/{first_task['id']}", json={"status": "completed"}, headers=consented_headers)
+        extra = [_make_task(client, consented_headers, goal["id"], title=f"과제 {i}", order_index=i) for i in range(5)]
+        body = client.get("/api/dashboard/summary", headers=consented_headers).json()
+        ids = [t["id"] for t in body["today_tasks"]]
+        assert len(ids) == 5  # capped
+        assert first_task["id"] not in ids  # completed task bumped out by incomplete ones
 
     def test_weekly_study_minutes_only_counts_this_week(self, client: TestClient, consented_headers, goal_and_task, monkeypatch):
         import main

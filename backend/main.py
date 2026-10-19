@@ -280,6 +280,14 @@ def _attach_reflection(db, uid: str, log: dict[str, Any]) -> dict[str, Any]:
     return {**log, "reflection": reflections[0] if reflections else None}
 
 
+def _attach_reflections_bulk(db, uid: str, logs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """P5-6: list_study_logs previously ran one reflections query per log (200 reads on
+    Firestore for a full page). One query for all of this user's reflections, grouped by
+    study_log_id, replaces that."""
+    by_log_id = {r["study_log_id"]: r for r in db.find("reflections", user_id=uid)}
+    return [{**log, "reflection": by_log_id.get(log["id"])} for log in logs]
+
+
 # --- Consent (Phase 3) ---
 
 @app.post(
@@ -615,6 +623,7 @@ def delete_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depe
     _get_owned(db, "goals", goal_id, uid)
     for task in db.find("tasks", user_id=uid, goal_id=goal_id):
         _delete_task_children(db, uid, task["id"])
+        _clear_active_timer_for_task(db, uid, task["id"])  # P5-2: a goal delete must not strand a timer
     db.delete_where("tasks", user_id=uid, goal_id=goal_id)
     db.delete("goals", goal_id)
     user = db.get("users", uid)
@@ -694,6 +703,7 @@ def _parse_iso_dt(value: str) -> datetime:
 # 5. Study Logs & Reflections CRUD
 @app.get("/api/study-logs", response_model=List[StudyLogResponse], tags=["study-logs"], summary="학습 실행 기록 목록 조회")
 def list_study_logs(
+    response: Response,
     task_id: Optional[str] = Query(None, description="과제 ID 필터"),
     period: str = Query("week", description="조회 기간 (week | all)"),
     uid: str = Depends(require_consented_uid),
@@ -709,7 +719,10 @@ def list_study_logs(
         week_start = clock.week_monday(clock.today())
         logs = [log for log in logs if clock.is_within_week(date.fromisoformat(log["study_date"]), week_start)]
     logs.sort(key=lambda log: (log["study_date"], log["created_at"]), reverse=True)
-    return [_attach_reflection(db, uid, log) for log in logs[:STUDY_LOG_LIST_LIMIT]]
+    if len(logs) > STUDY_LOG_LIST_LIMIT:
+        # 사소한 사항: 잘림을 조용히 하지 않는다 - 프론트가 안내 문구를 보여줄 수 있게 헤더로 알린다.
+        response.headers["X-Study-Logs-Truncated"] = "true"
+    return _attach_reflections_bulk(db, uid, logs[:STUDY_LOG_LIST_LIMIT])
 
 
 @app.post(
@@ -796,9 +809,14 @@ def delete_study_log(log_id: str, uid: str = Depends(require_consented_uid), db=
 
 
 # 5b. Timer - server-authoritative, one active timer per user (열린 결정 1: 저장 위치는
-# users.active_timer 필드. 일시정지는 구현하지 않는다 - 시작/종료만. 근거는
-# docs/phase5_report.md 참고).
+# users.active_timer 필드. 일시정지는 MVP에서 제외한다 - 시작/종료/취소만. 근거는
+# docs/phase5_report.md 참고). 경과 시간 계산은 _compute_elapsed_minutes 한 곳에만 있다 -
+# 나중에 일시정지(누적 시간)를 추가해도 이 함수만 바꾸면 된다.
 MAX_TIMER_DURATION_MINUTES = 1440  # 24h; beyond this, finishing requires a manual minutes override
+
+
+def _compute_elapsed_minutes(started_at: str, ended_at: str) -> int:
+    return max(1, round((_parse_iso_dt(ended_at) - _parse_iso_dt(started_at)).total_seconds() / 60))
 
 
 @app.post(
@@ -814,6 +832,13 @@ def start_timer(
     user: dict[str, Any] = Depends(require_consented_user_doc),
     db=Depends(get_db),
 ):
+    # P5-7 (documented limitation, not fixed here): this is read-then-write, not atomic.
+    # MemoryStore/FirestoreStore have no compare-and-set or transaction primitive, so two
+    # tabs/devices starting a timer within the same instant can both pass this check and
+    # both write users.active_timer (last write wins, no 409 for either). Firestore
+    # transactions (`db.transaction()` + a read-modify-write callback) would close this
+    # once real Firestore is connected (Task 0.5); the in-memory store would need an
+    # equivalent compare-and-set. Low risk for a single-user MVP session, but a real gap.
     uid = user["uid"]
     task = _get_owned(db, "tasks", payload.task_id, uid)
     active = user.get("active_timer")
@@ -881,19 +906,41 @@ def finish_timer(
     db=Depends(get_db),
 ):
     uid = user["uid"]
+
+    # P5-1: check idempotency *before* the active-timer check. The first successful call
+    # already cleared active_timer, so a retry that checked "is a timer running" first
+    # would always hit TIMER_NOT_RUNNING (409) instead of returning the record it already
+    # saved - the client sees a false failure and may re-enter the same session by hand.
+    existing = _find_by_client_request_id(db, "study_logs", uid, payload.client_request_id)
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        # Only clear active_timer if it's still the one this finish produced (same task) -
+        # covers a crash between creating the log and clearing the timer on the first
+        # attempt, without touching a timer the user may have started again since.
+        current_user = db.get("users", uid) or {}
+        still_active = current_user.get("active_timer")
+        if still_active and still_active.get("task_id") == existing.get("task_id"):
+            db.update("users", uid, {"active_timer": None})
+        return _attach_reflection(db, uid, existing)
+
     active = user.get("active_timer")
     if not active:
         raise api_error(status.HTTP_409_CONFLICT, "TIMER_NOT_RUNNING", "진행 중인 타이머가 없습니다.")
 
-    existing = _find_by_client_request_id(db, "study_logs", uid, payload.client_request_id)
-    if existing is not None:
-        response.status_code = status.HTTP_200_OK
+    # P5-2: a deleted goal already clears active_timer for its tasks (delete_goal /
+    # delete_task), but this defends against any other path that might leave it dangling.
+    task = db.get("tasks", active["task_id"])
+    if task is None or task.get("user_id") != uid:
         db.update("users", uid, {"active_timer": None})
-        return _attach_reflection(db, uid, existing)
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "TIMER_TASK_GONE",
+            "타이머가 연결된 과제가 삭제되어 타이머를 정리했습니다. 새로 시작해 주세요.",
+        )
 
     started_at = active["started_at"]
     ended_at = _now_iso()
-    elapsed_minutes = max(1, round((_parse_iso_dt(ended_at) - _parse_iso_dt(started_at)).total_seconds() / 60))
+    elapsed_minutes = _compute_elapsed_minutes(started_at, ended_at)
     if payload.minutes is not None:
         minutes = payload.minutes
     elif elapsed_minutes > MAX_TIMER_DURATION_MINUTES:
@@ -945,6 +992,11 @@ async def get_data_summary(
 DASHBOARD_WEEKDAY_LABELS = ("월", "화", "수", "목", "금", "토", "일")
 DASHBOARD_INSIGHT_MIN_RECORDS = 3
 DASHBOARD_INSIGHT_MIN_REFLECTIONS = 1
+# P5-4: today_tasks shows at most this many items, ordered incomplete-first (today's
+# suggested weekday, then this week's remaining order_index), with completed tasks
+# filling any leftover slots. If a week has more than this many incomplete tasks,
+# completed ones are the first to be cut.
+TODAY_TASKS_LIMIT = 5
 
 
 def _empty_dashboard_summary(week_start: date, today: date) -> DashboardSummaryResponse:
@@ -967,6 +1019,7 @@ def _empty_dashboard_summary(week_start: date, today: date) -> DashboardSummaryR
         weekly_target_minutes=0,
         total_study_log_count=0,
         today_tasks=[],
+        all_tasks_completed_this_week=False,
         weekly_hits=weekly_hits,
         insight=AIInsightSummary(
             text="학습 목표를 만들면 진행현황과 인사이트를 볼 수 있어요.",
@@ -1011,21 +1064,26 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
         (t for t in tasks if t["plan_week_start"] == week_start.isoformat()), key=lambda t: t["order_index"]
     )
     incomplete = [t for t in this_week_tasks if t["status"] != "completed"]
+    completed_this_week = [t for t in this_week_tasks if t["status"] == "completed"]
     today_weekday = clock.WEEKDAY_BY_INDEX[today.weekday()]
     today_match = [t for t in incomplete if t["suggested_weekday"] == today_weekday]
     today_match_ids = {t["id"] for t in today_match}
-    ordered = today_match + [t for t in incomplete if t["id"] not in today_match_ids]
+    rest_incomplete = [t for t in incomplete if t["id"] not in today_match_ids]
+    # P5-4: completed tasks stay visible (and toggleable back) instead of disappearing -
+    # incomplete tasks keep priority for the limited slots, completed ones fill the rest.
+    ordered = today_match + rest_incomplete + completed_this_week
     today_tasks = [
         TodayTaskItem(
             id=t["id"],
             title=t["title"],
             estimated_minutes=t["estimated_minutes"],
             suggested_weekday=t["suggested_weekday"],
-            is_completed=False,
+            is_completed=t["status"] == "completed",
             record_count=log_counts_by_task.get(t["id"], 0),
         )
-        for t in ordered[:5]
+        for t in ordered[:TODAY_TASKS_LIMIT]
     ]
+    all_tasks_completed_this_week = bool(this_week_tasks) and not incomplete
 
     reflection_count = len(db.find("reflections", user_id=uid))
     sufficient = len(logs) >= DASHBOARD_INSIGHT_MIN_RECORDS and reflection_count >= DASHBOARD_INSIGHT_MIN_REFLECTIONS
@@ -1055,6 +1113,7 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
         weekly_target_minutes=goal["weekly_hours"] * 60,
         total_study_log_count=len(logs),
         today_tasks=today_tasks,
+        all_tasks_completed_this_week=all_tasks_completed_this_week,
         weekly_hits=weekly_hits,
         insight=insight,
     )

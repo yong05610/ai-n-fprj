@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
-import { ApiError, apiRequest } from "@/lib/api";
+import { ApiError, apiRequest, apiRequestWithHeaders } from "@/lib/api";
 import { todayKSTDateString } from "@/lib/week";
 
 type Weekday = "none" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -70,7 +70,9 @@ export function ExecutionScreen() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [confirmingCancelTimer, setConfirmingCancelTimer] = useState(false);
   const [requestId, setRequestId] = useState(newRequestId());
+  const [logsTruncated, setLogsTruncated] = useState(false);
 
   async function load() {
     if (!session) return;
@@ -79,15 +81,16 @@ export function ExecutionScreen() {
     try {
       const token = await session.getToken();
       const profile = await apiRequest<{ active_goal_id: string | null }>("/api/user/profile", { token });
-      const [taskList, logList, active] = await Promise.all([
+      const [taskList, logsResult, active] = await Promise.all([
         profile.active_goal_id
           ? apiRequest<TaskItem[]>(`/api/tasks?goal_id=${encodeURIComponent(profile.active_goal_id)}`, { token })
           : Promise.resolve([] as TaskItem[]),
-        apiRequest<StudyLog[]>(`/api/study-logs?period=${period}`, { token }),
+        apiRequestWithHeaders<StudyLog[]>(`/api/study-logs?period=${period}`, { token }),
         apiRequest<ActiveTimer>("/api/timer/active", { token }),
       ]);
       setTasks(taskList);
-      setLogs(logList);
+      setLogs(logsResult.data);
+      setLogsTruncated(logsResult.headers.get("x-study-logs-truncated") === "true");
       setTimer(active);
       setLoadStatus("ready");
     } catch (error) {
@@ -241,9 +244,27 @@ export function ExecutionScreen() {
       await load();
       if (taskId) resetFormForNew(taskId);
     } catch (error) {
-      setSaveError(error instanceof ApiError ? error.message : "타이머 저장에 실패했습니다.");
+      if (error instanceof ApiError && error.code === "TIMER_TASK_GONE") {
+        // The server already cleared the dangling timer; reflect that locally too.
+        setTimer({ active: false, task_id: null, goal_id: null, started_at: null });
+        setSaveError("타이머가 연결된 과제가 삭제되어 타이머가 정리되었습니다.");
+      } else {
+        setSaveError(error instanceof ApiError ? error.message : "타이머 저장에 실패했습니다.");
+      }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function cancelTimer() {
+    if (!session) return;
+    try {
+      const token = await session.getToken();
+      await apiRequest("/api/timer/cancel", { method: "POST", token, body: {} });
+      setTimer({ active: false, task_id: null, goal_id: null, started_at: null });
+      setConfirmingCancelTimer(false);
+    } catch (error) {
+      setSaveError(error instanceof ApiError ? error.message : "타이머를 취소하지 못했습니다.");
     }
   }
 
@@ -324,6 +345,7 @@ export function ExecutionScreen() {
               {saveError}
             </p>
           )}
+          {logsTruncated && <p className="small muted">최근 200건만 표시됩니다.</p>}
           {tasks.map((task) => (
             <div key={task.id} className="task-record-group">
               <div className="task-record-head">
@@ -392,10 +414,25 @@ export function ExecutionScreen() {
                       <button type="button" className="btn" onClick={startTimer} disabled={Boolean(timerRunsElsewhere)}>
                         학습 시작
                       </button>
+                    ) : confirmingCancelTimer ? (
+                      <span className="inline-confirm">
+                        기록을 만들지 않고 취소할까요?
+                        <button type="button" className="link-btn" onClick={cancelTimer}>
+                          취소 확정
+                        </button>
+                        <button type="button" className="link-btn" onClick={() => setConfirmingCancelTimer(false)}>
+                          아니요
+                        </button>
+                      </span>
                     ) : (
-                      <button type="button" className="btn danger" onClick={finishTimer} disabled={saving}>
-                        학습 종료
-                      </button>
+                      <>
+                        <button type="button" className="btn danger" onClick={finishTimer} disabled={saving}>
+                          학습 종료
+                        </button>
+                        <button type="button" className="btn secondary" onClick={() => setConfirmingCancelTimer(true)} disabled={saving}>
+                          타이머 취소
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

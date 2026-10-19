@@ -20,10 +20,10 @@ type RequestOptions = {
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
-export async function apiRequest<T>(
+async function performRequest(
   path: string,
-  { method = "GET", body, token, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions = {},
-): Promise<T> {
+  { method = "GET", body, token, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions,
+): Promise<{ data: unknown; headers: Headers }> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -50,11 +50,24 @@ export async function apiRequest<T>(
 
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    const detail = data?.detail;
-    const code = typeof detail === "object" && detail?.code ? detail.code : "INTERNAL_ERROR";
+    const detail = (data as { detail?: unknown } | null)?.detail;
+    const code = typeof detail === "object" && detail && "code" in detail ? String((detail as { code: unknown }).code) : "INTERNAL_ERROR";
     const message =
-      typeof detail === "object" && detail?.message ? detail.message : "요청을 처리하지 못했습니다. 다시 시도해 주세요.";
+      typeof detail === "object" && detail && "message" in detail
+        ? String((detail as { message: unknown }).message)
+        : "요청을 처리하지 못했습니다. 다시 시도해 주세요.";
     throw new ApiError(response.status, code, message);
   }
+  return { data, headers: response.headers };
+}
+
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const { data } = await performRequest(path, options);
   return data as T;
+}
+
+/** Like apiRequest, but also returns response headers (e.g. list-truncation flags). */
+export async function apiRequestWithHeaders<T>(path: string, options: RequestOptions = {}): Promise<{ data: T; headers: Headers }> {
+  const { data, headers } = await performRequest(path, options);
+  return { data: data as T, headers };
 }

@@ -483,6 +483,9 @@ class DashboardSummaryResponse(BaseModel):
     weekly_target_minutes: int
     total_study_log_count: int
     today_tasks: List[TodayTaskItem]
+    all_tasks_completed_this_week: bool = Field(
+        False, description="이번 주 계획 과제가 1개 이상이고 전부 완료된 경우 true (P5-4)"
+    )
     weekly_hits: List[DailyHitItem]
     insight: AIInsightSummary
 

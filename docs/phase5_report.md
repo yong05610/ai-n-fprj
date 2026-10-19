@@ -92,6 +92,12 @@ TASK.md 5.1~5.9 전부 구현·백엔드 검증 완료. 5.2는 일시정지(paus
 
 커밋 전 과정과 동일하게 테스트 통과·비밀값 없음·의도한 파일만 포함을 확인한 뒤 push했다(사용자가 부여한 재량 권한, `docs` 참고: 다른 세션이 설정한 push 기준).
 
+## 10. 알려진 한계 (P5-7, docs/phase5_fix_instructions.md)
+
+`start_timer`는 "읽고 나서 쓰기" 방식이라 원자적이지 않다. 같은 사용자가 두 탭/기기에서 거의 동시에 타이머를 시작하면 둘 다 "활성 타이머 없음"을 보고 둘 다 쓸 수 있어 TIMER_ALREADY_RUNNING(409)이 걸러주지 못하는 경쟁 상태가 이론적으로 남아 있다. `MemoryStore`와 현재의 `FirestoreStore` 래퍼 모두 compare-and-set이나 트랜잭션을 제공하지 않는다. Firestore 실연동(Task 0.5) 이후 `db.transaction()` 기반의 읽기-검사-쓰기로 교체해야 완전히 막을 수 있다. 단일 사용자 MVP 세션에서는 위험이 낮다고 보고 지금은 코드 주석(`backend/main.py`의 `start_timer`)으로만 남겼다.
+
 ---
 
 보고 후 멈추고 검증팀 검증을 기다립니다. **특히 5-1(타이머 일시정지 제외)은 사용자 승인이 필요합니다.**
+
+**2026-10-20 추가:** 검증팀 1차 검증 결과(docs/phase5_fix_instructions.md)에 따라 결함 5건(P5-1~P5-5 필수·권장) + 경미 2건을 수정했다. 상세 내용은 `docs/phase5_fix_report.md` 참고. 타이머 일시정지 제외는 사용자가 승인했다(docs/phase5_fix_instructions.md "타이머 일시정지" 절).
