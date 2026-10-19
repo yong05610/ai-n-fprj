@@ -9,6 +9,7 @@ from ai_client import (
     MAX_RETRIES,
     AIClient,
     AIRetryableError,
+    AIRetryFeedback,
     AISchemaError,
     AITimeoutError,
     AIUnavailableError,
@@ -26,9 +27,11 @@ class _StubClient(AIClient):
         self._raws = list(raws or [])
         self._raises = list(raises or [])
         self.calls = 0
+        self.payloads_seen = []
 
     def _raw_complete(self, system_prompt: str, user_payload: dict) -> str:
         self.calls += 1
+        self.payloads_seen.append(user_payload)
         if self._raises:
             raise self._raises.pop(0)
         return self._raws.pop(0)
@@ -75,6 +78,19 @@ class TestGenerateRetryContract:
         result = client.generate("sys", {}, _Echo, validator=lambda p: None)
         assert result.value == 2
         assert client.calls == 1
+
+    def test_retry_feedback_is_merged_into_the_next_attempts_payload(self):
+        client = _StubClient(raws=['{"value": 1}', '{"value": 2}'])
+
+        def reject_once_then_pass(parsed: _Echo) -> None:
+            if client.calls == 1:
+                raise AIRetryFeedback("too small", feedback={"hint": "go bigger", "previous_value": parsed.value})
+
+        result = client.generate("sys", {"base": True}, _Echo, validator=reject_once_then_pass)
+        assert result.value == 2
+        assert client.calls == 2
+        assert client.payloads_seen[0] == {"base": True}
+        assert client.payloads_seen[1] == {"base": True, "hint": "go bigger", "previous_value": 1}
 
     def test_unavailable_error_is_not_caught_or_retried(self):
         client = _StubClient(raises=[AIUnavailableError("down")])

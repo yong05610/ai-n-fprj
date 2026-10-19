@@ -63,9 +63,16 @@ class TestSchemaValidation:
         )
         assert len(course.levels) == 2
 
-        # A course must carry at least one level (no shared/global level table).
+        # A course must carry at least two levels (P4-8: one level leaves no target to pick).
         with pytest.raises(ValidationError):
             CourseItem(id="empty", title="빈 과정", description="설명", levels=[])
+        with pytest.raises(ValidationError):
+            CourseItem(
+                id="one-level",
+                title="한 단계뿐",
+                description="설명",
+                levels=[LevelItem(order=1, name="입문자", description="기초 단계")],
+            )
 
     def test_path_recommendation_response_is_scoped_per_course(self):
         response = PathRecommendationResponse(
@@ -75,7 +82,10 @@ class TestSchemaValidation:
                     id="basic-syntax",
                     title="기본문법",
                     description="변수와 제어문",
-                    levels=[LevelItem(order=1, name="입문자", description="기초 단계")],
+                    levels=[
+                        LevelItem(order=1, name="입문자", description="기초 단계"),
+                        LevelItem(order=2, name="실무 기초", description="다음 단계"),
+                    ],
                 )
             ],
             suggested_roles=["백엔드 개발자", "데이터 엔지니어"],

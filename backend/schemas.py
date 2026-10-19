@@ -31,7 +31,9 @@ class CourseItem(BaseModel):
     id: str = Field(..., description="세부 과정 고유 ID 또는 슬러그")
     title: str = Field(..., max_length=100, description="세부 과정명 (예: 기본문법, 자료구조와 알고리즘)")
     description: str = Field(..., max_length=2000, description="과정 개요")
-    levels: List[LevelItem] = Field(..., min_length=1, description="이 과정에 한정된 수준 체계 (과정마다 다를 수 있음)")
+    levels: List[LevelItem] = Field(
+        ..., min_length=2, description="이 과정에 한정된 수준 체계 (최소 2개, 과정마다 다를 수 있음)"
+    )
 
 
 class PathRecommendationRequest(BaseModel):

@@ -49,15 +49,18 @@ PLAN_REQUEST_BASE = {
 
 
 class FakeAIClient(AIClient):
-    """Returns canned raw JSON strings in order, or raises canned exceptions. Counts calls."""
+    """Returns canned raw JSON strings in order, or raises canned exceptions. Counts calls
+    and records each attempt's user_payload (so retry-feedback tests can inspect it)."""
 
     def __init__(self, raws=None, raises=None):
         self._raws = list(raws or [])
         self._raises = list(raises or [])
         self.calls = 0
+        self.payloads_seen = []
 
     def _raw_complete(self, system_prompt: str, user_payload: dict) -> str:
         self.calls += 1
+        self.payloads_seen.append(user_payload)
         if self._raises:
             raise self._raises.pop(0)
         return self._raws.pop(0)
@@ -158,6 +161,25 @@ class TestPathRecommend:
         assert client.post("/api/path/recommend", json={"field": "x"}).status_code == 401
         assert client.post("/api/path/recommend", json={"field": "x"}, headers=mock_auth_headers).status_code == 403
 
+    def test_single_level_course_retried_then_fails(self, client: TestClient, consented_headers, override_ai):
+        # P4-8 repro: a real gpt-4o-mini call returned exactly one level per course,
+        # leaving no target level for the user to pick.
+        one_level = {
+            "courses": [{"title": "기본문법", "description": "변수와 제어문", "levels": [{"order": 1, "name": "입문자", "description": "..."}]}],
+            "suggested_roles": [],
+        }
+        fake = override_ai(FakeAIClient(raws=[_raw(one_level)] * (MAX_RETRIES + 1)))
+        response = client.post("/api/path/recommend", json={"field": "Python 개발"}, headers=consented_headers)
+        assert response.status_code == 502
+        assert response.json()["detail"]["code"] == "AI_SCHEMA_ERROR"
+        assert fake.calls == MAX_RETRIES + 1
+
+    def test_two_level_course_passes(self, client: TestClient, consented_headers, override_ai):
+        override_ai(FakeAIClient(raws=[_raw(VALID_PATH_RESPONSE)]))  # already 2 levels
+        response = client.post("/api/path/recommend", json={"field": "Python 개발"}, headers=consented_headers)
+        assert response.status_code == 200
+        assert len(response.json()["courses"][0]["levels"]) == 2
+
 
 class TestPlanGenerate:
     def test_success_returns_draft_without_persisting_anything(self, client: TestClient, consented_headers, override_ai):
@@ -219,6 +241,32 @@ class TestPlanGenerate:
         assert response.status_code == 502
         assert response.json()["detail"]["code"] == "AI_SCHEMA_ERROR"
         assert fake.calls == MAX_RETRIES + 1
+
+    def test_initial_payload_includes_precomputed_max_total_minutes(
+        self, client: TestClient, consented_headers, override_ai
+    ):
+        # P4-9: the model must not have to compute weekly_hours*60 itself.
+        fake = override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
+        client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
+        assert fake.payloads_seen[0]["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60
+
+    def test_over_budget_retry_gets_previous_total_as_feedback_then_succeeds(
+        self, client: TestClient, consented_headers, override_ai
+    ):
+        # P4-9 repro: a real gpt-4o-mini call returned 660/570/420 minutes against a
+        # 360-minute budget, three times in a row. The fix tells the next attempt how
+        # far over it was instead of just repeating the same unmet instruction.
+        over_budget = {
+            **VALID_PLAN_RESPONSE,
+            "tasks": [{"title": "과로", "description": "너무 많음", "estimated_minutes": 660, "suggested_weekday": "none"}],
+        }
+        fake = override_ai(FakeAIClient(raws=[_raw(over_budget), _raw(VALID_PLAN_RESPONSE)]))
+        response = client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
+        assert response.status_code == 200
+        assert fake.calls == 2
+        second_attempt_payload = fake.payloads_seen[1]
+        assert second_attempt_payload["previous_total_minutes"] == 660
+        assert second_attempt_payload["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60
 
     def test_invalid_suggested_weekday_treated_as_schema_error(self, client: TestClient, consented_headers, override_ai):
         bad_raw = '{"tasks":[{"title":"t","description":"d","estimated_minutes":30,"suggested_weekday":"monday"}],"advice_title":"a","advice_content":"b"}'

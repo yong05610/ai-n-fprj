@@ -44,6 +44,19 @@ class AIRetryableError(Exception):
     """Internal signal from a subclass: this attempt failed transiently, retry it."""
 
 
+class AIRetryFeedback(ValueError):
+    """Raise from a `validator` to fail the current attempt *and* tell the next
+    retry's user payload something concrete about what went wrong (e.g. "you
+    went 300 minutes over budget"). Treated exactly like a plain ValueError for
+    the schema/semantic-failure path; `feedback` is merged into `user_payload`
+    before the next attempt.
+    """
+
+    def __init__(self, message: str, feedback: dict) -> None:
+        super().__init__(message)
+        self.feedback = feedback
+
+
 def ai_configured() -> bool:
     return bool(os.getenv("OPENAI_API_KEY"))
 
@@ -79,9 +92,10 @@ class AIClient(ABC):
     ) -> T:
         last_error: Optional[Exception] = None
         last_kind = "timeout"
+        payload = dict(user_payload)
         for _ in range(MAX_RETRIES + 1):
             try:
-                raw = self._raw_complete(system_prompt, user_payload)
+                raw = self._raw_complete(system_prompt, payload)
             except AIRetryableError as exc:
                 last_error, last_kind = exc, "timeout"
                 continue
@@ -90,6 +104,10 @@ class AIClient(ABC):
                 if validator is not None:
                     validator(parsed)
                 return parsed
+            except AIRetryFeedback as exc:
+                last_error, last_kind = exc, "schema"
+                payload = {**payload, **exc.feedback}
+                continue
             except (ValidationError, ValueError) as exc:
                 last_error, last_kind = exc, "schema"
                 continue

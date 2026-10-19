@@ -14,7 +14,7 @@ from schemas import LevelItem, Weekday
 class AICourseItem(BaseModel):
     title: str = Field(..., max_length=100, description="세부 과정명")
     description: str = Field(..., max_length=2000, description="과정 개요")
-    levels: List[LevelItem] = Field(..., min_length=1, description="이 과정에 한정된 수준 체계")
+    levels: List[LevelItem] = Field(..., min_length=2, description="이 과정에 한정된 수준 체계 (최소 2개)")
 
 
 class AIPathRecommendation(BaseModel):

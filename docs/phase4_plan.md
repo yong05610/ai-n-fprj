@@ -1,7 +1,7 @@
 # PaceMate Phase 4 — AI 학습 경로·계획 (PLAN)
 
 **기준:** TASK.md Phase 4, docs/phase4_dev_prompt.md (검증팀 착수 프롬프트), PRD.md FR-02, docs/erd_current.md
-**상태:** 2026-10-19 구현 완료 → 검증팀 1차 리뷰(조건부 보류, 결함 7건) 반영 완료, 재검증 대기 (실 LLM 미검증)
+**상태:** 2026-10-19 구현 완료 → 검증팀 1차 리뷰(결함 7건) 반영 → 2차 잔여 사항(자료 매칭, 삭제 시 초안 정리) 반영 → 2026-10-20 실제 OpenAI 호출로 발견된 결함 2건(P4-8, P4-9) 반영, 실제 호출 검증 완료, 재검증 대기
 
 ---
 
@@ -76,6 +76,23 @@ Phase 3 리뷰에서 정한 `ge=1, le=20`(과정 내 수준 개수)을 유지했
 - **삭제 후 초안 잔존:** `AuthProvider.deleteAllData()`에 `clearWizardDraft()` 호출을 추가했다. 데이터 삭제 시 `sessionStorage`의 마법사 초안도 함께 지워진다.
 
 **재검증:** backend 113건 통과(+2), frontend `npm test`/`typecheck`/`build` 통과.
+
+## 4-3. 실제 OpenAI 호출 결함 수정 (P4-8, P4-9 — docs/phase4_fix_instructions_2.md)
+
+검증팀이 실제 키(gpt-4o-mini)로 처음 호출해 발견한 결함 2건을 수정했다. 가짜 AI 클라이언트로는 이 결함들을 잡을 수 없었다 — 실제 모델의 구체적 실패 패턴(수준 1개만 생성, 시간 계산을 못 지킴)에서만 드러났다.
+
+- **P4-8 과정당 수준 1개:** `PATH_RECOMMEND_SYSTEM_PROMPT`가 "수준 1개 이상"이라고만 해 모델이 최솟값을 택했다. 프롬프트를 "수준 3~6개, 쉬운 것부터 어려운 순서"로 명시하고, `AICourseItem.levels`/`CourseItem.levels`의 최소 개수를 1→2로 올렸다(목표 수준 선택이 가능한 최솟값). `_validate_ai_path`에도 과정당 수준 2개 미만이면 거부하는 명시적 검사를 추가했다(Pydantic이 이미 막지만, 더 구체적인 오류 메시지를 위해).
+- **P4-9 시간 한도 초과:** 모델이 `weekly_hours*60`을 직접 계산해야 했던 것을 없애고, 서버가 `max_total_minutes`를 미리 계산해 매 요청의 `user_payload`에 넣는다. 재시도 메커니즘도 확장했다 — `ai_client.AIClient.generate()`가 검증 실패 시 `AIRetryFeedback(message, feedback)`을 받으면, 다음 시도의 `user_payload`에 `feedback`을 병합한다(제공자 독립적인 범용 기능으로 구현). `_validate_ai_plan`은 시간 초과 시 `{"previous_total_minutes": ..., "max_total_minutes": ...}`를 실어 다음 시도에 이전 실패를 알려준다. 조용히 자르거나 서버가 보정하는 정책은 그대로 유지했다.
+
+**테스트:** 가짜 AI로 수준 1개(재시도 후 실패)·2개(통과) 양쪽, 시간 초과 후 한도 내 응답으로 재시도 성공(두 번째 시도 payload에 `previous_total_minutes`/`max_total_minutes`가 들어가는지 확인) 사례, 초기 payload에 `max_total_minutes`가 `weekly_hours*60`으로 들어가는지, `AIRetryFeedback`이 범용적으로 다음 시도 payload에 병합되는지(별도 범용 단위 테스트)를 추가했다. backend 118건 통과(+5).
+
+**실제 OpenAI 호출 검증 (`backend/.env`의 사용자 키 사용, gpt-4o-mini, 모델명 환경변수 기본값):**
+- `POST /api/path/recommend` 1회: 200, 약 18.6초. 과정 1개, **수준 3개**(최소 2개 요구 충족), 직무 5개.
+- `POST /api/plan/generate` 3회(동일 입력, 주당 7시간 → 한도 420분): 전부 200, 각 4.3~4.7초, 총 시간 420/360/360분(모두 한도 이내), 과업 4~5개. 수정 전 보고된 660/570/420(한도 360분 기준 전부 초과) 패턴이 재현되지 않았다.
+- `path/recommend → plan/generate → plan/confirm → GET /api/tasks` 전체 흐름 1회 실행: 생성 200(375분) → 확정 201(과제 5건 저장) → 재조회 200(5건) 전부 성공.
+- 키 값은 어디에도 출력·기록하지 않았다(환경변수 존재 여부만 `grep`으로 확인, `uvicorn --env-file .env`로 기동). 호출은 총 5회(추천 1 + 계획 3 + 전체 흐름 1)만 사용했다.
+
+이로써 "실 LLM 미검증" 항목이 처음으로 해소되었다(기본 모델 gpt-4o-mini 기준, 1회성 스모크 수준 — 지속적 회귀 방지는 여전히 가짜 AI 테스트가 담당).
 
 ## 5. 참고
 

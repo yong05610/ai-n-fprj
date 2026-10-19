@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 import clock
-from ai_client import AIClient, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
+from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
 from ai_schemas import AIPathRecommendation, AIPlanDraft
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
@@ -281,6 +281,10 @@ def _validate_ai_path(parsed: AIPathRecommendation) -> None:
     for course in parsed.courses:
         if not course.title.strip() or not course.description.strip():
             raise ValueError("과정 이름/설명이 비어 있습니다.")
+        # Pydantic's AICourseItem.levels already enforces min_length=2; this re-check
+        # exists for a clearer, specific error message (P4-8).
+        if len(course.levels) < 2:
+            raise ValueError("과정마다 수준이 최소 2개 이상이어야 목표 수준을 선택할 수 있습니다.")
         orders = [lvl.order for lvl in course.levels]
         if orders != sorted(orders) or len(orders) != len(set(orders)):
             raise ValueError("수준 순서(order)가 과정 안에서 중복 없이 오름차순이어야 합니다.")
@@ -289,9 +293,15 @@ def _validate_ai_path(parsed: AIPathRecommendation) -> None:
                 raise ValueError("수준 이름/설명이 비어 있습니다.")
 
 
-def _validate_ai_plan(parsed: AIPlanDraft, weekly_hours: int) -> None:
-    if sum(t.estimated_minutes for t in parsed.tasks) > weekly_hours * 60:
-        raise ValueError("총 예상 시간이 주당 가능 시간을 초과합니다.")
+def _validate_ai_plan(parsed: AIPlanDraft, max_total_minutes: int) -> None:
+    total = sum(t.estimated_minutes for t in parsed.tasks)
+    if total > max_total_minutes:
+        # P4-9: tell the next retry attempt how far over budget this one was, instead
+        # of just repeating the same instruction the model already failed to follow.
+        raise AIRetryFeedback(
+            "총 예상 시간이 주당 가능 시간을 초과합니다.",
+            feedback={"previous_total_minutes": total, "max_total_minutes": max_total_minutes},
+        )
     for t in parsed.tasks:
         if not t.title.strip() or not t.description.strip():
             raise ValueError("과업 제목/설명이 비어 있습니다.")
@@ -348,6 +358,7 @@ def generate_plan(
     _validate_week_within_target(week_start, target_date)
     week_end = week_start + timedelta(days=6)
 
+    max_total_minutes = payload.weekly_hours * 60
     user_payload = {
         "field": payload.field,
         "course": payload.course,
@@ -357,13 +368,14 @@ def generate_plan(
         "target_level_name": payload.target_level_name,
         "target_level_description": payload.target_level_description,
         "weekly_hours": payload.weekly_hours,
+        "max_total_minutes": max_total_minutes,
     }
     try:
         draft = ai.generate(
             PLAN_GENERATE_SYSTEM_PROMPT,
             user_payload,
             AIPlanDraft,
-            validator=lambda parsed: _validate_ai_plan(parsed, payload.weekly_hours),
+            validator=lambda parsed: _validate_ai_plan(parsed, max_total_minutes),
         )
     except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
         raise _ai_error_response(exc)
