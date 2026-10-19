@@ -40,6 +40,16 @@ npm run dev
 
 Open `http://localhost:3000`. The frontend reads `NEXT_PUBLIC_API_BASE_URL`; configure `CORS_ORIGINS` on the backend to include the exact frontend origin.
 
+### Auth modes
+
+The example env files run in **dev mode** (`AUTH_MODE=dev` / `STORE_BACKEND=memory` on the backend, `NEXT_PUBLIC_AUTH_MODE=dev` on the frontend), so the consent → anonymous UID flow works without Firebase credentials. Data is kept in backend memory and reset on restart. For real Firebase Anonymous Auth and Firestore, set `AUTH_MODE=firebase`, `STORE_BACKEND=firestore`, `FIREBASE_SERVICE_ACCOUNT_JSON`, and the `NEXT_PUBLIC_FIREBASE_*` values. Firestore rules and indexes live in `firebase/`. See `docs/phase3_auth.md`.
+
+### Tests
+
+```powershell
+backend\.venv\Scripts\python.exe -m pytest
+```
+
 ## Reference project
 
 `reference-AI NATIVE M -2/` is a temporary reference copy of a separate project. It is for reading and comparison only; it is excluded from this repository and is not part of PaceMate's source, install, or deployment steps. Remove the folder and its `.gitignore` entry when it is no longer needed. Do not copy its secrets or environment files into this project.

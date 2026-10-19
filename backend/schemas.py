@@ -1,5 +1,10 @@
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
+
+Weekday = Literal["none", "mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+GoalStatus = Literal["active", "completed", "archived"]
+TaskStatus = Literal["pending", "completed"]
+DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 
 
 # --- Common & Errors ---
@@ -84,26 +89,26 @@ class PlanGenerateResponse(BaseModel):
 # --- 3. Goals CRUD ---
 
 class GoalCreateRequest(BaseModel):
-    field: str = Field(..., description="학습 분야")
-    course: str = Field(..., description="선택 세부 과정")
+    field: str = Field(..., min_length=1, max_length=100, description="학습 분야")
+    course: str = Field(..., min_length=1, max_length=100, description="선택 세부 과정")
     current_level_num: int = Field(..., ge=1, le=5)
-    current_level_name: str = Field(...)
+    current_level_name: str = Field(..., min_length=1, max_length=100)
     target_level_num: int = Field(..., ge=1, le=5)
-    target_level_name: str = Field(...)
-    weekly_hours: int = Field(..., ge=1)
-    target_date: str = Field(..., description="YYYY-MM-DD")
+    target_level_name: str = Field(..., min_length=1, max_length=100)
+    weekly_hours: int = Field(..., ge=1, le=100)
+    target_date: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD")
 
 
 class GoalUpdateRequest(BaseModel):
-    field: Optional[str] = None
-    course: Optional[str] = None
-    current_level_num: Optional[int] = None
-    current_level_name: Optional[str] = None
-    target_level_num: Optional[int] = None
-    target_level_name: Optional[str] = None
-    weekly_hours: Optional[int] = None
-    target_date: Optional[str] = None
-    status: Optional[str] = Field(None, description="active | completed | archived")
+    field: Optional[str] = Field(None, min_length=1, max_length=100)
+    course: Optional[str] = Field(None, min_length=1, max_length=100)
+    current_level_num: Optional[int] = Field(None, ge=1, le=5)
+    current_level_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    target_level_num: Optional[int] = Field(None, ge=1, le=5)
+    target_level_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    weekly_hours: Optional[int] = Field(None, ge=1, le=100)
+    target_date: Optional[str] = Field(None, pattern=DATE_PATTERN)
+    status: Optional[GoalStatus] = Field(None, description="active | completed | archived")
 
 
 class GoalResponse(BaseModel):
@@ -125,22 +130,22 @@ class GoalResponse(BaseModel):
 # --- 4. Tasks CRUD ---
 
 class TaskCreateRequest(BaseModel):
-    goal_id: str
-    plan_week_start: str = Field(..., description="YYYY-MM-DD")
-    title: str
-    description: Optional[str] = ""
-    estimated_minutes: int = Field(..., ge=1)
-    suggested_weekday: Optional[str] = "none"
-    order_index: Optional[int] = 0
+    goal_id: str = Field(..., min_length=1)
+    plan_week_start: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD (월요일)")
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field("", max_length=2000)
+    estimated_minutes: int = Field(..., ge=1, le=6000)
+    suggested_weekday: Optional[Weekday] = "none"
+    order_index: Optional[int] = Field(0, ge=0)
 
 
 class TaskUpdateRequest(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    estimated_minutes: Optional[int] = None
-    suggested_weekday: Optional[str] = None
-    status: Optional[str] = Field(None, description="pending | completed")
-    order_index: Optional[int] = None
+    title: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=2000)
+    estimated_minutes: Optional[int] = Field(None, ge=1, le=6000)
+    suggested_weekday: Optional[Weekday] = None
+    status: Optional[TaskStatus] = Field(None, description="pending | completed")
+    order_index: Optional[int] = Field(None, ge=0)
 
 
 class TaskResponse(BaseModel):
@@ -315,10 +320,26 @@ class ResourceListResponse(BaseModel):
 
 # --- 9. User Profile & Data Deletion ---
 
+class ConsentCreateRequest(BaseModel):
+    terms_version: str = Field(..., description="동의한 안내 문구 버전 (예: v1.0)")
+    privacy_agreed: bool = Field(..., description="개인정보·익명 UID 안내 동의")
+    ai_use_agreed: bool = Field(..., description="AI 생성 결과 활용 및 기록 이용 동의")
+
+
+class ConsentResponse(BaseModel):
+    id: str
+    user_id: str
+    terms_version: str
+    privacy_agreed: bool
+    ai_use_agreed: bool
+    consented_at: str
+
+
 class UserProfileResponse(BaseModel):
     uid: str
     role: str = "learner"
     active_goal_id: Optional[str] = None
+    consent_version: Optional[str] = None
     created_at: str
 
 

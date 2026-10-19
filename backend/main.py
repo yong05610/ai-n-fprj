@@ -1,10 +1,14 @@
 import os
-from typing import Optional, List
+from datetime import date, datetime, timezone
+from typing import Any, Optional, List
 
 from fastapi import FastAPI, HTTPException, Depends, Query, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials
 
+from auth import assert_safe_auth_config, delete_auth_user, get_current_uid, security
+from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 from schemas import (
     ErrorResponse,
     PathRecommendationRequest,
@@ -31,9 +35,14 @@ from schemas import (
     UserProfileResponse,
     ProfileUpdateRequest,
     DataDeleteResponse,
+    ConsentCreateRequest,
+    ConsentResponse,
 )
+from store import USER_OWNED_COLLECTIONS, get_store
 
-security = HTTPBearer(auto_error=False)
+CURRENT_TERMS_VERSION = "v1.0"
+
+assert_safe_auth_config()
 
 
 def _allowed_origins() -> list[str]:
@@ -44,7 +53,7 @@ def _allowed_origins() -> list[str]:
 app = FastAPI(
     title="PaceMate API",
     version="0.1.0",
-    description="PaceMate MVP backend API — Phase 1 Schema & Contracts",
+    description="PaceMate MVP backend API",
     responses={
         400: {"model": ErrorResponse, "description": "잘못된 요청"},
         401: {"model": ErrorResponse, "description": "인증 실패 (토큰 누락 또는 유효하지 않음)"},
@@ -53,6 +62,8 @@ app = FastAPI(
         500: {"model": ErrorResponse, "description": "서버 내부 오류"},
     },
 )
+
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,7 +79,125 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "pacemate-api"}
 
 
-# --- Phase 1 API Skeletons (OpenAPI DTO Documentation) ---
+# --- Common helpers & dependencies ---
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _parse_date(value: str, field_name: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise bad_request(f"{field_name} 값이 올바른 날짜(YYYY-MM-DD)가 아닙니다.", {"field": field_name})
+
+
+def get_db():
+    try:
+        return get_store()
+    except Exception:
+        raise api_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "STORE_UNAVAILABLE",
+            "데이터 저장소에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.",
+        )
+
+
+def _consent_required() -> HTTPException:
+    return api_error(
+        status.HTTP_403_FORBIDDEN,
+        "CONSENT_REQUIRED",
+        "서비스 이용 안내에 동의한 뒤 이용할 수 있습니다.",
+    )
+
+
+def require_consented_uid(uid: str = Depends(get_current_uid), db=Depends(get_db)) -> str:
+    """Personal data endpoints are available only after the current terms are accepted."""
+    user = db.get("users", uid)
+    if not user or user.get("consent_version") != CURRENT_TERMS_VERSION:
+        raise _consent_required()
+    return uid
+
+
+def _get_owned(db, collection: str, doc_id: str, uid: str) -> dict[str, Any]:
+    doc = db.get(collection, doc_id)
+    if doc is None:
+        raise not_found()
+    if doc.get("user_id") != uid:
+        raise forbidden()
+    return doc
+
+
+def _changes(payload) -> dict[str, Any]:
+    return payload.model_dump(exclude_unset=True, exclude_none=True)
+
+
+def _validate_goal(goal: dict[str, Any]) -> None:
+    if goal["target_level_num"] < goal["current_level_num"]:
+        raise bad_request("목표 수준은 현재 수준보다 낮을 수 없습니다.", {"field": "target_level_num"})
+    _parse_date(goal["target_date"], "target_date")
+
+
+def _validate_week_start(value: str) -> None:
+    if _parse_date(value, "plan_week_start").weekday() != 0:
+        raise bad_request("계획 주간 시작일은 월요일이어야 합니다.", {"field": "plan_week_start"})
+
+
+def _delete_task_children(db, uid: str, task_id: str) -> None:
+    db.delete_where("reflections", user_id=uid, task_id=task_id)
+    db.delete_where("study_logs", user_id=uid, task_id=task_id)
+
+
+# --- Consent (Phase 3) ---
+
+@app.post(
+    "/api/consent",
+    response_model=ConsentResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["user"],
+    summary="서비스 이용 안내 동의 기록 (익명 UID 발급 직후 호출)",
+)
+def create_consent(payload: ConsentCreateRequest, uid: str = Depends(get_current_uid), db=Depends(get_db)):
+    if payload.terms_version != CURRENT_TERMS_VERSION:
+        raise api_error(
+            status.HTTP_400_BAD_REQUEST,
+            "TERMS_VERSION_MISMATCH",
+            "안내 문구가 변경되었습니다. 새 안내를 확인해 주세요.",
+            {"current_version": CURRENT_TERMS_VERSION},
+        )
+    if not (payload.privacy_agreed and payload.ai_use_agreed):
+        raise bad_request("필수 안내 항목에 모두 동의해야 시작할 수 있습니다.")
+
+    now = _now_iso()
+    record = db.create(
+        "consent_records",
+        {
+            "user_id": uid,
+            "terms_version": payload.terms_version,
+            "privacy_agreed": True,
+            "ai_use_agreed": True,
+            "consented_at": now,
+        },
+    )
+    if db.get("users", uid) is None:
+        db.set(
+            "users",
+            uid,
+            {
+                "uid": uid,
+                "role": "learner",
+                "active_goal_id": None,
+                "consent_version": payload.terms_version,
+                "created_at": now,
+                "last_active_at": now,
+            },
+        )
+    else:
+        db.update("users", uid, {"consent_version": payload.terms_version, "last_active_at": now})
+    return record
+
+
+# --- Phase 4~6 API Skeletons (OpenAPI DTO Documentation) ---
 # NOTE: 핸들러 내부 로직은 Phase 1 범위에 따라 501 Not Implemented를 반환하며 실제 동작을 가장하지 않습니다.
 
 def _not_implemented():
@@ -108,53 +237,90 @@ async def generate_plan(
 
 # 3. Goals CRUD
 @app.get("/api/goals", response_model=List[GoalResponse], tags=["goals"], summary="사용자의 학습 목표 목록 조회")
-async def list_goals(token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def list_goals(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    goals = db.find("goals", user_id=uid)
+    return sorted(goals, key=lambda g: g["created_at"], reverse=True)
 
 
 @app.post("/api/goals", response_model=GoalResponse, status_code=status.HTTP_201_CREATED, tags=["goals"], summary="학습 목표 저장")
-async def create_goal(payload: GoalCreateRequest, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def create_goal(payload: GoalCreateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    data = payload.model_dump()
+    _validate_goal(data)
+    now = _now_iso()
+    goal = db.create("goals", {**data, "user_id": uid, "status": "active", "created_at": now, "updated_at": now})
+    user = db.get("users", uid)
+    if user and not user.get("active_goal_id"):
+        db.update("users", uid, {"active_goal_id": goal["id"]})
+    return goal
 
 
 @app.get("/api/goals/{goal_id}", response_model=GoalResponse, tags=["goals"], summary="목표 상세 조회")
-async def get_goal(goal_id: str, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def get_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    return _get_owned(db, "goals", goal_id, uid)
 
 
 @app.patch("/api/goals/{goal_id}", response_model=GoalResponse, tags=["goals"], summary="목표 수정")
-async def update_goal(goal_id: str, payload: GoalUpdateRequest, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def update_goal(goal_id: str, payload: GoalUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    goal = _get_owned(db, "goals", goal_id, uid)
+    changes = _changes(payload)
+    _validate_goal({**goal, **changes})
+    return db.update("goals", goal_id, {**changes, "updated_at": _now_iso()})
 
 
-@app.delete("/api/goals/{goal_id}", tags=["goals"], summary="목표 삭제")
-async def delete_goal(goal_id: str, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+@app.delete("/api/goals/{goal_id}", tags=["goals"], summary="목표 삭제 (하위 과제·기록·회고 포함)")
+def delete_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    _get_owned(db, "goals", goal_id, uid)
+    for task in db.find("tasks", user_id=uid, goal_id=goal_id):
+        _delete_task_children(db, uid, task["id"])
+    db.delete_where("tasks", user_id=uid, goal_id=goal_id)
+    db.delete("goals", goal_id)
+    user = db.get("users", uid)
+    if user and user.get("active_goal_id") == goal_id:
+        db.update("users", uid, {"active_goal_id": None})
+    return {"status": "deleted", "id": goal_id}
 
 
 # 4. Tasks CRUD
 @app.get("/api/tasks", response_model=List[TaskResponse], tags=["tasks"], summary="학습 과제 목록 조회")
-async def list_tasks(
+def list_tasks(
     goal_id: Optional[str] = Query(None, description="목표 ID 필터"),
     plan_week_start: Optional[str] = Query(None, description="계획 주간 시작일 필터"),
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
 ):
-    _not_implemented()
+    filters: dict[str, Any] = {"user_id": uid}
+    if goal_id:
+        filters["goal_id"] = goal_id
+    if plan_week_start:
+        filters["plan_week_start"] = plan_week_start
+    tasks = db.find("tasks", **filters)
+    return sorted(tasks, key=lambda t: (t["plan_week_start"], t["order_index"], t["created_at"]))
 
 
 @app.post("/api/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED, tags=["tasks"], summary="학습 과제 생성")
-async def create_task(payload: TaskCreateRequest, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def create_task(payload: TaskCreateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    _get_owned(db, "goals", payload.goal_id, uid)
+    _validate_week_start(payload.plan_week_start)
+    now = _now_iso()
+    data = payload.model_dump()
+    data["description"] = data["description"] or ""
+    data["suggested_weekday"] = data["suggested_weekday"] or "none"
+    data["order_index"] = data["order_index"] or 0
+    return db.create("tasks", {**data, "user_id": uid, "status": "pending", "created_at": now, "updated_at": now})
 
 
 @app.patch("/api/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"], summary="과제 상태/추천요일 수정")
-async def update_task(task_id: str, payload: TaskUpdateRequest, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def update_task(task_id: str, payload: TaskUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    _get_owned(db, "tasks", task_id, uid)
+    return db.update("tasks", task_id, {**_changes(payload), "updated_at": _now_iso()})
 
 
-@app.delete("/api/tasks/{task_id}", tags=["tasks"], summary="과제 삭제")
-async def delete_task(task_id: str, token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+@app.delete("/api/tasks/{task_id}", tags=["tasks"], summary="과제 삭제 (하위 기록·회고 포함)")
+def delete_task(task_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    _get_owned(db, "tasks", task_id, uid)
+    _delete_task_children(db, uid, task_id)
+    db.delete("tasks", task_id)
+    return {"status": "deleted", "id": task_id}
 
 
 # 5. Study Logs & Reflections CRUD
@@ -273,19 +439,34 @@ async def list_resources(
 
 
 # 9. User Profile & Data Deletion
+def _profile(user: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "uid": user["uid"],
+        "role": user.get("role", "learner"),
+        "active_goal_id": user.get("active_goal_id"),
+        "consent_version": user.get("consent_version"),
+        "created_at": user["created_at"],
+    }
+
+
 @app.get("/api/user/profile", response_model=UserProfileResponse, tags=["user"], summary="사용자 프로필 조회")
-async def get_profile(token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def get_profile(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    return _profile(db.get("users", uid))
 
 
 @app.patch("/api/user/profile", response_model=UserProfileResponse, tags=["user"], summary="사용자 프로필 수정")
-async def update_profile(
-    payload: ProfileUpdateRequest,
-    token: Optional[HTTPAuthorizationCredentials] = Depends(security),
-):
-    _not_implemented()
+def update_profile(payload: ProfileUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("active_goal_id"):
+        _get_owned(db, "goals", changes["active_goal_id"], uid)
+    user = db.update("users", uid, {**changes, "last_active_at": _now_iso()})
+    return _profile(user)
 
 
 @app.post("/api/user/delete-data", response_model=DataDeleteResponse, tags=["user"], summary="내 학습 데이터 전체 삭제 요청")
-async def delete_user_data(token: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    _not_implemented()
+def delete_user_data(uid: str = Depends(get_current_uid), db=Depends(get_db)):
+    for collection in USER_OWNED_COLLECTIONS:
+        db.delete_where(collection, user_id=uid)
+    db.delete("users", uid)
+    delete_auth_user(uid)
+    return DataDeleteResponse()

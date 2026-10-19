@@ -1,0 +1,28 @@
+rules_version = '2';
+// PaceMate Firestore rules.
+// All reads/writes go through the FastAPI backend (Admin SDK bypasses these rules and
+// enforces UID ownership in code). Direct client access is therefore closed by default:
+// owners may only read their own documents, and no client may write anything.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null && resource.data.user_id == request.auth.uid;
+    }
+
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    match /{collection}/{docId} {
+      allow read: if collection in ['goals', 'tasks', 'study_logs', 'reflections', 'conversations', 'consent_records']
+                  && isOwner();
+      allow write: if false;
+    }
+
+    match /learning_documents/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
