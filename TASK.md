@@ -49,19 +49,19 @@
 
 ## Phase 1 — 요구사항 동결·ERD·권한 설계 (DES · P0)
 
-- [ ] 1.1 서비스기획서·PRD·표준 목업을 대조하고 용어·화면·MVP 범위를 확정한다.
-- [ ] 1.2 사용자 여정과 사용자용 7개 화면을 확정한다: 대시보드, 학습 경로 설정, 학습 과제 계획, 학습 실행 기록, AI 튜터, 참고자료 보관함, 내 정보·설정.
-- [ ] 1.3 전체 논리 ERD를 작성한다: users, consent_records, goals, tasks, study_logs, reflections, conversations, learning_documents.
-- [ ] 1.4 관계를 확정한다: users 1:N goals, goals 1:N tasks, tasks 1:N study_logs, study_logs 1:0..1 reflections, users 1:N conversations. 자료 문서는 공용 읽기 전용이다.
-- [ ] 1.4a [BE] `conversations` 문서 계약을 확정한다: UID, title, messages([{role, content, timestamp}]), created_at, updated_at. role은 user/assistant로 제한하고 사용자 UID 소유권을 강제한다.
-- [ ] 1.5 사용자 소유 문서 모두 UID 경계를 갖도록 설계한다. 클라이언트가 보낸 UID를 권한 근거로 사용하지 않는다.
-- [ ] 1.6 동의 기록 최소 필드와 사용자의 데이터 삭제 요청 절차를 정한다.
-- [ ] 1.7 ERD 검토·승인 후 Firestore 컬렉션/경로·필드·필요 인덱스·보안 규칙을 구체화한다.
-- [ ] 1.8 설문 응답은 외부 익명 설문에 보관하며 MVP 제품 DB에는 넣지 않는다고 확정한다.
-- [ ] 1.9 프론트·백엔드 병렬 개발을 위해 REST API 명세를 작성한다: 인증 헤더, 요청/응답 DTO, 필수·선택 필드, 오류 코드, 소유권 규칙, 페이지네이션 여부를 포함한다.
-- [ ] 1.10 [BE][FE] 최소 API 계약을 확정한다: `POST /api/path/recommend`, `POST /api/plan/generate`, 목표·과제·학습 기록 CRUD, `GET /api/data/summary`(튜터 컨텍스트용 집계), `GET /api/dashboard/summary`(화면 집계), `POST/GET /api/conversations`, `GET /api/conversations/{conversation_id}`(메시지 이력 상세), `POST /api/conversations/{conversation_id}/messages`, `GET /api/resources`, 프로필·데이터 삭제 요청 경로. 튜터 호출은 대화 메시지 엔드포인트로 통일하고 별도 `POST /api/chat` 또는 `/api/tutor/ask`를 중복 정의하지 않는다.
-- [ ] 1.11 [BE][FE] DTO를 화면 기준으로 고정한다: PathRecommendationRequest/Response, PlanGenerateRequest/Response(주간 범위·과업 목록), Task(plan_week_start·estimated_minutes·optional suggested_weekday), StudyLog, LearningDataSummary(learning_summary·recent_reflections 최대 5건), DashboardSummary(지표·오늘 과제·주간 hit·인사이트), Conversation/Message, Resource, ProfileUpdateRequest. API 오류 형식·페이지네이션·인증 헤더도 합의하며, AI 생성 응답은 서버 검증 후 저장하고 UID는 토큰에서만 결정한다.
-- [ ] 1.12 [BE] FastAPI OpenAPI 스키마에 요청·응답·인증·오류 DTO를 문서화하고 로컬 `/docs`에서 확인한다. Render 공개 환경에서 `/docs` 노출은 배포 설정에 따라 확인한다.
+- [x] 1.1 서비스기획서·PRD·표준 목업을 대조하고 용어·화면·MVP 범위를 확정한다.
+- [x] 1.2 사용자 여정과 사용자용 7개 화면을 확정한다: 대시보드, 학습 경로 설정, 학습 과제 계획, 학습 실행 기록, AI 튜터, 참고자료 보관함, 내 정보·설정.
+- [x] 1.3 전체 논리 ERD를 작성한다: users, consent_records, goals, tasks, study_logs, reflections, conversations, learning_documents.
+- [x] 1.4 관계를 확정한다: users 1:N goals, goals 1:N tasks, tasks 1:N study_logs, study_logs 1:0..1 reflections, users 1:N conversations. 자료 문서는 공용 읽기 전용이다.
+- [x] 1.4a [BE] `conversations` 문서 계약을 확정한다: UID, title, messages([{role, content, timestamp}]), created_at, updated_at. role은 user/assistant로 제한하고 사용자 UID 소유권을 강제한다.
+- [x] 1.5 사용자 소유 문서 모두 UID 경계를 갖도록 설계한다. 클라이언트가 보낸 UID를 권한 근거로 사용하지 않는다.
+- [x] 1.6 동의 기록 최소 필드와 사용자의 데이터 삭제 요청 절차를 정한다.
+- [x] 1.7 ERD 검토·승인 후 Firestore 컬렉션/경로·필드·필요 인덱스·보안 규칙을 구체화한다.
+- [x] 1.8 설문 응답은 외부 익명 설문에 보관하며 MVP 제품 DB에는 넣지 않는다고 확정한다.
+- [x] 1.9 프론트·백엔드 병렬 개발을 위해 REST API 명세를 작성한다: 인증 헤더, 요청/응답 DTO, 필수·선택 필드, 오류 코드, 소유권 규칙, 페이지네이션 여부를 포함한다.
+- [x] 1.10 [BE][FE] 최소 API 계약을 확정한다: `POST /api/path/recommend`, `POST /api/plan/generate`, 목표·과제·학습 기록 CRUD, `GET /api/data/summary`(튜터 컨텍스트용 집계), `GET /api/dashboard/summary`(화면 집계), `POST/GET /api/conversations`, `GET /api/conversations/{conversation_id}`(메시지 이력 상세), `POST /api/conversations/{conversation_id}/messages`, `GET /api/resources`, 프로필·데이터 삭제 요청 경로. 튜터 호출은 대화 메시지 엔드포인트로 통일하고 별도 `POST /api/chat` 또는 `/api/tutor/ask`를 중복 정의하지 않는다.
+- [x] 1.11 [BE][FE] DTO를 화면 기준으로 고정한다: PathRecommendationRequest/Response, PlanGenerateRequest/Response(주간 범위·과업 목록), Task(plan_week_start·estimated_minutes·optional suggested_weekday), StudyLog, LearningDataSummary(learning_summary·recent_reflections 최대 5건), DashboardSummary(지표·오늘 과제·주간 hit·인사이트), Conversation/Message, Resource, ProfileUpdateRequest. API 오류 형식·페이지네이션·인증 헤더도 합의하며, AI 생성 응답은 서버 검증 후 저장하고 UID는 토큰에서만 결정한다.
+- [x] 1.12 [BE] FastAPI OpenAPI 스키마에 요청·응답·인증·오류 DTO를 문서화하고 로컬 `/docs`에서 확인한다. Render 공개 환경에서 `/docs` 노출은 배포 설정에 따라 확인한다.
 
 **산출물:** ERD, Firestore 논리 스키마, UID 권한 규칙, 화면 흐름, Frontend/Backend 역할 경계, REST API 명세 및 DTO 예시.
 
