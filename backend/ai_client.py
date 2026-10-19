@@ -120,7 +120,9 @@ class OpenAIClient(AIClient):
                     {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
                 ],
                 response_format={"type": "json_object"},
-                max_tokens=ai_max_output_tokens(),
+                # max_completion_tokens (not the deprecated max_tokens) is required by
+                # newer models (e.g. reasoning models) and still accepted by older ones.
+                max_completion_tokens=ai_max_output_tokens(),
             )
         except self._timeout_error as exc:
             raise AIRetryableError("provider call timed out") from exc

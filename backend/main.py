@@ -404,7 +404,26 @@ def generate_plan(
     tags=["plan"],
     summary="편집한 계획 초안을 학습 목표·과제로 함께 저장",
 )
-def confirm_plan(payload: PlanConfirmRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+def confirm_plan(
+    payload: PlanConfirmRequest,
+    response: Response,
+    uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
+):
+    # Idempotency (P4-4): a client that never saw the response to a prior confirm
+    # (timeout, dropped connection) must be able to retry with the same
+    # client_request_id instead of creating a second goal+task set.
+    if payload.client_request_id:
+        existing_goal = next(
+            (g for g in db.find("goals", user_id=uid, client_request_id=payload.client_request_id)),
+            None,
+        )
+        if existing_goal is not None:
+            response.status_code = status.HTTP_200_OK
+            existing_tasks = db.find("tasks", user_id=uid, goal_id=existing_goal["id"])
+            existing_tasks.sort(key=lambda t: t["order_index"])
+            return PlanConfirmResponse(goal=existing_goal, tasks=existing_tasks)
+
     goal_data = {
         "field": payload.field,
         "course": payload.course,
@@ -416,6 +435,7 @@ def confirm_plan(payload: PlanConfirmRequest, uid: str = Depends(require_consent
         "target_level_description": payload.target_level_description,
         "weekly_hours": payload.weekly_hours,
         "target_date": payload.target_date,
+        "client_request_id": payload.client_request_id,
     }
     # Validate everything before writing anything, so a rejected request never leaves a
     # partial save (the store layer has no multi-document transaction to roll back).

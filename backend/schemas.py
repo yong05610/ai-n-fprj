@@ -23,14 +23,14 @@ class ErrorResponse(BaseModel):
 
 class LevelItem(BaseModel):
     order: int = Field(..., ge=1, le=20, description="같은 과정 안에서의 순서 등급 (높을수록 상위). 간격 계산·비교에 쓰지 않는다")
-    name: str = Field(..., description="수준명 (예: Python 입문자). 화면에는 이 이름만 표시하고 번호는 표시하지 않는다")
-    description: str = Field(..., description="수준 상세 설명 (서술형, AI 해석용)")
+    name: str = Field(..., max_length=100, description="수준명 (예: Python 입문자). 화면에는 이 이름만 표시하고 번호는 표시하지 않는다")
+    description: str = Field(..., max_length=2000, description="수준 상세 설명 (서술형, AI 해석용)")
 
 
 class CourseItem(BaseModel):
     id: str = Field(..., description="세부 과정 고유 ID 또는 슬러그")
-    title: str = Field(..., description="세부 과정명 (예: 기본문법, 자료구조와 알고리즘)")
-    description: str = Field(..., description="과정 개요")
+    title: str = Field(..., max_length=100, description="세부 과정명 (예: 기본문법, 자료구조와 알고리즘)")
+    description: str = Field(..., max_length=2000, description="과정 개요")
     levels: List[LevelItem] = Field(..., min_length=1, description="이 과정에 한정된 수준 체계 (과정마다 다를 수 있음)")
 
 
@@ -57,15 +57,15 @@ class PathRecommendationResponse(BaseModel):
 
 class WeeklyTaskPlanItem(BaseModel):
     id: Optional[str] = Field(None, description="과제 식별자 (초안 시 임시 ID)")
-    title: str = Field(..., description="학습 과업명")
-    description: str = Field(..., description="과업 세부 내용")
-    estimated_minutes: int = Field(..., ge=1, description="예상 학습 시간 (분)")
+    title: str = Field(..., max_length=200, description="학습 과업명")
+    description: str = Field(..., max_length=2000, description="과업 세부 내용")
+    estimated_minutes: int = Field(..., ge=1, le=6000, description="예상 학습 시간 (분)")
     suggested_weekday: Optional[Weekday] = Field("none", description="선택적 추천 요일 (마감일 아님)")
 
 
 class AdviceItem(BaseModel):
-    title: str = Field(..., description="조언 제목")
-    content: str = Field(..., description="AI 학습 조언 내용")
+    title: str = Field(..., max_length=200, description="조언 제목")
+    content: str = Field(..., max_length=4000, description="AI 학습 조언 내용")
 
 
 class ResourceReferenceItem(BaseModel):
@@ -254,6 +254,11 @@ class PlanConfirmRequest(BaseModel):
     target_date: str = Field(..., pattern=DATE_PATTERN)
     plan_week_start: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD (월요일)")
     tasks: List[PlanConfirmTaskItem] = Field(..., min_length=1)
+    client_request_id: Optional[str] = Field(
+        None,
+        max_length=100,
+        description="클라이언트가 만든 요청 식별자 (선택). 같은 값으로 재요청하면 중복 저장 대신 기존 결과를 반환한다",
+    )
 
     @field_validator("field", "course")
     @classmethod

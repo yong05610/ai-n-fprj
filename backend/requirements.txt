@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 firebase-admin
-openai
+openai==3.35.1
 python-dotenv
 pytest
 tzdata

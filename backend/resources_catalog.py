@@ -25,14 +25,29 @@ def _category_parts(doc: dict) -> tuple[str, str]:
     return doc_field.strip().lower(), doc_course.strip().lower()
 
 
+# A field (or course) string shorter than this is too generic/short to mean anything on
+# its own ("a", "기초") and produced false matches against unrelated catalog entries.
+_MIN_MATCH_LENGTH = 3
+
+
 def match_references(field: str, course: str) -> list[dict]:
-    field_l, course_l = field.strip().lower(), course.strip().lower()
+    """Field match is mandatory - course text alone never matches across fields.
+
+    Matching on course text alone (independent of field) is what let an unrelated
+    field like "UX 디자인" pull in an "SQL 기초" doc just because the course text
+    "기초" is a substring shared across fields. The catalog is small and unranked
+    (10 entries, Task 2.3), so once a field matches, every doc under that field is
+    returned; `course` isn't used to narrow further - a within-field narrowing pass
+    can be added if the catalog grows enough to need it.
+    """
+    field_l = field.strip().lower()
+    if len(field_l) < _MIN_MATCH_LENGTH:
+        return []
+
     matches = []
     for doc in load_catalog():
-        doc_field, doc_course = _category_parts(doc)
-        field_hit = bool(field_l) and (field_l in doc_field or doc_field in field_l)
-        course_hit = bool(course_l) and (course_l in doc_course or doc_course in course_l)
-        if field_hit or course_hit:
+        doc_field, _ = _category_parts(doc)
+        if field_l in doc_field or doc_field in field_l:
             matches.append(doc)
     return matches
 

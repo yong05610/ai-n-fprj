@@ -314,6 +314,29 @@ class TestPlanConfirm:
         assert client.post("/api/plan/confirm", json=CONFIRM_REQUEST).status_code == 401
         assert client.post("/api/plan/confirm", json=CONFIRM_REQUEST, headers=mock_auth_headers).status_code == 403
 
+    def test_retry_with_same_client_request_id_does_not_duplicate(self, client: TestClient, consented_headers):
+        payload = {**CONFIRM_REQUEST, "client_request_id": "retry-key-1"}
+        first = client.post("/api/plan/confirm", json=payload, headers=consented_headers)
+        assert first.status_code == 201
+        first_goal_id = first.json()["goal"]["id"]
+
+        second = client.post("/api/plan/confirm", json=payload, headers=consented_headers)
+        assert second.status_code == 200
+        assert second.json()["goal"]["id"] == first_goal_id
+        assert len(second.json()["tasks"]) == len(first.json()["tasks"])
+
+        assert len(client.get("/api/goals", headers=consented_headers).json()) == 1
+
+    def test_different_client_request_id_creates_a_new_goal(self, client: TestClient, consented_headers):
+        client.post("/api/plan/confirm", json={**CONFIRM_REQUEST, "client_request_id": "key-a"}, headers=consented_headers)
+        client.post("/api/plan/confirm", json={**CONFIRM_REQUEST, "client_request_id": "key-b"}, headers=consented_headers)
+        assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
+
+    def test_omitting_client_request_id_keeps_old_always_create_behavior(self, client: TestClient, consented_headers):
+        client.post("/api/plan/confirm", json=CONFIRM_REQUEST, headers=consented_headers)
+        client.post("/api/plan/confirm", json=CONFIRM_REQUEST, headers=consented_headers)
+        assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
+
 
 class TestTaskWeeklyTimeBudgetSharedWithAIPath:
     """The manual POST /api/tasks / PATCH /api/tasks/{id} path must enforce the same

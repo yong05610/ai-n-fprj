@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiRequest } from "@/lib/api";
+import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from "@/lib/wizardStorage";
+import { isMondayDateString, mondayOfThisWeekKST, todayKSTDateString } from "@/lib/week";
 
 type LevelItem = { order: number; name: string; description: string };
 type CourseItem = { id: string; title: string; description: string; levels: LevelItem[] };
@@ -31,58 +33,109 @@ type PlanGenerateResponse = {
   references: { title: string; category: string; url: string | null; is_verified: boolean }[];
   references_notice: string | null;
 };
+type SavedTask = { id: string; title: string; estimated_minutes: number; suggested_weekday: string; status: string };
 
 type PathStatus = "input" | "loading" | "ready" | "error";
 type PlanStatus = "idle" | "loading" | "ready" | "error";
 type ConfirmStatus = "idle" | "saving" | "done" | "error";
 
-const AI_TIMEOUT_MS = 45_000;
+const AI_TIMEOUT_MS = 70_000; // server retries up to 3x a ~20s provider timeout; stay above that ceiling
 
-function mondayOfThisWeek(): string {
-  const d = new Date();
-  const dayIndex = (d.getDay() + 6) % 7; // Monday = 0
-  d.setDate(d.getDate() - dayIndex);
-  return d.toISOString().slice(0, 10);
+type WizardSnapshot = {
+  field: string;
+  goal: string;
+  recommendation: PathRecommendationResponse | null;
+  courseId: string | null;
+  courseTitle: string;
+  courseDescription: string;
+  selectedRole: string | null;
+  currentOrder: number | null;
+  currentLevelName: string;
+  currentLevelDesc: string;
+  targetOrder: number | null;
+  targetLevelName: string;
+  targetLevelDesc: string;
+  weeklyHours: number;
+  targetDate: string;
+  planWeekStart: string;
+  draft: PlanGenerateResponse | null;
+  draftRecipeKey: string | null;
+  tasks: WeeklyTask[];
+  clientRequestId: string | null;
+};
+
+function newRequestId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export function LearningPathWizard({ onClose }: { onClose: () => void }) {
   const { session } = useAuth();
+  const restored = useMemo(() => loadWizardDraft<WizardSnapshot>(), []);
 
-  // --- Step 1: path setup (분야 -> 과정/수준 추천 -> 선택) ---
-  const [field, setField] = useState("");
-  const [goal, setGoal] = useState("");
+  // --- Step 1: path setup (분야 -> 과정/수준 추천 -> 선택, 이름 수정 가능) ---
+  const [field, setField] = useState(restored?.field ?? "");
+  const [goal, setGoal] = useState(restored?.goal ?? "");
   const [pathStatus, setPathStatus] = useState<PathStatus>("input");
   const [pathError, setPathError] = useState<string | null>(null);
-  const [recommendation, setRecommendation] = useState<PathRecommendationResponse | null>(null);
-  const [courseId, setCourseId] = useState<string | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
-  const [currentOrder, setCurrentOrder] = useState<number | null>(null);
-  const [targetOrder, setTargetOrder] = useState<number | null>(null);
-  const [weeklyHours, setWeeklyHours] = useState(7);
-  const [targetDate, setTargetDate] = useState("");
-  const [planWeekStart, setPlanWeekStart] = useState(mondayOfThisWeek());
+  const [recommendation, setRecommendation] = useState<PathRecommendationResponse | null>(restored?.recommendation ?? null);
+  const [courseId, setCourseId] = useState<string | null>(restored?.courseId ?? null);
+  const [courseTitle, setCourseTitle] = useState(restored?.courseTitle ?? "");
+  const [courseDescription, setCourseDescription] = useState(restored?.courseDescription ?? "");
+  const [selectedRole, setSelectedRole] = useState<string | null>(restored?.selectedRole ?? null);
+  const [currentOrder, setCurrentOrder] = useState<number | null>(restored?.currentOrder ?? null);
+  const [currentLevelName, setCurrentLevelName] = useState(restored?.currentLevelName ?? "");
+  const [currentLevelDesc, setCurrentLevelDesc] = useState(restored?.currentLevelDesc ?? "");
+  const [targetOrder, setTargetOrder] = useState<number | null>(restored?.targetOrder ?? null);
+  const [targetLevelName, setTargetLevelName] = useState(restored?.targetLevelName ?? "");
+  const [targetLevelDesc, setTargetLevelDesc] = useState(restored?.targetLevelDesc ?? "");
+  const [weeklyHours, setWeeklyHours] = useState(restored?.weeklyHours ?? 7);
+  const [targetDate, setTargetDate] = useState(restored?.targetDate ?? "");
+  const [planWeekStart, setPlanWeekStart] = useState(restored?.planWeekStart ?? mondayOfThisWeekKST());
 
   const selectedCourse = useMemo(
     () => recommendation?.courses.find((c) => c.id === courseId) ?? null,
     [recommendation, courseId],
   );
-  const currentLevel = useMemo(
-    () => selectedCourse?.levels.find((l) => l.order === currentOrder) ?? null,
-    [selectedCourse, currentOrder],
-  );
-  const targetLevel = useMemo(
-    () => selectedCourse?.levels.find((l) => l.order === targetOrder) ?? null,
-    [selectedCourse, targetOrder],
-  );
   const targetLevelOptions = useMemo(
     () => selectedCourse?.levels.filter((l) => currentOrder == null || l.order > currentOrder) ?? [],
     [selectedCourse, currentOrder],
   );
+  const onlyOneLevelInCourse = Boolean(selectedCourse && selectedCourse.levels.length < 2);
 
   function pickCourse(course: CourseItem) {
     setCourseId(course.id);
-    setCurrentOrder(course.levels[0]?.order ?? null);
-    setTargetOrder(course.levels[1]?.order ?? course.levels[0]?.order ?? null);
+    setCourseTitle(course.title);
+    setCourseDescription(course.description);
+    const first = course.levels[0];
+    const second = course.levels.find((l) => first && l.order > first.order) ?? first;
+    setCurrentOrder(first?.order ?? null);
+    setCurrentLevelName(first?.name ?? "");
+    setCurrentLevelDesc(first?.description ?? "");
+    setTargetOrder(second?.order ?? null);
+    setTargetLevelName(second?.name ?? "");
+    setTargetLevelDesc(second?.description ?? "");
+  }
+
+  function pickCurrentLevel(order: number) {
+    setCurrentOrder(order);
+    const lvl = selectedCourse?.levels.find((l) => l.order === order);
+    setCurrentLevelName(lvl?.name ?? "");
+    setCurrentLevelDesc(lvl?.description ?? "");
+    if (targetOrder != null && targetOrder <= order) {
+      const next = selectedCourse?.levels.find((l) => l.order > order) ?? null;
+      setTargetOrder(next?.order ?? null);
+      setTargetLevelName(next?.name ?? "");
+      setTargetLevelDesc(next?.description ?? "");
+    }
+  }
+
+  function pickTargetLevel(order: number) {
+    setTargetOrder(order);
+    const lvl = selectedCourse?.levels.find((l) => l.order === order);
+    setTargetLevelName(lvl?.name ?? "");
+    setTargetLevelDesc(lvl?.description ?? "");
   }
 
   async function recommend() {
@@ -109,12 +162,52 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
   // --- Step 2: plan draft (초안, 미저장) ---
   const [planStatus, setPlanStatus] = useState<PlanStatus>("idle");
   const [planError, setPlanError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<PlanGenerateResponse | null>(null);
-  const [tasks, setTasks] = useState<WeeklyTask[]>([]);
+  const [draft, setDraft] = useState<PlanGenerateResponse | null>(restored?.draft ?? null);
+  const [draftRecipeKey, setDraftRecipeKey] = useState<string | null>(restored?.draftRecipeKey ?? null);
+  const [tasks, setTasks] = useState<WeeklyTask[]>(restored?.tasks ?? []);
   const [activeTab, setActiveTab] = useState<"tasks" | "advice" | "refs">("tasks");
+  const [clientRequestId, setClientRequestId] = useState<string | null>(restored?.clientRequestId ?? null);
+
+  const currentRecipeKey = useMemo(
+    () =>
+      JSON.stringify([
+        recommendation?.field,
+        courseTitle,
+        courseDescription,
+        selectedRole,
+        currentOrder,
+        currentLevelName,
+        currentLevelDesc,
+        targetOrder,
+        targetLevelName,
+        targetLevelDesc,
+        weeklyHours,
+        targetDate,
+        planWeekStart,
+      ]),
+    [
+      recommendation,
+      courseTitle,
+      courseDescription,
+      selectedRole,
+      currentOrder,
+      currentLevelName,
+      currentLevelDesc,
+      targetOrder,
+      targetLevelName,
+      targetLevelDesc,
+      weeklyHours,
+      targetDate,
+      planWeekStart,
+    ],
+  );
+  const isDraftStale = draft != null && draftRecipeKey != null && draftRecipeKey !== currentRecipeKey;
+
+  const planWeekStartIsMonday = isMondayDateString(planWeekStart);
 
   async function generatePlan() {
-    if (!session || !recommendation || !selectedCourse || !currentLevel || !targetLevel || !targetDate) return;
+    if (!session || !recommendation || !selectedCourse || currentOrder == null || targetOrder == null || !targetDate) return;
+    if (!planWeekStartIsMonday) return;
     setPlanStatus("loading");
     setPlanError(null);
     try {
@@ -125,21 +218,23 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
         timeoutMs: AI_TIMEOUT_MS,
         body: {
           field: recommendation.field,
-          course: selectedCourse.title,
+          course: courseTitle,
           selected_role: selectedRole,
-          current_level_order: currentLevel.order,
-          current_level_name: currentLevel.name,
-          current_level_description: currentLevel.description,
-          target_level_order: targetLevel.order,
-          target_level_name: targetLevel.name,
-          target_level_description: targetLevel.description,
+          current_level_order: currentOrder,
+          current_level_name: currentLevelName,
+          current_level_description: currentLevelDesc,
+          target_level_order: targetOrder,
+          target_level_name: targetLevelName,
+          target_level_description: targetLevelDesc,
           weekly_hours: weeklyHours,
           target_date: targetDate,
           plan_week_start: planWeekStart,
         },
       });
       setDraft(result);
+      setDraftRecipeKey(currentRecipeKey);
       setTasks(result.tasks);
+      setClientRequestId(newRequestId());
       setActiveTab("tasks");
       setPlanStatus("ready");
     } catch (error) {
@@ -164,33 +259,50 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
   // --- Step 3: confirm (목표+과제 저장) ---
   const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>("idle");
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [savedTasks, setSavedTasks] = useState<SavedTask[] | null>(null);
+  const [savedGoalField, setSavedGoalField] = useState<string>("");
 
-  const canConfirm = Boolean(draft) && !overBudget && tasks.length > 0 && tasks.every((t) => t.title.trim());
+  const tasksAreValid = tasks.length > 0 && tasks.every((t) => t.title.trim() && t.estimated_minutes > 0);
+  const canConfirm = Boolean(draft) && !isDraftStale && !overBudget && tasksAreValid;
 
   async function confirmPlan() {
-    if (!session || !recommendation || !selectedCourse || !currentLevel || !targetLevel || !draft || !canConfirm) return;
+    if (!session || !recommendation || !selectedCourse || currentOrder == null || targetOrder == null || !draft || !canConfirm) {
+      return;
+    }
     setConfirmStatus("saving");
     setConfirmError(null);
     try {
       const token = await session.getToken();
-      await apiRequest("/api/plan/confirm", {
+      const result = await apiRequest<{ goal: { id: string }; tasks: unknown[] }>("/api/plan/confirm", {
         method: "POST",
         token,
         body: {
           field: recommendation.field,
-          course: selectedCourse.title,
-          current_level_order: currentLevel.order,
-          current_level_name: currentLevel.name,
-          current_level_description: currentLevel.description,
-          target_level_order: targetLevel.order,
-          target_level_name: targetLevel.name,
-          target_level_description: targetLevel.description,
+          course: courseTitle,
+          current_level_order: currentOrder,
+          current_level_name: currentLevelName,
+          current_level_description: currentLevelDesc,
+          target_level_order: targetOrder,
+          target_level_name: targetLevelName,
+          target_level_description: targetLevelDesc,
           weekly_hours: weeklyHours,
           target_date: targetDate,
           plan_week_start: draft.plan_week_start,
           tasks,
+          client_request_id: clientRequestId,
         },
       });
+      setSavedGoalField(recommendation.field);
+      try {
+        const reloaded = await apiRequest<SavedTask[]>(
+          `/api/tasks?goal_id=${encodeURIComponent(result.goal.id)}&plan_week_start=${encodeURIComponent(draft.plan_week_start)}`,
+          { token },
+        );
+        setSavedTasks(reloaded);
+      } catch {
+        setSavedTasks(null); // save itself already succeeded; the confirmation screen just won't list tasks
+      }
+      clearWizardDraft();
       setConfirmStatus("done");
     } catch (error) {
       setConfirmError(error instanceof ApiError ? error.message : "알 수 없는 오류가 발생했습니다.");
@@ -198,12 +310,83 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // Persist the in-progress wizard (P4-7): survives refresh/navigation until confirmed or cleared.
+  useEffect(() => {
+    if (confirmStatus === "done") return;
+    const snapshot: WizardSnapshot = {
+      field,
+      goal,
+      recommendation,
+      courseId,
+      courseTitle,
+      courseDescription,
+      selectedRole,
+      currentOrder,
+      currentLevelName,
+      currentLevelDesc,
+      targetOrder,
+      targetLevelName,
+      targetLevelDesc,
+      weeklyHours,
+      targetDate,
+      planWeekStart,
+      draft,
+      draftRecipeKey,
+      tasks,
+      clientRequestId,
+    };
+    saveWizardDraft(snapshot);
+  }, [
+    field,
+    goal,
+    recommendation,
+    courseId,
+    courseTitle,
+    courseDescription,
+    selectedRole,
+    currentOrder,
+    currentLevelName,
+    currentLevelDesc,
+    targetOrder,
+    targetLevelName,
+    targetLevelDesc,
+    weeklyHours,
+    targetDate,
+    planWeekStart,
+    draft,
+    draftRecipeKey,
+    tasks,
+    clientRequestId,
+    confirmStatus,
+  ]);
+
+  function handleClose() {
+    const hasProgress = recommendation != null || draft != null;
+    if (hasProgress && confirmStatus !== "done") {
+      const ok = window.confirm("작성 중인 학습 경로·계획이 있습니다. 저장하지 않고 홈으로 돌아갈까요?");
+      if (!ok) return;
+    }
+    onClose();
+  }
+
   if (confirmStatus === "done") {
     return (
       <section className="card">
         <p className="eyebrow">PACEMATE · PLAN SAVED</p>
         <h2>학습 계획이 저장되었습니다.</h2>
-        <p className="description">목표와 이번 주 과제가 저장되어 언제든 다시 확인할 수 있습니다.</p>
+        <p className="description">
+          {savedGoalField} 목표와 이번 주 과제가 저장되어 언제든 다시 확인할 수 있습니다.
+        </p>
+        {savedTasks && savedTasks.length > 0 && (
+          <ul>
+            {savedTasks.map((t) => (
+              <li key={t.id}>
+                {t.title} · {t.estimated_minutes}분
+                {t.suggested_weekday !== "none" && ` · ${WEEKDAY_LABEL[t.suggested_weekday as Weekday]}`}
+              </li>
+            ))}
+          </ul>
+        )}
         <button className="btn" onClick={onClose}>
           홈으로 돌아가기
         </button>
@@ -213,7 +396,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="stack">
-      <button className="btn secondary" onClick={onClose} style={{ alignSelf: "flex-start" }}>
+      <button className="btn secondary" onClick={handleClose} style={{ alignSelf: "flex-start" }}>
         ← 홈으로
       </button>
 
@@ -265,7 +448,18 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                   </button>
                 ))}
               </div>
-              {selectedCourse && <p className="small muted">{selectedCourse.description}</p>}
+              {selectedCourse && (
+                <>
+                  <label htmlFor="course-title">과정명 (수정 가능)</label>
+                  <input id="course-title" value={courseTitle} onChange={(e) => setCourseTitle(e.target.value)} />
+                  <label htmlFor="course-description">과정 설명 (수정 가능)</label>
+                  <textarea
+                    id="course-description"
+                    value={courseDescription}
+                    onChange={(e) => setCourseDescription(e.target.value)}
+                  />
+                </>
+              )}
             </div>
 
             {recommendation.suggested_roles.length > 0 && (
@@ -288,23 +482,17 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
 
             {selectedCourse && (
               <div className="field">
-                <label>3. 현재 수준과 목표 수준</label>
-                <p className="small muted">수준 이름만 표시하며, 목표 수준은 현재 수준보다 높은 항목만 선택할 수 있습니다.</p>
+                <label>3. 현재 수준과 목표 수준 (이름·설명 수정 가능)</label>
+                <p className="small muted">수준 번호는 표시하지 않으며, 목표 수준은 현재 수준보다 높은 항목만 선택할 수 있습니다.</p>
+                {onlyOneLevelInCourse && (
+                  <p className="error" role="alert">
+                    이 과정은 수준이 1개뿐이라 목표 수준을 선택할 수 없습니다. 다른 과정을 선택하거나 다시 추천받으세요.
+                  </p>
+                )}
                 <div className="field-grid" style={{ marginTop: 10 }}>
                   <div className="field">
                     <label htmlFor="current-level">현재 수준</label>
-                    <select
-                      id="current-level"
-                      value={currentOrder ?? ""}
-                      onChange={(e) => {
-                        const order = Number(e.target.value);
-                        setCurrentOrder(order);
-                        if (targetOrder != null && targetOrder <= order) {
-                          const next = selectedCourse.levels.find((l) => l.order > order);
-                          setTargetOrder(next?.order ?? null);
-                        }
-                      }}
-                    >
+                    <select id="current-level" value={currentOrder ?? ""} onChange={(e) => pickCurrentLevel(Number(e.target.value))}>
                       {selectedCourse.levels.map((l) => (
                         <option key={l.order} value={l.order}>
                           {l.name}
@@ -317,7 +505,8 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                     <select
                       id="target-level"
                       value={targetOrder ?? ""}
-                      onChange={(e) => setTargetOrder(Number(e.target.value))}
+                      onChange={(e) => pickTargetLevel(Number(e.target.value))}
+                      disabled={targetLevelOptions.length === 0}
                     >
                       {targetLevelOptions.map((l) => (
                         <option key={l.order} value={l.order}>
@@ -327,10 +516,26 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                     </select>
                   </div>
                 </div>
-                <p className="small muted">
-                  {currentLevel && `현재: ${currentLevel.description}`}
-                  {targetLevel && ` · 목표: ${targetLevel.description}`}
-                </p>
+                <div className="field-grid">
+                  <div className="field">
+                    <label htmlFor="current-level-name">현재 수준 이름</label>
+                    <input id="current-level-name" value={currentLevelName} onChange={(e) => setCurrentLevelName(e.target.value)} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="target-level-name">목표 수준 이름</label>
+                    <input id="target-level-name" value={targetLevelName} onChange={(e) => setTargetLevelName(e.target.value)} />
+                  </div>
+                </div>
+                <div className="field-grid">
+                  <div className="field">
+                    <label htmlFor="current-level-desc">현재 수준 설명</label>
+                    <textarea id="current-level-desc" value={currentLevelDesc} onChange={(e) => setCurrentLevelDesc(e.target.value)} />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="target-level-desc">목표 수준 설명</label>
+                    <textarea id="target-level-desc" value={targetLevelDesc} onChange={(e) => setTargetLevelDesc(e.target.value)} />
+                  </div>
+                </div>
               </div>
             )}
 
@@ -348,7 +553,13 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
               </div>
               <div className="field">
                 <label htmlFor="target-date">목표 완료 희망일</label>
-                <input id="target-date" type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+                <input
+                  id="target-date"
+                  type="date"
+                  min={todayKSTDateString()}
+                  value={targetDate}
+                  onChange={(e) => setTargetDate(e.target.value)}
+                />
               </div>
             </div>
             <div className="field">
@@ -359,14 +570,30 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 value={planWeekStart}
                 onChange={(e) => setPlanWeekStart(e.target.value)}
               />
+              {!planWeekStartIsMonday && (
+                <p className="error" role="alert">
+                  계획 주간 시작일은 월요일이어야 합니다.{" "}
+                  <button type="button" className="link-btn" onClick={() => setPlanWeekStart(mondayOfThisWeekKST())}>
+                    이번 주 월요일로 설정
+                  </button>
+                </p>
+              )}
             </div>
 
             <button
               className="btn"
               onClick={generatePlan}
-              disabled={!selectedCourse || !currentLevel || !targetLevel || !targetDate || planStatus === "loading"}
+              disabled={
+                !selectedCourse ||
+                currentOrder == null ||
+                targetOrder == null ||
+                !targetDate ||
+                !planWeekStartIsMonday ||
+                onlyOneLevelInCourse ||
+                planStatus === "loading"
+              }
             >
-              {planStatus === "loading" ? "계획 만드는 중…" : "✦ 과제·조언·참고자료 만들기"}
+              {planStatus === "loading" ? "계획 만드는 중…" : draft ? "✦ 계획 다시 만들기" : "✦ 과제·조언·참고자료 만들기"}
             </button>
             {planStatus === "error" && (
               <p className="error" role="alert">
@@ -385,6 +612,11 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           <p className="small muted">
             {draft.plan_week_start} ~ {draft.plan_week_end}
           </p>
+          {isDraftStale && (
+            <p className="error" role="alert">
+              입력 조건이 바뀌어 이 초안은 최신 상태가 아닙니다. 위의 "계획 다시 만들기"로 새로 생성한 뒤 저장하세요.
+            </p>
+          )}
 
           <div className="tabs">
             <button
@@ -504,7 +736,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           </button>
           {confirmStatus === "error" && (
             <p className="error" role="alert">
-              {confirmError}
+              {confirmError} 같은 저장 버튼으로 다시 시도해도 중복 저장되지 않습니다.
             </p>
           )}
         </section>
