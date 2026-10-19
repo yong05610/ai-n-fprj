@@ -24,6 +24,19 @@ class TestMatchReferences:
     def test_two_character_field_does_not_match_anything(self):
         assert match_references("AI", "") == []
 
+    def test_substring_of_an_unrelated_field_does_not_match(self):
+        # Repro: field="Java" previously matched the "JavaScript" catalog entries
+        # because "java" is a plain substring of "javascript".
+        assert match_references("Java", "") == []
+
+    def test_shared_generic_suffix_does_not_cross_match_unrelated_fields(self):
+        # "Python 개발", "웹 개발", and "백엔드 개발" all share the generic word
+        # "개발" ("development") - a naive shared-token check matched all three
+        # for a "Python 개발" query. Only the Python docs should match.
+        matches = match_references("Python 개발", "기본문법")
+        assert len(matches) == 3
+        assert all("python" in m["category"].lower() for m in matches)
+
     def test_real_field_still_matches_its_own_catalog_entries(self):
         matches = match_references("Python 개발", "기본문법")
         assert len(matches) == 3

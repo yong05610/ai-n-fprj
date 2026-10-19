@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { ApiError, apiRequest } from "@/lib/api";
 import { clearConsent, consentPayload, hasStoredConsent, storeConsent } from "@/lib/consent";
 import { type Session, endSession, restoreSession, startAnonymousSession } from "@/lib/session";
+import { clearWizardDraft } from "@/lib/wizardStorage";
 
 export type AuthStatus = "checking" | "needs-consent" | "declined" | "starting" | "ready" | "error";
 
@@ -92,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!session) return;
     await apiRequest("/api/user/delete-data", { method: "POST", token: await session.getToken() });
     clearConsent();
+    clearWizardDraft();
     await endSession().catch(() => undefined);
     setSession(null);
     setStatus("needs-consent");

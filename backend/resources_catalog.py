@@ -8,10 +8,19 @@ it); `chunks` is reserved for Phase 6's RAG index and unused here.
 
 import json
 import os
+import re
 from functools import lru_cache
 
 
 _CATALOG_PATH = os.path.join(os.path.dirname(__file__), "data", "rag_documents.json")
+
+# Splits into Latin/digit runs and Korean-syllable runs, so "Python 개발" tokenizes to
+# {"python", "개발"} and "JavaScript" to {"javascript"} - never a single run spanning both.
+_TOKEN_PATTERN = re.compile(r"[a-z0-9]+|[가-힣]+")
+
+# A field string shorter than this is too generic/short to mean anything on its own
+# ("a", "AI") and produced false matches against unrelated catalog entries.
+_MIN_MATCH_LENGTH = 3
 
 
 @lru_cache(maxsize=1)
@@ -25,29 +34,46 @@ def _category_parts(doc: dict) -> tuple[str, str]:
     return doc_field.strip().lower(), doc_course.strip().lower()
 
 
-# A field (or course) string shorter than this is too generic/short to mean anything on
-# its own ("a", "기초") and produced false matches against unrelated catalog entries.
-_MIN_MATCH_LENGTH = 3
+def _head_token(value: str) -> str | None:
+    """The leading token of a field string - its domain-specific term.
+
+    Every multi-word field in this catalog is authored as "<distinctive term>
+    <generic suffix>" ("Python 개발", "웹 개발", "백엔드 개발", "데이터 분석"). Matching
+    on *any* shared token let unrelated fields collide on the generic suffix
+    alone (field="Python 개발" matching "웹 개발"/"백엔드 개발" docs just because
+    they all share the word "개발"/"development"). The head token is the one
+    that actually identifies the field.
+    """
+    tokens = _TOKEN_PATTERN.findall(value.strip().lower())
+    return tokens[0] if tokens else None
 
 
 def match_references(field: str, course: str) -> list[dict]:
     """Field match is mandatory - course text alone never matches across fields.
 
-    Matching on course text alone (independent of field) is what let an unrelated
-    field like "UX 디자인" pull in an "SQL 기초" doc just because the course text
-    "기초" is a substring shared across fields. The catalog is small and unranked
-    (10 entries, Task 2.3), so once a field matches, every doc under that field is
-    returned; `course` isn't used to narrow further - a within-field narrowing pass
-    can be added if the catalog grows enough to need it.
+    Matching is by exact head-token equality, not substring containment: a
+    plain substring check made "Java" match the "JavaScript" doc (and "UX
+    디자인" match an "SQL 기초" doc via the shared word "기초"). "java" and
+    "javascript" are different tokens even though one contains the other, so
+    exact equality rejects it while "Python" == "Python 개발"'s head token
+    "python" still matches.
+
+    The catalog is small and unranked (10 entries, Task 2.3), so once a field
+    matches, every doc under that field is returned; `course` isn't used to
+    narrow further - a within-field narrowing pass can be added if the catalog
+    grows enough to need it.
     """
     field_l = field.strip().lower()
     if len(field_l) < _MIN_MATCH_LENGTH:
+        return []
+    query_head = _head_token(field)
+    if not query_head:
         return []
 
     matches = []
     for doc in load_catalog():
         doc_field, _ = _category_parts(doc)
-        if field_l in doc_field or doc_field in field_l:
+        if query_head == _head_token(doc_field):
             matches.append(doc)
     return matches
 

@@ -70,6 +70,13 @@ Phase 3 리뷰에서 정한 `ge=1, le=20`(과정 내 수준 개수)을 유지했
 
 **재검증:** backend 111건 통과(기존 102 + 결함 수정 9건), frontend `npm test` 6건 통과(P4-2 전용), `npm run typecheck`/`build` 통과. 실제 uvicorn 서버로 참고자료 매칭과 확정 멱등성을 다시 HTTP로 확인했다.
 
+## 4-2. 경미한 잔여 사항 (Phase 5 착수 전 정리, 검증팀 2차 확인)
+
+- **자료 매칭 부분 문자열 잔존:** `match_references`를 토큰 전체집합 교집합 방식으로 먼저 바꿨더니, "Python 개발"/"웹 개발"/"백엔드 개발"이 공통 일반어("개발")로 서로 오매칭되는 새 문제를 테스트로 직접 발견했다. 최종적으로 각 분야 문자열의 **선두 토큰(도메인 고유어)만 정확히 일치**시키는 방식으로 바꿨다 — 이 카탈로그의 모든 분야명이 "<고유어> <일반 접미어>" 형태로 작성되어 있다는 점에 근거한다. "Java"는 더 이상 "JavaScript"와 매칭되지 않고, "Python"/"Python 개발"은 여전히 올바르게 매칭된다. 회귀 테스트 2건 추가(`backend/tests/test_resources_catalog.py`, 총 8건).
+- **삭제 후 초안 잔존:** `AuthProvider.deleteAllData()`에 `clearWizardDraft()` 호출을 추가했다. 데이터 삭제 시 `sessionStorage`의 마법사 초안도 함께 지워진다.
+
+**재검증:** backend 113건 통과(+2), frontend `npm test`/`typecheck`/`build` 통과.
+
 ## 5. 참고
 
 - 참고자료 카탈로그(`backend/data/rag_documents.json`)는 Phase 2에서 이미 검토·커밋된 원본이다. 처음 구현 중 실수로 스키마를 바꿔 덮어썼다가 `git status`로 발견해 되돌리고, 매칭 코드를 기존 스키마(`category`, `license`, `verified`, `chunks`)에 맞춰 다시 작성했다.
