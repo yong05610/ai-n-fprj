@@ -1,0 +1,112 @@
+[
+  {
+    "id": "doc_001",
+    "title": "Python 공식 튜토리얼 — 기본 문법",
+    "category": "Python 개발 / 기본문법",
+    "source_name": "Python 공식 문서",
+    "url": "https://docs.python.org/3/tutorial/",
+    "license": "PSF License (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_002",
+    "title": "Python 자료구조 공식 가이드",
+    "category": "Python 개발 / 자료구조와 알고리즘",
+    "source_name": "Python 공식 문서",
+    "url": "https://docs.python.org/3/tutorial/datastructures.html",
+    "license": "PSF License (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_003",
+    "title": "Python 함수 정의 가이드",
+    "category": "Python 개발 / 함수·모듈",
+    "source_name": "Python 공식 문서",
+    "url": "https://docs.python.org/3/tutorial/controlflow.html#defining-functions",
+    "license": "PSF License (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_004",
+    "title": "MDN: JavaScript 기초",
+    "category": "JavaScript / 기본문법",
+    "source_name": "MDN Web Docs (Mozilla)",
+    "url": "https://developer.mozilla.org/ko/docs/Learn/JavaScript/First_steps",
+    "license": "CC BY-SA 2.5 (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_005",
+    "title": "MDN: 비동기 JavaScript (async/await)",
+    "category": "JavaScript / 비동기 프로그래밍",
+    "source_name": "MDN Web Docs (Mozilla)",
+    "url": "https://developer.mozilla.org/ko/docs/Learn/JavaScript/Asynchronous",
+    "license": "CC BY-SA 2.5 (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_006",
+    "title": "SQL Tutorial — 기초 쿼리",
+    "category": "데이터 분석 / SQL 기초",
+    "source_name": "W3Schools",
+    "url": "https://www.w3schools.com/sql/",
+    "license": "W3Schools (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_007",
+    "title": "Git 공식 문서 — 기초 (한국어)",
+    "category": "협업 도구 / Git 버전 관리",
+    "source_name": "Git 공식 문서 (git-scm.com)",
+    "url": "https://git-scm.com/book/ko/v2",
+    "license": "CC BY-NC-SA 3.0 (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_008",
+    "title": "Next.js 공식 문서 — App Router",
+    "category": "웹 개발 / Next.js",
+    "source_name": "Next.js 공식 문서",
+    "url": "https://nextjs.org/docs/app",
+    "license": "MIT License (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_009",
+    "title": "FastAPI 공식 문서 (한국어)",
+    "category": "백엔드 개발 / FastAPI",
+    "source_name": "FastAPI 공식 문서",
+    "url": "https://fastapi.tiangolo.com/ko/",
+    "license": "MIT License (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  },
+  {
+    "id": "doc_010",
+    "title": "모던 JavaScript 튜토리얼 (한국어)",
+    "category": "JavaScript / 심화",
+    "source_name": "javascript.info",
+    "url": "https://ko.javascript.info/",
+    "license": "CC BY-NC-SA 4.0 (공개 무료)",
+    "verified": true,
+    "verified_at": "2026-10-19",
+    "chunks": []
+  }
+]
