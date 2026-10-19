@@ -1,5 +1,6 @@
+from datetime import datetime
 from typing import Optional, List, Literal
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 Weekday = Literal["none", "mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 GoalStatus = Literal["active", "completed", "archived"]
@@ -223,6 +224,10 @@ class TaskResponse(BaseModel):
     order_index: int
     created_at: str
     updated_at: str
+    # Derived from study_logs at request time (Phase 5 결정 5) - never stored, so these
+    # are always consistent with the current logs but cost one aggregation per request.
+    record_count: int = 0
+    total_minutes: int = 0
 
 
 # --- 4b. Plan Confirmation (FR-02 Step 2 save; resolves "열린 결정 1") ---
@@ -277,9 +282,35 @@ class PlanConfirmResponse(BaseModel):
 
 # --- 5. Study Logs & Reflections CRUD ---
 
+def _dedupe_tags(tags: Optional[List[str]]) -> List[str]:
+    seen: List[str] = []
+    for tag in tags or []:
+        tag = tag.strip()
+        if not tag or len(tag) > 30 or tag in seen:
+            continue
+        seen.append(tag)
+    return seen
+
+
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 class ReflectionCreateRequest(BaseModel):
-    content: str = Field(..., min_length=1, description="한 줄 회고")
-    tags: Optional[List[str]] = Field(default_factory=list, description="회고 태그 목록")
+    content: str = Field(..., min_length=1, max_length=500, description="한 줄 회고")
+    tags: Optional[List[str]] = Field(default_factory=list, max_length=10, description="회고 태그 목록 (중복·공백·30자 초과는 정리됨)")
+
+    @field_validator("content")
+    @classmethod
+    def _content_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("content는 공백만으로 구성될 수 없습니다.")
+        return value
+
+    @field_validator("tags")
+    @classmethod
+    def _clean_tags(cls, value: Optional[List[str]]) -> List[str]:
+        return _dedupe_tags(value)
 
 
 class ReflectionResponse(BaseModel):
@@ -291,24 +322,66 @@ class ReflectionResponse(BaseModel):
     updated_at: str
 
 
+def _validate_timer_pair(started_at: Optional[str], ended_at: Optional[str]) -> None:
+    if (started_at is None) != (ended_at is None):
+        raise ValueError("started_at과 ended_at은 둘 다 있거나 둘 다 없어야 합니다.")
+    if started_at and ended_at:
+        try:
+            start, end = _parse_iso(started_at), _parse_iso(ended_at)
+        except ValueError:
+            raise ValueError("started_at/ended_at은 올바른 ISO 8601 형식이어야 합니다.")
+        if start >= end:
+            raise ValueError("started_at은 ended_at보다 빨라야 합니다.")
+
+
 class StudyLogCreateRequest(BaseModel):
-    task_id: str
-    goal_id: Optional[str] = None
-    study_date: str = Field(..., description="YYYY-MM-DD")
-    minutes: int = Field(..., ge=1, description="학습 시간 (분)")
-    activity: str = Field(..., description="실행 내용")
+    task_id: str = Field(..., min_length=1, description="goal_id는 서버가 이 과제로부터 도출한다 (요청에 없음)")
+    study_date: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD (서비스 시간대 기준 오늘 이전·당일만)")
+    minutes: int = Field(..., ge=1, le=1440, description="학습 시간 (분), 사용자가 보정한 값을 그대로 저장")
+    activity: str = Field(..., max_length=2000, description="실행 내용")
     started_at: Optional[str] = Field(None, description="타이머 시작 시각 (ISO 8601, 선택)")
     ended_at: Optional[str] = Field(None, description="타이머 종료 시각 (ISO 8601, 선택)")
-    reflection: Optional[ReflectionCreateRequest] = Field(None, description="동반 작성할 회고")
+    reflection: Optional[ReflectionCreateRequest] = Field(None, description="동반 작성할 회고 (선택)")
+    client_request_id: Optional[str] = Field(None, max_length=100, description="멱등 재시도 키 (선택)")
+
+    @field_validator("activity")
+    @classmethod
+    def _activity_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("activity는 공백만으로 구성될 수 없습니다.")
+        return value
+
+    @model_validator(mode="after")
+    def _check_timer_pair(self) -> "StudyLogCreateRequest":
+        _validate_timer_pair(self.started_at, self.ended_at)
+        return self
 
 
 class StudyLogUpdateRequest(BaseModel):
-    study_date: Optional[str] = None
-    minutes: Optional[int] = None
-    activity: Optional[str] = None
+    study_date: Optional[str] = Field(None, pattern=DATE_PATTERN)
+    minutes: Optional[int] = Field(None, ge=1, le=1440)
+    activity: Optional[str] = Field(None, max_length=2000)
     started_at: Optional[str] = None
     ended_at: Optional[str] = None
-    reflection: Optional[ReflectionCreateRequest] = None
+    reflection: Optional[ReflectionCreateRequest] = Field(None, description="회고 생성/수정 (내용 교체)")
+    delete_reflection: bool = Field(
+        False, description="true면 회고만 삭제한다. reflection 과 함께 보낼 수 없다 (열린 결정 4)"
+    )
+    client_request_id: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("activity")
+    @classmethod
+    def _activity_not_blank(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("activity는 공백만으로 구성될 수 없습니다.")
+        return value
+
+    @model_validator(mode="after")
+    def _check_timer_pair_and_reflection_conflict(self) -> "StudyLogUpdateRequest":
+        _validate_timer_pair(self.started_at, self.ended_at)
+        if self.delete_reflection and self.reflection is not None:
+            raise ValueError("reflection과 delete_reflection을 동시에 보낼 수 없습니다.")
+        return self
 
 
 class StudyLogResponse(BaseModel):
@@ -324,6 +397,40 @@ class StudyLogResponse(BaseModel):
     reflection: Optional[ReflectionResponse] = None
     created_at: str
     updated_at: str
+
+
+# --- 5b. Timer (server-authoritative, one active timer per user; 열린 결정 1) ---
+
+class TimerStartRequest(BaseModel):
+    task_id: str = Field(..., min_length=1)
+    client_request_id: Optional[str] = Field(None, max_length=100)
+
+
+class ActiveTimerResponse(BaseModel):
+    active: bool
+    task_id: Optional[str] = None
+    goal_id: Optional[str] = None
+    started_at: Optional[str] = None
+
+
+class TimerFinishRequest(BaseModel):
+    activity: str = Field(..., max_length=2000)
+    minutes: Optional[int] = Field(
+        None, ge=1, le=1440, description="생략하면 서버가 started_at/ended_at(서버 시각)으로 계산한다"
+    )
+    reflection: Optional[ReflectionCreateRequest] = None
+    client_request_id: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("activity")
+    @classmethod
+    def _activity_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("activity는 공백만으로 구성될 수 없습니다.")
+        return value
+
+
+class TimerCancelRequest(BaseModel):
+    client_request_id: Optional[str] = Field(None, max_length=100)
 
 
 # --- 6. Summaries (Dashboard & Tutor Data Summary) ---

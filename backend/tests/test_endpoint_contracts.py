@@ -2,10 +2,10 @@ from fastapi.testclient import TestClient
 
 
 class TestEndpointContracts:
-    """Endpoints not yet implemented (Phase 5~6) return 501 once past auth/consent; unauthenticated
+    """Endpoints not yet implemented (Phase 6) return 501 once past auth/consent; unauthenticated
     calls to personal-data endpoints must fail with 401 before ever reaching the 501 stub.
-    Phase 4 endpoints (path/recommend, plan/generate, plan/confirm) are implemented - their
-    auth/consent gating is covered here, behavior is covered in test_phase4_plan.py."""
+    Phase 4/5 endpoints are implemented - their auth/consent gating is covered here,
+    behavior is covered in test_phase4_plan.py / test_phase5_exec.py."""
 
     def test_path_recommend_requires_auth(self, client: TestClient):
         assert client.post("/api/path/recommend", json={"field": "Python 개발"}).status_code == 401
@@ -39,20 +39,18 @@ class TestEndpointContracts:
         assert client.get("/api/tasks").status_code == 401
         assert client.delete("/api/tasks/task_123").status_code == 401
 
-    def test_study_logs_endpoints_require_auth_then_501(self, client: TestClient, consented_headers):
+    def test_study_logs_endpoints_require_auth(self, client: TestClient):
         assert client.get("/api/study-logs").status_code == 401
         assert client.delete("/api/study-logs/log_123").status_code == 401
 
-        response = client.get("/api/study-logs", headers=consented_headers)
+    def test_data_summary_requires_auth_then_501(self, client: TestClient, consented_headers):
+        assert client.get("/api/data/summary").status_code == 401
+        response = client.get("/api/data/summary", headers=consented_headers)
         assert response.status_code == 501
         assert response.json()["detail"]["code"] == "NOT_IMPLEMENTED"
 
-    def test_summaries_endpoints_require_auth_then_501(self, client: TestClient, consented_headers):
-        assert client.get("/api/data/summary").status_code == 401
+    def test_dashboard_summary_requires_auth(self, client: TestClient):
         assert client.get("/api/dashboard/summary").status_code == 401
-
-        assert client.get("/api/data/summary", headers=consented_headers).status_code == 501
-        assert client.get("/api/dashboard/summary", headers=consented_headers).status_code == 501
 
     def test_conversations_endpoints_require_auth_then_501(self, client: TestClient, consented_headers):
         assert client.get("/api/conversations").status_code == 401

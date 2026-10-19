@@ -19,3 +19,19 @@ def today() -> date:
 
 def week_monday(day: date) -> date:
     return day - timedelta(days=day.weekday())
+
+
+def week_sunday(day: date) -> date:
+    return week_monday(day) + timedelta(days=6)
+
+
+def is_within_week(day: date, week_start: date) -> bool:
+    return week_start <= day <= week_start + timedelta(days=6)
+
+
+def date_from_utc_iso(value: str) -> date:
+    """The Asia/Seoul calendar date a UTC ISO-8601 instant falls on."""
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(SERVICE_TZ).date()
+
+
+WEEKDAY_BY_INDEX = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")  # date.weekday(): Monday = 0

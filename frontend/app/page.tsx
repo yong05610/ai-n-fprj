@@ -1,52 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { ConsentModal } from "@/components/ConsentModal";
+import { Dashboard } from "@/components/Dashboard";
 import { DeleteDataSection } from "@/components/DeleteDataSection";
+import { ExecutionScreen } from "@/components/ExecutionScreen";
 import { LearningPathWizard } from "@/components/LearningPathWizard";
-import { apiRequest } from "@/lib/api";
 
-type Goal = { id: string; field: string; course: string; target_level_name: string; status: string };
+type View = "dashboard" | "execution" | "wizard";
 
-function GoalList() {
-  const { session } = useAuth();
-  const [goals, setGoals] = useState<Goal[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!session) return;
-    session
-      .getToken()
-      .then((token) => apiRequest<Goal[]>("/api/goals", { token }))
-      .then(setGoals)
-      .catch((e: Error) => setError(e.message));
-  }, [session]);
-
+function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (
-    <section className="card">
-      <h2>내 학습 목표</h2>
-      {error && <p className="error">{error}</p>}
-      {!error && goals === null && <p className="description">불러오는 중…</p>}
-      {goals?.length === 0 && <p className="description">아직 저장된 학습 목표가 없습니다.</p>}
-      {goals && goals.length > 0 && (
-        <ul>
-          {goals.map((goal) => (
-            <li key={goal.id}>
-              {goal.field} · {goal.course} → {goal.target_level_name} ({goal.status})
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <nav className="nav-bar">
+      <button className={`btn${view === "dashboard" ? " active" : ""}`} onClick={() => onChange("dashboard")}>
+        대시보드
+      </button>
+      <button className={`btn${view === "execution" ? " active" : ""}`} onClick={() => onChange("execution")}>
+        학습 실행 기록
+      </button>
+      <button className={`btn${view === "wizard" ? " active" : ""}`} onClick={() => onChange("wizard")}>
+        학습 경로 만들기
+      </button>
+    </nav>
   );
 }
 
 export default function Home() {
   const { status, session, errorMessage, accept, decline, reopenConsent } = useAuth();
-  const [view, setView] = useState<"home" | "wizard">("home");
-  const [goalListKey, setGoalListKey] = useState(0);
+  const [view, setView] = useState<View>("dashboard");
+  const [dashboardKey, setDashboardKey] = useState(0);
 
   if (status === "checking") {
     return (
@@ -89,11 +73,11 @@ export default function Home() {
 
   if (view === "wizard") {
     return (
-      <main className="shell stack">
+      <main className="shell wide">
         <LearningPathWizard
           onClose={() => {
-            setView("home");
-            setGoalListKey((k) => k + 1);
+            setView("dashboard");
+            setDashboardKey((k) => k + 1);
           }}
         />
       </main>
@@ -101,22 +85,15 @@ export default function Home() {
   }
 
   return (
-    <main className="shell stack">
-      <section className="card">
-        <p className="eyebrow">PACEMATE · MVP</p>
-        <h1>나에게 맞는 학습 페이스를 찾아보세요.</h1>
-        <div className="status">
-          <span className="dot ok" aria-hidden="true" />
-          <span>
-            익명 계정으로 시작했습니다 · UID <code>{session?.uid.slice(0, 8)}…</code>
-          </span>
+    <main className="shell wide">
+      <NavBar view={view} onChange={setView} />
+      {view === "dashboard" && (
+        <div className="stack">
+          <Dashboard key={dashboardKey} onCreatePath={() => setView("wizard")} />
+          <DeleteDataSection />
         </div>
-        <button className="btn" style={{ marginTop: 16 }} onClick={() => setView("wizard")}>
-          ＋ 학습 경로 만들기
-        </button>
-      </section>
-      <GoalList key={goalListKey} />
-      <DeleteDataSection />
+      )}
+      {view === "execution" && <ExecutionScreen />}
     </main>
   );
 }

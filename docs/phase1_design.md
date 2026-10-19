@@ -87,6 +87,7 @@ erDiagram
         string role "learner"
         string active_goal_id "현재 활성 목표 (goals.id, 선택)"
         string consent_version "최신 동의 버전 (Phase 3)"
+        object active_timer "진행 중인 학습 타이머 (Phase 5, 선택)"
         timestamp created_at "최초 접속일"
         timestamp last_active_at "최종 활동일"
     }
@@ -308,6 +309,10 @@ erDiagram
 | `POST` | `/api/study-logs` | 학습 기록 등록 (단순 타이머 결과 또는 수동 입력) 및 회고 저장 | `study-logs` |
 | `PATCH` | `/api/study-logs/{log_id}` | 학습 기록 및 회고 내용 수정 | `study-logs` |
 | `DELETE` | `/api/study-logs/{log_id}` | 학습 기록 삭제 (회고 동반 삭제, 과제는 유지) | `study-logs` |
+| `POST` | `/api/timer/start` | 학습 타이머 시작 (사용자당 하나, 이미 있으면 409) | `users.active_timer` |
+| `GET` | `/api/timer/active` | 활성 타이머 조회 (새로고침 복원용) | `users.active_timer` |
+| `POST` | `/api/timer/finish` | 타이머 종료, 학습 기록으로 저장 | `study-logs` |
+| `POST` | `/api/timer/cancel` | 활성 타이머 취소 (기록 생성 없음) | `users.active_timer` |
 | `GET` | `/api/data/summary` | **AI 튜터 컨텍스트용** 학습 요약 및 최근 회고(최대 5건) 집계 | `summary` |
 | `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트 | `summary` |
 | `POST` | `/api/conversations` | 새 튜터 대화 세션 생성 | `conversations` |

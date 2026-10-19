@@ -21,6 +21,7 @@ erDiagram
         string role "learner"
         string active_goal_id "구현에만 있음"
         string consent_version "구현에만 있음"
+        object active_timer "Phase 5: {task_id, goal_id, started_at, client_request_id} 또는 없음 (열린 결정 1)"
         string created_at
         string last_active_at
     }
@@ -46,6 +47,7 @@ erDiagram
         int weekly_hours
         string target_date "오늘 이후만 허용"
         string status "active|completed|archived"
+        string client_request_id "plan/confirm 멱등 재시도 키, 선택"
         string created_at
         string updated_at
     }
@@ -67,12 +69,13 @@ erDiagram
         string id PK
         string user_id FK
         string task_id FK
-        string goal_id FK
-        string study_date
-        int minutes
+        string goal_id FK "task에서 서버가 도출, 요청의 goal_id는 무시"
+        string study_date "오늘 이전만 허용"
+        int minutes "1~1440, 사용자 보정값을 그대로 저장 (열린 결정 2)"
         string activity
-        string started_at "타이머 시작 시각, 선택 (Phase 3 리뷰에서 스키마 추가, 동작은 Phase 5)"
-        string ended_at "타이머 종료 시각, 선택"
+        string started_at "타이머 시작 시각, 선택"
+        string ended_at "타이머 종료 시각, 선택. 둘 다 있거나 둘 다 없어야 함"
+        string client_request_id "멱등 재시도 키, 선택 (Phase 4 plan/confirm과 동일 패턴)"
     }
     reflections {
         string id PK
@@ -121,3 +124,17 @@ erDiagram
 | 6 | 수준 범위 | `level`은 1~5 고정, 목표는 현재와 같은 수준도 허용 | **결정:** 단계 수 고정(5단계) 폐지, `ge=1, le=20`의 안전 상한만 유지(분야마다 단계 수가 다를 수 있음). 목표 수준은 현재 수준보다 **높아야만** 허용(동일 수준도 거부)하도록 변경. `LevelItem.level` → `order`, `*_num` → `*_order`로 이름도 변경(점수처럼 읽히는 문제 해결) |
 
 **검증:** `backend/tests` 53건 통과(Phase 3 리뷰 반영분 19건 신규), 프론트 `npm run typecheck` / `npm run build` 통과.
+
+## 4. Phase 5 결정 사항 (docs/phase5_dev_prompt.md 열린 결정 1~7)
+
+상세 근거는 `docs/phase5_report.md` §5 참고. 요약:
+
+| # | 항목 | 결정 |
+|---|---|---|
+| 1 | 활성 타이머 저장 위치 | `users.active_timer` 필드(별도 컬렉션 아님). 일시정지(paused)는 구현하지 않음 — 시작/종료/취소만 |
+| 2 | minutes vs started_at/ended_at | `minutes`는 사용자 입력을 그대로 저장(자동 계산으로 덮어쓰지 않음). 타이머 종료(`/api/timer/finish`)는 사용자가 분을 직접 넘기지 않으면 서버가 경과 시간으로 자동 계산 |
+| 3 | 기록 저장이 과제 자동 완료시키는지 | 아니오 — `status`는 `PATCH /api/tasks/{id}`로 사용자가 직접 토글 |
+| 4 | 회고 단독 삭제 | `StudyLogUpdateRequest.delete_reflection: bool` 전용 플래그 (reflection=null은 `_changes()`의 exclude_none 때문에 구분 불가) |
+| 5 | 과제별 누적 시간 제공 위치 | `GET /api/tasks` 응답에 `record_count`/`total_minutes` 추가(요청마다 계산, 별도 저장 안 함). 별도 집계 엔드포인트는 만들지 않음 |
+| 6 | 인사이트 충분/부족 기준 | 기록 3건 이상 **그리고** 회고 1건 이상이면 "충분"(Phase 6 안내), 아니면 "부족" 안내 |
+| 7 | 동일 과제·같은 날 기록 중복 | 허용(제한 없음) — 하루를 여러 세션으로 나눠 기록하는 사용을 막지 않기 위함 |

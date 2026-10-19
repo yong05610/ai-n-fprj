@@ -34,8 +34,15 @@ from schemas import (
     StudyLogCreateRequest,
     StudyLogUpdateRequest,
     StudyLogResponse,
+    TimerStartRequest,
+    ActiveTimerResponse,
+    TimerFinishRequest,
+    TimerCancelRequest,
     LearningDataSummaryResponse,
     DashboardSummaryResponse,
+    TodayTaskItem,
+    DailyHitItem,
+    AIInsightSummary,
     ConversationCreateRequest,
     ConversationListItem,
     ConversationDetailResponse,
@@ -122,12 +129,35 @@ def _consent_required() -> HTTPException:
     )
 
 
-def require_consented_uid(uid: str = Depends(get_current_uid), db=Depends(get_db)) -> str:
+def get_current_user_doc(uid: str = Depends(get_current_uid), db=Depends(get_db)) -> Optional[dict[str, Any]]:
+    """Shared sub-dependency so a request needing both the consent check and the user
+    document (Phase 5's dashboard/timer endpoints) reads `users` once, not twice.
+
+    FastAPI caches a dependency's result per request when the same callable is reached
+    through more than one path - `require_consented_uid` and `require_consented_user_doc`
+    both depend on this, so only one `db.get("users", uid)` happens per request. This is
+    deliberately narrow (Phase 3/4's existing endpoints are untouched) rather than a
+    blanket refactor of every `require_consented_uid` call site (검증팀 항목 1, 보류 사유는
+    docs/phase5_report.md 참고).
+    """
+    return db.get("users", uid)
+
+
+def require_consented_uid(uid: str = Depends(get_current_uid), user=Depends(get_current_user_doc)) -> str:
     """Personal data endpoints are available only after the current terms are accepted."""
-    user = db.get("users", uid)
     if not user or user.get("consent_version") != CURRENT_TERMS_VERSION:
         raise _consent_required()
     return uid
+
+
+def require_consented_user_doc(
+    uid: str = Depends(get_current_uid), user=Depends(get_current_user_doc)
+) -> dict[str, Any]:
+    """Like require_consented_uid, but for endpoints that need the user document itself
+    (active_goal_id, active_timer) and would otherwise re-fetch it."""
+    if not user or user.get("consent_version") != CURRENT_TERMS_VERSION:
+        raise _consent_required()
+    return user
 
 
 def _get_owned(db, collection: str, doc_id: str, uid: str) -> dict[str, Any]:
@@ -192,6 +222,62 @@ def _validate_task_time_budget(
 def _delete_task_children(db, uid: str, task_id: str) -> None:
     db.delete_where("reflections", user_id=uid, task_id=task_id)
     db.delete_where("study_logs", user_id=uid, task_id=task_id)
+
+
+def _study_log_stats(db, uid: str, task_id: str) -> tuple[int, int]:
+    logs = db.find("study_logs", user_id=uid, task_id=task_id)
+    return len(logs), sum(log["minutes"] for log in logs)
+
+
+def _with_task_stats(task: dict[str, Any], record_count: int, total_minutes: int) -> dict[str, Any]:
+    return {**task, "record_count": record_count, "total_minutes": total_minutes}
+
+
+def _find_by_client_request_id(db, collection: str, uid: str, client_request_id: Optional[str]) -> Optional[dict[str, Any]]:
+    """Shared idempotency lookup (Phase 4 plan/confirm pattern): a write request carrying
+    a client_request_id that already succeeded returns the prior result instead of
+    creating a duplicate."""
+    if not client_request_id:
+        return None
+    return next(
+        (d for d in db.find(collection, user_id=uid, client_request_id=client_request_id)),
+        None,
+    )
+
+
+def _validate_study_date_not_future(study_date: str) -> date:
+    parsed = _parse_date(study_date, "study_date")
+    if parsed > clock.today():
+        raise bad_request("학습 날짜는 오늘보다 미래일 수 없습니다.", {"field": "study_date"})
+    return parsed
+
+
+def _clear_active_timer_for_task(db, uid: str, task_id: str) -> None:
+    """Deleting a task must not leave a dangling active timer pointing at it (5.2)."""
+    user = db.get("users", uid)
+    active = (user or {}).get("active_timer")
+    if active and active.get("task_id") == task_id:
+        db.update("users", uid, {"active_timer": None})
+
+
+def _reflection_for_log(db, uid: str, study_log_id: str, task_id: str, payload, now: str) -> dict[str, Any]:
+    return db.create(
+        "reflections",
+        {
+            "user_id": uid,
+            "study_log_id": study_log_id,
+            "task_id": task_id,
+            "content": payload.content,
+            "tags": payload.tags or [],
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+
+
+def _attach_reflection(db, uid: str, log: dict[str, Any]) -> dict[str, Any]:
+    reflections = db.find("reflections", user_id=uid, study_log_id=log["id"])
+    return {**log, "reflection": reflections[0] if reflections else None}
 
 
 # --- Consent (Phase 3) ---
@@ -551,7 +637,14 @@ def list_tasks(
     if plan_week_start:
         filters["plan_week_start"] = plan_week_start
     tasks = db.find("tasks", **filters)
-    return sorted(tasks, key=lambda t: (t["plan_week_start"], t["order_index"], t["created_at"]))
+    sorted_tasks = sorted(tasks, key=lambda t: (t["plan_week_start"], t["order_index"], t["created_at"]))
+
+    # One query for all of this user's logs (not one per task) - 5.9's "쿼리 수를 줄인다".
+    stats: dict[str, tuple[int, int]] = {}
+    for log in db.find("study_logs", user_id=uid):
+        count, minutes = stats.get(log["task_id"], (0, 0))
+        stats[log["task_id"]] = (count + 1, minutes + log["minutes"])
+    return [_with_task_stats(t, *stats.get(t["id"], (0, 0))) for t in sorted_tasks]
 
 
 @app.post("/api/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED, tags=["tasks"], summary="학습 과제 생성")
@@ -565,7 +658,8 @@ def create_task(payload: TaskCreateRequest, uid: str = Depends(require_consented
     data["description"] = data["description"] or ""
     data["suggested_weekday"] = data["suggested_weekday"] or "none"
     data["order_index"] = data["order_index"] or 0
-    return db.create("tasks", {**data, "user_id": uid, "status": "pending", "created_at": now, "updated_at": now})
+    task = db.create("tasks", {**data, "user_id": uid, "status": "pending", "created_at": now, "updated_at": now})
+    return _with_task_stats(task, 0, 0)
 
 
 @app.patch("/api/tasks/{task_id}", response_model=TaskResponse, tags=["tasks"], summary="과제 상태/추천요일 수정")
@@ -577,40 +671,261 @@ def update_task(task_id: str, payload: TaskUpdateRequest, uid: str = Depends(req
         _validate_task_time_budget(
             db, uid, goal, task["plan_week_start"], changes["estimated_minutes"], exclude_task_id=task_id
         )
-    return db.update("tasks", task_id, {**changes, "updated_at": _now_iso()})
+    updated = db.update("tasks", task_id, {**changes, "updated_at": _now_iso()})
+    return _with_task_stats(updated, *_study_log_stats(db, uid, task_id))
 
 
 @app.delete("/api/tasks/{task_id}", tags=["tasks"], summary="과제 삭제 (하위 기록·회고 포함)")
 def delete_task(task_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
     _get_owned(db, "tasks", task_id, uid)
     _delete_task_children(db, uid, task_id)
+    _clear_active_timer_for_task(db, uid, task_id)
     db.delete("tasks", task_id)
     return {"status": "deleted", "id": task_id}
 
 
+STUDY_LOG_LIST_LIMIT = 200  # hard cap, no cursor pagination yet (5.4 decision, documented in report)
+
+
+def _parse_iso_dt(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 # 5. Study Logs & Reflections CRUD
 @app.get("/api/study-logs", response_model=List[StudyLogResponse], tags=["study-logs"], summary="학습 실행 기록 목록 조회")
-async def list_study_logs(
+def list_study_logs(
     task_id: Optional[str] = Query(None, description="과제 ID 필터"),
-    period: Optional[str] = Query("week", description="조회 기간 (week | all)"),
+    period: str = Query("week", description="조회 기간 (week | all)"),
     uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
 ):
-    _not_implemented()
+    if period not in ("week", "all"):
+        raise bad_request("period는 week 또는 all이어야 합니다.", {"field": "period"})
+    filters: dict[str, Any] = {"user_id": uid}
+    if task_id:
+        filters["task_id"] = task_id
+    logs = db.find("study_logs", **filters)
+    if period == "week":
+        week_start = clock.week_monday(clock.today())
+        logs = [log for log in logs if clock.is_within_week(date.fromisoformat(log["study_date"]), week_start)]
+    logs.sort(key=lambda log: (log["study_date"], log["created_at"]), reverse=True)
+    return [_attach_reflection(db, uid, log) for log in logs[:STUDY_LOG_LIST_LIMIT]]
 
 
-@app.post("/api/study-logs", response_model=StudyLogResponse, status_code=status.HTTP_201_CREATED, tags=["study-logs"], summary="학습 실행 기록 및 회고 생성")
-async def create_study_log(payload: StudyLogCreateRequest, uid: str = Depends(require_consented_uid)):
-    _not_implemented()
+@app.post(
+    "/api/study-logs",
+    response_model=StudyLogResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["study-logs"],
+    summary="학습 실행 기록 및 회고 생성",
+)
+def create_study_log(
+    payload: StudyLogCreateRequest, response: Response, uid: str = Depends(require_consented_uid), db=Depends(get_db)
+):
+    existing = _find_by_client_request_id(db, "study_logs", uid, payload.client_request_id)
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return _attach_reflection(db, uid, existing)
+
+    task = _get_owned(db, "tasks", payload.task_id, uid)
+    _validate_study_date_not_future(payload.study_date)
+
+    now = _now_iso()
+    log = db.create(
+        "study_logs",
+        {
+            "user_id": uid,
+            "task_id": payload.task_id,
+            "goal_id": task["goal_id"],
+            "study_date": payload.study_date,
+            "minutes": payload.minutes,
+            "activity": payload.activity,
+            "started_at": payload.started_at,
+            "ended_at": payload.ended_at,
+            "client_request_id": payload.client_request_id,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    # Best-effort: validated before any write, but the store has no multi-document
+    # transaction, so a failure between these two creates could leave an orphan
+    # study_log with no reflection (documented in docs/phase5_report.md).
+    if payload.reflection is not None:
+        _reflection_for_log(db, uid, log["id"], payload.task_id, payload.reflection, now)
+    return _attach_reflection(db, uid, log)
 
 
 @app.patch("/api/study-logs/{log_id}", response_model=StudyLogResponse, tags=["study-logs"], summary="학습 실행 기록 및 회고 수정")
-async def update_study_log(log_id: str, payload: StudyLogUpdateRequest, uid: str = Depends(require_consented_uid)):
-    _not_implemented()
+def update_study_log(
+    log_id: str, payload: StudyLogUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)
+):
+    log = _get_owned(db, "study_logs", log_id, uid)
+    if payload.study_date is not None:
+        _validate_study_date_not_future(payload.study_date)
+
+    changes = _changes(payload)
+    changes.pop("reflection", None)
+    changes.pop("delete_reflection", None)
+    changes.pop("client_request_id", None)
+    updated = db.update("study_logs", log_id, {**changes, "updated_at": _now_iso()}) if changes else log
+
+    now = _now_iso()
+    if payload.delete_reflection:
+        # 열린 결정 4: PATCH 의 _changes()는 exclude_none 이라 reflection=null 로는 삭제를
+        # 표현할 수 없다. 별도 불리언 플래그로 "회고만 삭제"를 명확히 구분한다.
+        db.delete_where("reflections", user_id=uid, study_log_id=log_id)
+    elif payload.reflection is not None:
+        existing_reflections = db.find("reflections", user_id=uid, study_log_id=log_id)
+        if existing_reflections:
+            db.update(
+                "reflections",
+                existing_reflections[0]["id"],
+                {"content": payload.reflection.content, "tags": payload.reflection.tags or [], "updated_at": now},
+            )
+        else:
+            _reflection_for_log(db, uid, log_id, log["task_id"], payload.reflection, now)
+    return _attach_reflection(db, uid, updated)
 
 
 @app.delete("/api/study-logs/{log_id}", tags=["study-logs"], summary="학습 실행 기록 삭제 (회고 포함, 과제 유지)")
-async def delete_study_log(log_id: str, uid: str = Depends(require_consented_uid)):
-    _not_implemented()
+def delete_study_log(log_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    _get_owned(db, "study_logs", log_id, uid)
+    db.delete_where("reflections", user_id=uid, study_log_id=log_id)
+    db.delete("study_logs", log_id)
+    return {"status": "deleted", "id": log_id}
+
+
+# 5b. Timer - server-authoritative, one active timer per user (열린 결정 1: 저장 위치는
+# users.active_timer 필드. 일시정지는 구현하지 않는다 - 시작/종료만. 근거는
+# docs/phase5_report.md 참고).
+MAX_TIMER_DURATION_MINUTES = 1440  # 24h; beyond this, finishing requires a manual minutes override
+
+
+@app.post(
+    "/api/timer/start",
+    response_model=ActiveTimerResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["timer"],
+    summary="학습 타이머 시작 (사용자당 하나만 허용)",
+)
+def start_timer(
+    payload: TimerStartRequest,
+    response: Response,
+    user: dict[str, Any] = Depends(require_consented_user_doc),
+    db=Depends(get_db),
+):
+    uid = user["uid"]
+    task = _get_owned(db, "tasks", payload.task_id, uid)
+    active = user.get("active_timer")
+    if active:
+        if payload.client_request_id and active.get("client_request_id") == payload.client_request_id:
+            response.status_code = status.HTTP_200_OK
+            return ActiveTimerResponse(
+                active=True, task_id=active["task_id"], goal_id=active["goal_id"], started_at=active["started_at"]
+            )
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "TIMER_ALREADY_RUNNING",
+            "진행 중인 학습을 먼저 종료·저장하세요.",
+            {"task_id": active.get("task_id"), "goal_id": active.get("goal_id"), "started_at": active.get("started_at")},
+        )
+
+    now = _now_iso()
+    active_timer = {
+        "task_id": payload.task_id,
+        "goal_id": task["goal_id"],
+        "started_at": now,
+        "client_request_id": payload.client_request_id,
+    }
+    db.update("users", uid, {"active_timer": active_timer})
+    return ActiveTimerResponse(active=True, task_id=payload.task_id, goal_id=task["goal_id"], started_at=now)
+
+
+@app.get(
+    "/api/timer/active",
+    response_model=ActiveTimerResponse,
+    tags=["timer"],
+    summary="활성 타이머 조회 (새로고침 복원용)",
+)
+def get_active_timer(user: dict[str, Any] = Depends(require_consented_user_doc)):
+    active = user.get("active_timer")
+    if not active:
+        return ActiveTimerResponse(active=False)
+    return ActiveTimerResponse(
+        active=True, task_id=active["task_id"], goal_id=active["goal_id"], started_at=active["started_at"]
+    )
+
+
+@app.post(
+    "/api/timer/cancel",
+    response_model=ActiveTimerResponse,
+    tags=["timer"],
+    summary="활성 타이머 취소 (기록을 만들지 않음)",
+)
+def cancel_timer(payload: TimerCancelRequest, user: dict[str, Any] = Depends(require_consented_user_doc), db=Depends(get_db)):
+    db.update("users", user["uid"], {"active_timer": None})
+    return ActiveTimerResponse(active=False)
+
+
+@app.post(
+    "/api/timer/finish",
+    response_model=StudyLogResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["timer"],
+    summary="활성 타이머 종료 및 학습 기록 저장",
+)
+def finish_timer(
+    payload: TimerFinishRequest,
+    response: Response,
+    user: dict[str, Any] = Depends(require_consented_user_doc),
+    db=Depends(get_db),
+):
+    uid = user["uid"]
+    active = user.get("active_timer")
+    if not active:
+        raise api_error(status.HTTP_409_CONFLICT, "TIMER_NOT_RUNNING", "진행 중인 타이머가 없습니다.")
+
+    existing = _find_by_client_request_id(db, "study_logs", uid, payload.client_request_id)
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        db.update("users", uid, {"active_timer": None})
+        return _attach_reflection(db, uid, existing)
+
+    started_at = active["started_at"]
+    ended_at = _now_iso()
+    elapsed_minutes = max(1, round((_parse_iso_dt(ended_at) - _parse_iso_dt(started_at)).total_seconds() / 60))
+    if payload.minutes is not None:
+        minutes = payload.minutes
+    elif elapsed_minutes > MAX_TIMER_DURATION_MINUTES:
+        raise bad_request(
+            "타이머가 24시간을 넘게 실행되어 자동 계산할 수 없습니다. 학습 시간을 직접 입력해 주세요.",
+            {"field": "minutes"},
+        )
+    else:
+        minutes = elapsed_minutes
+
+    task_id = active["task_id"]
+    now = ended_at
+    log = db.create(
+        "study_logs",
+        {
+            "user_id": uid,
+            "task_id": task_id,
+            "goal_id": active["goal_id"],
+            "study_date": clock.date_from_utc_iso(started_at).isoformat(),
+            "minutes": minutes,
+            "activity": payload.activity,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "client_request_id": payload.client_request_id,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    if payload.reflection is not None:
+        _reflection_for_log(db, uid, log["id"], task_id, payload.reflection, now)
+    db.update("users", uid, {"active_timer": None})
+    return _attach_reflection(db, uid, log)
 
 
 # 6. Summaries
@@ -627,14 +942,122 @@ async def get_data_summary(
     _not_implemented()
 
 
+DASHBOARD_WEEKDAY_LABELS = ("월", "화", "수", "목", "금", "토", "일")
+DASHBOARD_INSIGHT_MIN_RECORDS = 3
+DASHBOARD_INSIGHT_MIN_REFLECTIONS = 1
+
+
+def _empty_dashboard_summary(week_start: date, today: date) -> DashboardSummaryResponse:
+    weekly_hits = [
+        DailyHitItem(
+            day=DASHBOARD_WEEKDAY_LABELS[i],
+            date=(week_start + timedelta(days=i)).isoformat(),
+            has_activity=False,
+            is_today=(week_start + timedelta(days=i)) == today,
+        )
+        for i in range(7)
+    ]
+    return DashboardSummaryResponse(
+        active_goal_title="",
+        level_progress_text="",
+        completed_task_count=0,
+        total_task_count=0,
+        progress_percentage=0,
+        weekly_study_minutes=0,
+        weekly_target_minutes=0,
+        total_study_log_count=0,
+        today_tasks=[],
+        weekly_hits=weekly_hits,
+        insight=AIInsightSummary(
+            text="학습 목표를 만들면 진행현황과 인사이트를 볼 수 있어요.",
+            notice="",
+            is_insufficient=True,
+        ),
+    )
+
+
 @app.get(
     "/api/dashboard/summary",
     response_model=DashboardSummaryResponse,
     tags=["summary"],
     summary="대시보드 화면용 종합 집계 (4대 지표, 오늘 과제, 주간 hit, 인사이트)",
 )
-async def get_dashboard_summary(uid: str = Depends(require_consented_uid)):
-    _not_implemented()
+def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_doc), db=Depends(get_db)):
+    today = clock.today()
+    week_start = clock.week_monday(today)
+
+    goal_id = user.get("active_goal_id")
+    goal = db.get("goals", goal_id) if goal_id else None
+    if goal is None or goal.get("user_id") != user["uid"]:
+        # No active goal, or it was deleted out from under a stale active_goal_id - both
+        # are the normal "nothing to show yet" case, not an error (always 200).
+        return _empty_dashboard_summary(week_start, today)
+
+    uid = user["uid"]
+    tasks = db.find("tasks", user_id=uid, goal_id=goal_id)
+    total_task_count = len(tasks)
+    completed_task_count = sum(1 for t in tasks if t["status"] == "completed")
+    progress_percentage = round(completed_task_count / total_task_count * 100) if total_task_count else 0
+
+    logs = db.find("study_logs", user_id=uid, goal_id=goal_id)
+    weekly_logs = [log for log in logs if clock.is_within_week(date.fromisoformat(log["study_date"]), week_start)]
+    weekly_study_minutes = sum(log["minutes"] for log in weekly_logs)
+
+    log_counts_by_task: dict[str, int] = {}
+    for log in logs:
+        log_counts_by_task[log["task_id"]] = log_counts_by_task.get(log["task_id"], 0) + 1
+
+    this_week_tasks = sorted(
+        (t for t in tasks if t["plan_week_start"] == week_start.isoformat()), key=lambda t: t["order_index"]
+    )
+    incomplete = [t for t in this_week_tasks if t["status"] != "completed"]
+    today_weekday = clock.WEEKDAY_BY_INDEX[today.weekday()]
+    today_match = [t for t in incomplete if t["suggested_weekday"] == today_weekday]
+    today_match_ids = {t["id"] for t in today_match}
+    ordered = today_match + [t for t in incomplete if t["id"] not in today_match_ids]
+    today_tasks = [
+        TodayTaskItem(
+            id=t["id"],
+            title=t["title"],
+            estimated_minutes=t["estimated_minutes"],
+            suggested_weekday=t["suggested_weekday"],
+            is_completed=False,
+            record_count=log_counts_by_task.get(t["id"], 0),
+        )
+        for t in ordered[:5]
+    ]
+
+    reflection_count = len(db.find("reflections", user_id=uid))
+    sufficient = len(logs) >= DASHBOARD_INSIGHT_MIN_RECORDS and reflection_count >= DASHBOARD_INSIGHT_MIN_REFLECTIONS
+    insight = (
+        AIInsightSummary(text="AI 인사이트는 Phase 6에서 제공됩니다.", notice="", is_insufficient=False)
+        if sufficient
+        else AIInsightSummary(text="기록과 회고를 더 남기면 인사이트를 볼 수 있어요.", notice="", is_insufficient=True)
+    )
+
+    weekly_hits = [
+        DailyHitItem(
+            day=DASHBOARD_WEEKDAY_LABELS[i],
+            date=(week_start + timedelta(days=i)).isoformat(),
+            has_activity=any(log["study_date"] == (week_start + timedelta(days=i)).isoformat() for log in weekly_logs),
+            is_today=(week_start + timedelta(days=i)) == today,
+        )
+        for i in range(7)
+    ]
+
+    return DashboardSummaryResponse(
+        active_goal_title=f"{goal['field']} · {goal['course']}",
+        level_progress_text=f"{goal['current_level_name']} → {goal['target_level_name']}",
+        completed_task_count=completed_task_count,
+        total_task_count=total_task_count,
+        progress_percentage=progress_percentage,
+        weekly_study_minutes=weekly_study_minutes,
+        weekly_target_minutes=goal["weekly_hours"] * 60,
+        total_study_log_count=len(logs),
+        today_tasks=today_tasks,
+        weekly_hits=weekly_hits,
+        insight=insight,
+    )
 
 
 # 7. Conversations (AI Tutor - 단일화된 튜터 호출 엔드포인트)
