@@ -45,7 +45,7 @@ erDiagram
         string target_level_name
         string target_level_description "스냅샷, 선택"
         int weekly_hours
-        string start_date "일정 시작일(확정 시 계획 주 시작 월요일). 일정 겹침 검사 기준 (결정 2026-10-22, Phase 5B 구현됨)"
+        string start_date "사용자가 선택한 학습 시작일(월요일일 필요 없음, 오늘 이후). 일정 겹침 검사 기준. 첫 계획 주(plan_week_start)는 이 날짜가 속한 주의 월요일 (결정 2026-10-22, Phase 5B 구현됨)"
         string target_date "오늘 이후만 허용"
         string status "active|completed|archived"
         string client_request_id "plan/confirm 멱등 재시도 키, 선택"
