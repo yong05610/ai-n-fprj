@@ -144,3 +144,9 @@ erDiagram
 - 사용자는 목표(goals)를 여러 개 가질 수 있다. 새 목표를 확정할 때 status=active 인 기존 목표와 [start_date, target_date] 구간이 하루라도 겹치면 거부한다(409 GOAL_PERIOD_OVERLAP). completed·archived 는 비교하지 않는다.
 - 기존 학습의 일정 변경으로 생기는 겹침은 검사하지 않는다.
 - `users.active_goal_id` 는 계획·실행 화면에서 보는 학습이며 학습 전환 드롭다운으로 바꾼다. 대시보드, 튜터, 자료함은 모든 active 목표를 대상으로 한다.
+
+## 피드백·관리자 규칙 (결정 2026-10-22, docs/phase5e_design.md, Phase 5E 구현 예정)
+- 신설 컬렉션 `feedback`: id, usability(1~5), ai_usefulness(1~5), screen(enum), comment(선택, 1000자 이하), status(new/seen/candidate/done), client_request_id(제출 멱등용 무작위 값), created_at, updated_at. **user_id 를 두지 않는다.** 따라서 USER_OWNED_COLLECTIONS 에 넣지 않으며 delete-data 로 지워지지 않는다.
+- `users` 에 `feedback_submitted_count`(제출 횟수 상한용, 내용과 연결 없음)를 추가할 수 있다.
+- 관리자: `users.role` 은 "learner" 그대로 두고, 관리자 판별은 환경변수 `ADMIN_UIDS`(쉼표 구분 UID 목록)로만 한다. `GET /api/user/profile` 응답에 `is_admin`(읽기 전용)을 추가한다.
+- 관리자 API 는 `/api/admin/*` 이며 허용 목록 밖은 403 ErrorResponse 다.
