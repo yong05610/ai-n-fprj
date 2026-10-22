@@ -36,3 +36,11 @@ test("todayKSTDateString matches mondayOfThisWeekKST's own date extraction for t
   const instant = new Date("2026-10-20T18:00:00Z");
   assert.equal(todayKSTDateString(instant), "2026-10-21");
 });
+
+import { todayKSTLabel } from "./week";
+
+test("todayKSTLabel uses the Seoul calendar day, not the UTC day", () => {
+  // 2026-10-21T16:00:00Z is already Thursday 2026-10-22 01:00 in Seoul.
+  assert.equal(todayKSTLabel(new Date("2026-10-21T16:00:00Z")), "2026년 10월 22일 · 목요일");
+  assert.equal(todayKSTLabel(new Date("2026-10-17T03:00:00Z")), "2026년 10월 17일 · 토요일");
+});

@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
+import { GoalSwitch } from "@/components/GoalSwitch";
+import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
 import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from "@/lib/wizardStorage";
 import { todayKSTDateString } from "@/lib/week";
@@ -72,8 +74,16 @@ function newRequestId(): string {
     : `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-export function LearningPathWizard({ onClose }: { onClose: () => void }) {
+export function LearningPathWizard({
+  onClose,
+  registerLeaveGuard,
+}: {
+  onClose: () => void;
+  /** The app shell asks this guard before leaving the screen (sidebar clicks etc.). */
+  registerLeaveGuard: (guard: (() => boolean) | null) => void;
+}) {
   const { session } = useAuth();
+  const goalSwitch = useGoalSwitch();
   const restored = useMemo(() => loadWizardDraft<WizardSnapshot>(), []);
 
   // --- Step 1: path setup (분야 -> 과정/수준 추천 -> 선택, 이름 수정 가능) ---
@@ -431,19 +441,23 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, targetDate]);
 
-  function handleClose() {
-    const hasProgress = recommendation != null || draft != null;
-    if (hasProgress && confirmStatus !== "done") {
-      const ok = window.confirm("작성 중인 학습 경로·계획이 있습니다. 저장하지 않고 홈으로 돌아갈까요?");
-      if (!ok) return;
-    }
-    onClose();
-  }
+  // Phase 5C: there is no "back to home" button any more; the sidebar is the way out. Leaving
+  // with unsaved work still asks first (same confirmation as before).
+  const hasProgress = recommendation != null || draft != null;
+  useEffect(() => {
+    registerLeaveGuard(() => {
+      if (hasProgress && confirmStatus !== "done") {
+        return window.confirm("작성 중인 학습 경로·계획이 있습니다. 저장하지 않고 다른 화면으로 이동할까요?");
+      }
+      return true;
+    });
+    return () => registerLeaveGuard(null);
+  }, [hasProgress, confirmStatus, registerLeaveGuard]);
 
   if (confirmStatus === "done") {
     return (
       <section className="card">
-        <p className="eyebrow">PACEMATE · PLAN SAVED</p>
+        <p className="kicker">PACEMATE · PLAN SAVED</p>
         <h2>학습 계획이 저장되었습니다.</h2>
         <p className="description">
           {savedGoalField} 목표와 이번 주 과제가 저장되어 언제든 다시 확인할 수 있습니다.
@@ -466,14 +480,35 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="stack">
-      <button className="btn secondary" onClick={handleClose} style={{ alignSelf: "flex-start" }}>
-        ← 홈으로
-      </button>
+    <>
+      <GoalSwitch
+        goals={goalSwitch.goals}
+        activeGoalId={goalSwitch.activeGoalId}
+        busy={goalSwitch.switching}
+        onSelect={goalSwitch.switchGoal}
+      />
+      {goalSwitch.error && (
+        <p className="error" role="alert">
+          {goalSwitch.error}
+        </p>
+      )}
+      <div className="heading">
+        <div>
+          <p className="kicker">PERSONAL LEARNING PATH</p>
+          <h1>학습 분야에서 나만의 목표까지</h1>
+          <p>AI가 세부 과정을 나누고 수준별 계획을 구성합니다.</p>
+        </div>
+        <span className="pill blue">계획 설정</span>
+      </div>
 
+      <div className="grid columns">
       <section className="card">
-        <p className="eyebrow">PERSONAL LEARNING PATH</p>
-        <h2>1. 학습 분야에서 나만의 목표까지</h2>
+        <div className="card-head">
+          <div>
+            <h2>1. 학습 분야 선택</h2>
+            <p>배우고 싶은 분야를 입력하면 세부 과정을 추천해요.</p>
+          </div>
+        </div>
         <div className="field">
           <label htmlFor="wizard-field">학습하고 싶은 분야</label>
           <input
@@ -487,11 +522,11 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
         </div>
         <button
           type="button"
-          className="btn secondary small"
+          className="btn small secondary"
           onClick={fetchIdeas}
           disabled={!field.trim() || ideasStatus === "loading" || pathStatus === "loading"}
         >
-          {ideasStatus === "loading" ? "예시 찾는 중…" : ideas ? "예시 다시 보기" : "대표 직무·목표 예시 보기"}
+          {ideasStatus === "loading" ? "예시 찾는 중…" : ideas ? "✦ 예시 다시 보기" : "✦ 이 분야의 대표 직무·목표 예시 보기"}
         </button>
         {ideasStatus === "error" && (
           <p className="error" role="alert">
@@ -500,7 +535,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
         )}
         {ideas && (
           <div className="field">
-            <label>대표 직무·목표 예시 (참고용, 선택 사항)</label>
+            <label>이 분야에서 많이 목표로 삼는 직무 (참고 · 누르면 아래 목표에 채워져요)</label>
             <div className="chip-row">
               {ideas.map((role) => (
                 <button
@@ -513,7 +548,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 </button>
               ))}
             </div>
-            <p className="small muted">누르면 아래 학습 목표 칸에 채워지며, 직접 고쳐 쓸 수 있어요. AI가 제안한 예시입니다.</p>
+            <p className="small muted">직접 고쳐 쓸 수 있어요. AI가 제안한 예시입니다.</p>
           </div>
         )}
         <div className="field">
@@ -527,7 +562,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
             autoComplete="off"
           />
         </div>
-        <button className="btn" onClick={recommend} disabled={!field.trim() || pathStatus === "loading"}>
+        <button className="btn small" onClick={recommend} disabled={!field.trim() || pathStatus === "loading"}>
           {pathStatus === "loading" ? "추천 받는 중…" : recommendation ? "✦ 다시 추천받기" : "✦ AI 세부 과정·수준 추천"}
         </button>
         {pathStatus === "error" && (
@@ -539,7 +574,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
         {recommendation && (
           <>
             <div className="field" style={{ marginTop: 17 }}>
-              <label>2. 추천된 세부 과정 중 하나를 선택하세요</label>
+              <label>2. 추천된 세부 과정 중 하나를 선택하세요 (한 번에 하나)</label>
               <div className="chip-row">
                 {recommendation.courses.map((c) => (
                   <button
@@ -625,7 +660,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
               </div>
             )}
 
-            <div className="field-grid">
+            <div className="field-grid three">
               <div className="field">
                 <label htmlFor="weekly-hours">주간 학습 가능 시간(시간)</label>
                 <input
@@ -647,8 +682,6 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                   onChange={(e) => setStartDate(e.target.value)}
                 />
               </div>
-            </div>
-            <div className="field-grid">
               <div className="field">
                 <label htmlFor="target-date">목표 완료 희망일</label>
                 <input
@@ -698,13 +731,22 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
         )}
       </section>
 
-      {draft && (
-        <section className="card">
-          <p className="eyebrow">저장 전 초안</p>
-          <h2>AI 학습 설계 미리보기</h2>
-          <p className="small muted">
-            {draft.plan_week_start} ~ {draft.plan_week_end}
-          </p>
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h2>AI 학습 설계 미리보기</h2>
+            <p>
+              {draft && selectedCourse
+                ? `${recommendation?.field ?? ""} · ${courseTitle} · ${currentLevelName} → ${targetLevelName} · 주 ${weeklyHours}시간 · ${draft.plan_week_start} ~ ${draft.plan_week_end}`
+                : "과정과 수준, 일정을 정한 뒤 계획을 만들면 여기에 미리보기가 나타나요."}
+            </p>
+          </div>
+          {draft && <span className="pill gold">저장 전 초안</span>}
+        </div>
+        {!draft ? (
+          <p className="description">아직 만든 계획이 없어요. 계획은 확정해서 저장하기 전까지 저장되지 않습니다.</p>
+        ) : (
+        <>
           {isDraftStale && (
             <p className="error" role="alert">
               입력 조건이 바뀌어 이 초안은 최신 상태가 아닙니다. 위의 "계획 다시 만들기"로 새로 생성한 뒤 저장하세요.
@@ -787,30 +829,30 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           )}
 
           {activeTab === "advice" && (
-            <div>
+            <div className="coach">
+              <p className="kicker">AI INSIGHT</p>
               <h3>{draft.advice.title}</h3>
-              <p className="description">{draft.advice.content}</p>
+              <p>{draft.advice.content}</p>
             </div>
           )}
 
           {activeTab === "refs" && (
             <div>
               {draft.references.length > 0 ? (
-                <ul>
+                <div>
                   {draft.references.map((r) => (
-                    <li key={r.title}>
-                      <strong>{r.title}</strong> · {r.category}
+                    <div key={r.title} className="resource">
+                      <span className="pill blue">검토된 자료</span>
+                      <strong> {r.title}</strong>
+                      <p>세부 과정: {r.category}</p>
                       {r.url && (
-                        <>
-                          {" · "}
-                          <a href={r.url} target="_blank" rel="noreferrer">
-                            자료 열기 ↗
-                          </a>
-                        </>
+                        <a href={r.url} target="_blank" rel="noreferrer">
+                          자료 열기 ↗
+                        </a>
                       )}
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <p className="description" style={{ whiteSpace: "pre-line" }}>
                   {draft.references_notice}
@@ -835,8 +877,10 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 : `${confirmError} 같은 저장 버튼으로 다시 시도해도 중복 저장되지 않습니다.`}
             </p>
           )}
-        </section>
-      )}
-    </div>
+        </>
+        )}
+      </section>
+      </div>
+    </>
   );
 }

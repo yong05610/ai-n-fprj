@@ -40,3 +40,16 @@ export function todayKSTDateString(now: Date = new Date()): string {
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
+
+/** "2026년 10월 22일 · 목요일" in Asia/Seoul, for the top bar (Phase 5C). */
+export function todayKSTLabel(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "long",
+  }).formatToParts(now);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}년 ${get("month")} ${get("day")}일 · ${get("weekday")}`;
+}

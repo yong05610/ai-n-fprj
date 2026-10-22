@@ -366,69 +366,131 @@ export function ExecutionScreen() {
     </>
   );
 
+  const heading = (
+    <div className="heading">
+      <div>
+        <p className="kicker">STUDY EXECUTION</p>
+        <h1>학습 실행 기록</h1>
+        <p>과제별 실행 기록과 진행현황을 확인하고, 새 기록을 남기거나 기존 기록을 수정합니다.</p>
+      </div>
+    </div>
+  );
+
   if (loadStatus === "loading") {
     return (
-      <section className="card">
-        <p className="description">불러오는 중…</p>
-      </section>
+      <>
+        {heading}
+        <section className="card">
+          <p className="description">불러오는 중…</p>
+        </section>
+      </>
     );
   }
 
   if (loadStatus === "error") {
     return (
-      <section className="card">
-        <p className="error" role="alert">
-          {loadError}
-        </p>
-        <button className="btn" onClick={load}>
-          다시 시도
-        </button>
-      </section>
+      <>
+        {heading}
+        <section className="card">
+          <p className="error" role="alert">
+            {loadError}
+          </p>
+          <button className="btn" onClick={load}>
+            다시 시도
+          </button>
+        </section>
+      </>
     );
   }
 
   if (!tasks || tasks.length === 0) {
     return (
-      <div className="stack">
+      <>
         {switcher}
+        {heading}
         <section className="card">
           <h2>학습 과제가 없습니다</h2>
           <p className="description">학습 경로를 만들어 과제를 먼저 확정해 주세요.</p>
         </section>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="stack">
+    <>
       {switcher}
+      {heading}
       <div className="grid stats">
         <article className="card stat">
-          <label>학습 시간</label>
-          <strong>{weeklyMinutes}분</strong>
-          <small>목표 {weeklyTargetMinutes}분 · {weeklyPercent}%</small>
+          <div>
+            <label>{period === "week" ? "이번 주 학습시간" : "전체 학습시간"}</label>
+            <strong>
+              {weeklyMinutes} <small>분</small>
+            </strong>
+            <small>{period === "week" ? `주 목표 ${weeklyTargetMinutes}분` : "전체 기간"}</small>
+          </div>
+          <span className="stat-icon">◷</span>
         </article>
         <article className="card stat">
-          <label>학습 기록</label>
-          <strong>{recordCount}건</strong>
-          <small>{period === "week" ? "이번 주" : "전체 기간"}</small>
+          <div>
+            <label>학습 기록</label>
+            <strong>
+              {recordCount} <small>건</small>
+            </strong>
+            <small>{period === "week" ? "이번 주 기록" : "전체 기간 기록"}</small>
+          </div>
+          <span className="stat-icon">↗</span>
         </article>
         <article className="card stat">
-          <label>진행 중인 과제</label>
-          <strong>{activeTaskCount}개</strong>
-          <small>전체 {tasks.length}개</small>
+          <div>
+            <label>진행 중인 과제</label>
+            <strong>
+              {activeTaskCount} <small>개</small>
+            </strong>
+            <small>전체 학습 과제 {tasks.length}개</small>
+          </div>
+          <span className="stat-icon">▦</span>
         </article>
         <article className="card stat">
-          <label>주간 목표 달성</label>
-          <strong>{weeklyPercent}%</strong>
+          <div>
+            <label>주간 목표 달성</label>
+            <strong>
+              {weeklyPercent} <small>%</small>
+            </strong>
+            <small>
+              {weeklyMinutes}분 / {weeklyTargetMinutes}분
+            </small>
+          </div>
+          <span className="stat-icon">◎</span>
         </article>
       </div>
 
-      <div className="exec-layout">
+      {/* Phase 6.9 builds the real insight; until then the slot is visible but inactive. */}
+      <section className="card insight-card">
+        <div className="insight-mark">✦</div>
+        <div className="insight-copy">
+          <div className="insight-heading">
+            <div>
+              <p className="kicker">AI LEARNING INSIGHT</p>
+              <h2>기록에서 찾은 이번 주 학습 인사이트</h2>
+            </div>
+            <button type="button" className="btn secondary small" disabled aria-disabled="true">
+              인사이트 갱신 (준비 중)
+            </button>
+          </div>
+          <p>기록과 회고를 바탕으로 한 학습 인사이트가 준비 중입니다.</p>
+          <small>내 실행 기록과 회고 기반 · AI 생성 안내</small>
+        </div>
+      </section>
+
+      <div className="grid columns execution-layout">
         <section className="card">
           <div className="card-head">
-            <h2>과제별 학습 기록</h2>
-            <select className="field" value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label="기간 선택">
+            <div>
+              <h2>과제별 학습 기록</h2>
+              <p>과제 하나에 여러 기록을 쌓고 진행 상황을 확인합니다.</p>
+            </div>
+            <select className="searchbar" value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label="기간 선택">
               <option value="week">이번 주</option>
               <option value="all">전체 기간</option>
             </select>
@@ -439,26 +501,39 @@ export function ExecutionScreen() {
             </p>
           )}
           {logsTruncated && <p className="small muted">최근 200건만 표시됩니다.</p>}
+          <div className="activity-list">
           {tasks.map((task) => (
-            <div key={task.id} className="task-record-group">
+            <article key={task.id} className="task-record-group">
               <div className="task-record-head">
                 <div>
                   <h3>{task.title}</h3>
-                  <span className="task-record-meta">
-                    예상 {task.estimated_minutes}분 · 누적 {task.total_minutes}분 · 기록 {task.record_count}건
-                  </span>
+                  <div className="task-record-meta">
+                    계획 {task.estimated_minutes}분 · 누적 {task.total_minutes}분 · 기록 {task.record_count}건
+                  </div>
                 </div>
-                <button type="button" className="btn small" onClick={() => resetFormForNew(task.id)}>
-                  새 기록
-                </button>
+                <div className="task-record-controls">
+                  <span className={`pill ${task.status === "completed" ? "green" : "blue"}`}>
+                    {task.status === "completed" ? "완료" : "진행 중"}
+                  </span>
+                  <button type="button" className="btn secondary small task-select" onClick={() => resetFormForNew(task.id)}>
+                    이 과제로 기록
+                  </button>
+                </div>
               </div>
+              <div className="task-progress-line">
+                <span style={{ width: `${Math.min(100, Math.round((task.total_minutes / Math.max(1, task.estimated_minutes)) * 100))}%` }}></span>
+              </div>
+              <div className="task-records">
               {(logsByTask[task.id] ?? []).map((log) => (
                 <div key={log.id} className={`record-entry${selectedLogId === log.id ? " selected" : ""}`}>
                   <button type="button" className="record-select" onClick={() => loadFormForEdit(log)}>
-                    <strong>{log.study_date}</strong>
-                    <small>{log.activity}</small>
+                    <strong>
+                      {log.activity} · {log.minutes}분
+                    </strong>
+                    <small>
+                      {log.study_date} · 회고: {log.reflection?.content ?? "없음"}
+                    </small>
                   </button>
-                  <span className="small muted">{log.minutes}분</span>
                   {confirmingDeleteId === log.id ? (
                     <span className="inline-confirm">
                       정말 삭제할까요?
@@ -477,16 +552,42 @@ export function ExecutionScreen() {
                 </div>
               ))}
               {(logsByTask[task.id] ?? []).length === 0 && <p className="small muted">아직 기록이 없습니다.</p>}
-            </div>
+              </div>
+            </article>
           ))}
+          </div>
         </section>
 
         <section className="card record-editor">
-          <span className={`mode-pill${mode === "edit" ? " edit-mode" : ""}`}>
-            {mode === "edit" ? "학습 기록 수정 중" : "새 학습 기록"}
-          </span>
+          <div className="card-head">
+            <div>
+              <span className={`mode-pill${mode === "edit" ? " edit-mode" : ""}`}>
+                {mode === "edit" ? "학습 기록 수정 중" : "새 학습 기록"}
+              </span>
+              <h2>{mode === "edit" ? "기록을 수정하세요" : "실행 내용을 기록하세요"}</h2>
+              <p>과제를 선택하고 학습을 시작하거나 지난 기록을 직접 입력할 수 있어요.</p>
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="record-task">학습 과제</label>
+            <select
+              id="record-task"
+              value={selectedTaskId ?? ""}
+              disabled={mode === "edit"}
+              onChange={(e) => {
+                if (e.target.value) resetFormForNew(e.target.value);
+              }}
+            >
+              <option value="">과제를 선택하세요</option>
+              {tasks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
+              ))}
+            </select>
+          </div>
           {!selectedTaskId ? (
-            <p className="description">왼쪽에서 과제를 선택하거나 "새 기록"을 눌러 시작하세요.</p>
+            <p className="small muted">위에서 과제를 고르거나 왼쪽 목록의 "이 과제로 기록"을 눌러 시작하세요.</p>
           ) : (
             <>
               {mode === "new" && (
@@ -558,7 +659,7 @@ export function ExecutionScreen() {
               <div className="record-actions" style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
                 {mode === "edit" && (
                   <button type="button" className="btn secondary" onClick={cancelEdit} disabled={saving}>
-                    취소
+                    수정 취소
                   </button>
                 )}
                 <button type="button" className="btn" onClick={save} disabled={saving || !activity.trim()}>
@@ -570,6 +671,6 @@ export function ExecutionScreen() {
           )}
         </section>
       </div>
-    </div>
+    </>
   );
 }
