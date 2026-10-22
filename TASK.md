@@ -121,6 +121,17 @@
 **완료 기준:** 과제 1:N 기록 관계와 기록 수정/삭제 결과가 목록·집계·회고 맥락에 일관되게 반영된다.
 **결과:** docs/phase5_report.md, 수정 docs/phase5_fix_report.md (검증팀 지시 P5-1~P5-7 반영 완료, backend 전체 검증, 프론트 UI 미검증 — 브라우저 자동화 도구 없음. 재검증 대기)
 
+## Phase 5B — 복수 학습 운용 (MULTI · P0, Phase 6 앞)
+결정 문서: docs/multi_goal_design.md. 지시서: docs/phase5b_dev_prompt.md.
+- [ ] B.1 일정 겹침 검사(active 목표끼리, 409 GOAL_PERIOD_OVERLAP), goals.start_date
+- [ ] B.2 학습 전환(active_goal_id 변경, 소유·active 검사)
+- [ ] B.3 대시보드 요약에 진행 중 전체 학습 현황(goals_overview) 추가
+- [ ] B.4 종합 분석 API(GET /api/analytics/overview, 진행 중 학습의 일정·일자별 투입 시간·진행률)
+- [ ] B.5 백엔드 테스트
+- [ ] B.6 학습 전환 드롭다운(계획·실행 화면)
+- [ ] B.7 대시보드 최근 학습 / 종합 현황 2영역, 겹침 오류 안내
+- [ ] B.8 종합 학습 분석 화면
+
 ## Phase 6 — RAG·Long-term Memory 튜터·인사이트 (AI · P0)
 
 - [ ] 6.1 사전 검토된 자료를 서버 배포물에 포함하고 읽기 전용 검색 인덱스를 만든다.
