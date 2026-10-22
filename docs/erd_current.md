@@ -141,7 +141,7 @@ erDiagram
 | 7 | 동일 과제·같은 날 기록 중복 | 허용(제한 없음) — 하루를 여러 세션으로 나눠 기록하는 사용을 막지 않기 위함 |
 
 ## 복수 학습 규칙 (결정 2026-10-22, docs/multi_goal_design.md)
-- 사용자는 목표(goals)를 여러 개 가질 수 있다. 새 목표를 확정할 때 status=active 인 기존 목표와 [start_date, target_date] 구간이 하루라도 겹치면 거부한다(409 GOAL_PERIOD_OVERLAP). completed·archived 는 비교하지 않는다.
+- 사용자는 목표(goals)를 여러 개 가질 수 있다. 새 목표를 확정할 때 [start_date, target_date] 안의 어느 하루라도 status=active 인 기존 목표가 이미 2개 진행 중이면(즉 동시 학습이 2개를 초과하게 되면) 거부한다(409 GOAL_PERIOD_OVERLAP, details 에 max_concurrent=2, overlaps, conflict_from, conflict_to). 같은 날 동시에 2개까지는 허용한다(결정 2026-10-22 개정, docs/multi_goal_design.md §7). completed·archived 는 비교하지 않는다.
 - 기존 학습의 일정 변경으로 생기는 겹침은 검사하지 않는다.
 - `users.active_goal_id` 는 계획·실행 화면에서 보는 학습이며 학습 전환 드롭다운으로 바꾼다. 대시보드, 튜터, 자료함은 모든 active 목표를 대상으로 한다.
 

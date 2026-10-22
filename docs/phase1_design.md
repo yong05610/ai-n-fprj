@@ -298,7 +298,7 @@ erDiagram
 | `POST` | `/api/path/recommend` | 1단계: 분야 입력 기반 세부 과정 및 수준 제안 (`suggested_roles` 는 호환용 선택 필드, 화면은 `/api/path/ideas` 를 쓴다) | `path` |
 | `POST` | `/api/plan/generate` | 2단계: 과정·수준·시간 선택 기반 주간 과업·조언·자료 생성. `start_date`(필수, 오늘 이후 아무 요일) 가 속한 주의 월요일이 계획 주간. `plan_week_start` 는 선택이며 주어지면 그 월요일과 같아야 한다 | `plan` |
 | `GET` | `/api/goals` | 사용자의 목표 목록 조회 | `goals` |
-| `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 활성 목표와 기간이 겹치면 409 `GOAL_PERIOD_OVERLAP`, `details.overlaps` 에 겹친 학습 전부. `/api/plan/confirm` 은 사용자가 고른 `start_date` 로 동일 검사) | `goals` |
+| `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 같은 날 진행 중인 활성 학습이 이미 2개면(동시 최대 2개 초과) 409 `GOAL_PERIOD_OVERLAP`, `details.overlaps` 에 해당 날에 걸린 학습 전부. `/api/plan/confirm` 은 사용자가 고른 `start_date` 로 동일 검사) | `goals` |
 | `GET` | `/api/goals/{goal_id}` | 목표 상세 조회 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |
@@ -332,5 +332,5 @@ erDiagram
 
 1. **RAG 인덱싱 방식:** MVP 14일 일정 상 가벼운 인메모리 TF-IDF/코사인 유사도 또는 소규모 임베딩 메모리 인덱스 중 어떤 것을 기본 채택할지 (Phase 6 착수 전 결정 필요).
 2. **복수 활성 목표 허용 여부:** 현재 UI는 단일 목표 흐름을 전제로 하나, DB 모델은 1:N 구조로 유연하게 설계함. MVP에서는 `status="active"` 목표를 1개로 제한할지 여부.
-   **결정 2026-10-22(사용자):** 복수 활성 목표를 허용하되 일정이 겹치는 계획은 만들 수 없다. 상세는 docs/multi_goal_design.md, docs/erd_current.md.
+   **결정 2026-10-22(사용자):** 복수 활성 목표를 허용하되 같은 날 진행되는 학습은 최대 2개이며 2개를 초과하는 계획은 만들 수 없다(2026-10-22 개정). 상세는 docs/multi_goal_design.md, docs/erd_current.md.
 3. **토큰 만료 시의 클라이언트 UX:** Firebase Anonymous Auth 세션 갱신 실패 시 오프라인/재인증 모달 처리 세부 시나리오.

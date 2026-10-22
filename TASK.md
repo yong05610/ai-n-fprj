@@ -123,7 +123,7 @@
 
 ## Phase 5B — 복수 학습 운용 (MULTI · P0, Phase 6 앞)
 결정 문서: docs/multi_goal_design.md. 지시서: docs/phase5b_dev_prompt.md.
-- [x] B.1 일정 겹침 검사(active 목표끼리, 409 GOAL_PERIOD_OVERLAP), goals.start_date
+- [x] B.1 일정 겹침 검사(active 목표끼리, 409 GOAL_PERIOD_OVERLAP), goals.start_date ← 규칙 개정 2026-10-22: 동시 최대 2개 허용, 2개 초과 거부(docs/multi_goal_design.md §7, 코드 수정은 docs/phase5c_fix_instructions.md R1)
 - [x] B.2 학습 전환(active_goal_id 변경, 소유·active 검사)
 - [x] B.3 대시보드 요약에 진행 중 전체 학습 현황(goals_overview) 추가
 - [x] B.4 종합 분석 API(GET /api/analytics/overview, 진행 중 학습의 일정·일자별 투입 시간·진행률)
@@ -146,10 +146,10 @@
 **완료 기준:** 같은 화면을 목업과 나란히 놓았을 때 앱 셸·영역 구성·요소 순서가 같고, 기존 테스트가 모두 통과한다. 화면은 사용자 확인.
 **결과:** docs/phase5c_report.md (2db65f8, backend 258건, frontend 21건·typecheck·build 통과, 백엔드 변경 없음). 검증: docs/phase5c_verification.md — 코드·테스트 승인, C.1~C.6 은 **구현됨, 사용자 화면 확인 대기**(목업과 나란히 비교 후 체크).
 
-## Phase 5D — 학습 과제 계획 화면 (WBS · P0, 5C 뒤)
+## Phase 5D — 학습 과제 계획 화면 (WBS · P0, Phase 6 뒤)
 - [ ] D.1 page-wbs 구현: 내 계획 조회(주차별 과제), 추천 요일 변경, AI 학습 조언·연결 참고자료 표시, 학습 전환 위젯. 기존 API 재사용, 필요 시 최소 추가
 
-## Phase 5E — 관리자: 사용자 관리·피드백 (ADMIN · P0, 사용자 테스트 전, 사용자 승인 대기)
+## Phase 5E — 관리자: 사용자 관리·피드백 (ADMIN · P0, 5D 뒤, 사용자 테스트 전)
 설계: docs/phase5e_design.md (사용자 승인 2026-10-22, PRD FR-07·ERD 갱신 완료). 개발 지시서는 5C, 5D 뒤에 PM 이 쓴다.
 - [ ] E.1 [BE] 관리자 식별(ADMIN_UIDS 허용 목록, require_admin_uid), profile.is_admin
 - [ ] E.2 [BE][FE] 사용자 관리 화면과 GET /api/admin/users(마스킹 UID, 동의, 학습 수, 활동, 활성/휴면, 읽기 전용)
@@ -159,6 +159,7 @@
 - 운영 현황·AI 생성 이력·참고자료 관리·서비스 설정은 제목과 "준비 중"만 둔다.
 
 ## Phase 6 — RAG·Long-term Memory 튜터·인사이트 (AI · P0)
+**순서 변경(사용자 결정 2026-10-22):** AI 튜터는 핵심 기능이라 5D, 5E 보다 먼저 목업 `page-tutor` 형태로 구현한다. 지시서: docs/phase6_dev_prompt.md (선행: docs/phase5c_fix_instructions.md R1 검증). 이번 Phase 에는 6.1~6.8, 6.10 만 포함한다. **6.9(실행 화면 인사이트)는 Phase 6B 로 분리하고, 6.11(참고자료 보관함)은 사용자 보류.** 진행 순서: 5C 수정(R1) → Phase 6(튜터) → 5D → 5E → 6B → 7.
 
 - [ ] 6.1 사전 검토된 자료를 서버 배포물에 포함하고 읽기 전용 검색 인덱스를 만든다.
 - [ ] 6.2 질문 관련 청크를 검색해 답변에 자료명/출처를 표시한다.
