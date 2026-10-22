@@ -98,3 +98,23 @@ ul { margin: 0; padding-left: 20px; color: #475569; line-height: 1.7; font-size:
 .timer-label { font-size: 11px; color: #94a3b8; display: block; }
 .timer-status { font-size: 11px; color: #94a3b8; }
 .timer-actions { display: flex; gap: 6px; }
+
+/* Phase 5B: multi-learning (switcher, overview rows, analysis bars). */
+.goal-switch { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid #c3ccff; background: #f0f2ff; border-radius: 10px; width: max-content; max-width: 100%; flex-wrap: wrap; }
+.goal-switch label { font-size: 11px; font-weight: 800; color: #4b5ed2; }
+.goal-switch select { border: 1px solid #c6ceff; background: #fff; border-radius: 8px; padding: 5px 8px; font-size: 12px; font-weight: 700; }
+.goal-switch strong { font-size: 13px; }
+.goal-switch small { color: #778198; font-size: 10px; }
+.scope-label { margin: 0 0 4px; font-size: 11px; font-weight: 800; color: #4b5ed2; }
+.block-small { display: block; color: #94a3b8; font-size: 11px; margin-top: 2px; }
+.goal-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid #f0f1f5; }
+.goal-row:last-child { border: 0; }
+.bar { height: 8px; border-radius: 99px; background: #eef0f5; overflow: hidden; }
+.bar span { display: block; height: 100%; background: #5374d8; border-radius: 99px; }
+.bar-label { display: flex; justify-content: space-between; margin: 6px 0; font-size: 12px; color: #64748b; }
+.pill { display: inline-flex; padding: 4px 10px; border-radius: 99px; background: #eef1ff; color: #4b56c8; font-size: 11px; font-weight: 800; }
+.mini-bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; margin: 14px 0 4px; }
+.mini-bars span { flex: 1; background: #c6ceff; border-radius: 4px 4px 0 0; position: relative; }
+.mini-bars span i { position: absolute; top: -14px; left: 0; right: 0; text-align: center; font-style: normal; font-size: 10px; color: #778198; }
+.mini-days { display: flex; gap: 6px; font-size: 10px; color: #778198; }
+.mini-days span { flex: 1; text-align: center; }

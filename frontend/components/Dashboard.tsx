@@ -15,6 +15,15 @@ type TodayTask = {
 };
 type DailyHit = { day: string; date: string; has_activity: boolean; is_today: boolean };
 type Insight = { text: string; notice: string; is_insufficient: boolean };
+export type GoalOverview = {
+  goal_id: string;
+  course: string;
+  start_date: string;
+  target_date: string;
+  completed_task_count: number;
+  total_task_count: number;
+  progress_percentage: number;
+};
 type DashboardSummary = {
   active_goal_title: string;
   level_progress_text: string;
@@ -28,6 +37,7 @@ type DashboardSummary = {
   all_tasks_completed_this_week: boolean;
   weekly_hits: DailyHit[];
   insight: Insight;
+  goals_overview: GoalOverview[];
 };
 
 type Status = "loading" | "ready" | "error";
@@ -112,7 +122,7 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
 
   if (!summary) return null;
 
-  if (!summary.active_goal_title) {
+  if (!summary.active_goal_title && summary.goals_overview.length === 0) {
     return (
       <section className="card">
         <h2>아직 학습 목표가 없어요</h2>
@@ -129,13 +139,59 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
       ? Math.round((summary.weekly_study_minutes / summary.weekly_target_minutes) * 100)
       : 0;
 
+  const recentBlock = summary.active_goal_title !== "";
+
   return (
     <div className="stack">
       <section className="card">
         <p className="eyebrow">MY LEARNING SPACE</p>
-        <h2>{summary.active_goal_title}</h2>
-        <p className="description">{summary.level_progress_text}</p>
+        {recentBlock ? (
+          <>
+            <p className="scope-label">최근 학습 경로</p>
+            <h2>{summary.active_goal_title}</h2>
+            <p className="description">{summary.level_progress_text}</p>
+          </>
+        ) : (
+          <p className="description">
+            최근 학습이 선택되어 있지 않아요. 학습 실행 기록 화면에서 학습을 전환하면 이곳에 표시됩니다.
+          </p>
+        )}
       </section>
+
+      <section className="card" aria-label="종합 학습 현황">
+        <div className="card-head">
+          <div>
+            <h2>종합 학습 현황</h2>
+            <p className="small muted">진행 중인 모든 학습</p>
+          </div>
+        </div>
+        {summary.goals_overview.length === 0 ? (
+          <p className="description">진행 중인 학습이 없습니다.</p>
+        ) : (
+          summary.goals_overview.map((g) => (
+            <div key={g.goal_id} className="goal-row">
+              <div>
+                <strong>{g.course}</strong>
+                <small className="block-small">
+                  {g.start_date} ~ {g.target_date}
+                </small>
+              </div>
+              <div>
+                <div className="bar" role="progressbar" aria-valuenow={g.progress_percentage} aria-valuemin={0} aria-valuemax={100}>
+                  <span style={{ width: `${g.progress_percentage}%` }}></span>
+                </div>
+                <small className="block-small">
+                  {g.completed_task_count} / {g.total_task_count} 과제 완료
+                </small>
+              </div>
+              <b>{g.progress_percentage}%</b>
+            </div>
+          ))
+        )}
+      </section>
+
+      {recentBlock && (
+        <>
 
       <div className="grid stats">
         <article className="card stat">
@@ -220,6 +276,8 @@ export function Dashboard({ onCreatePath }: { onCreatePath: () => void }) {
         <h2>학습 인사이트</h2>
         <p className="description">{summary.insight.text}</p>
       </section>
+        </>
+      )}
     </div>
   );
 }

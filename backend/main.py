@@ -40,6 +40,9 @@ from schemas import (
     TimerCancelRequest,
     LearningDataSummaryResponse,
     DashboardSummaryResponse,
+    GoalOverviewItem,
+    AnalyticsGoalItem,
+    AnalyticsOverviewResponse,
     TodayTaskItem,
     DailyHitItem,
     AIInsightSummary,
@@ -217,6 +220,53 @@ def _validate_task_time_budget(
             "이번 주 과업 총 예상 시간이 주당 가능 시간을 초과합니다.",
             {"field": "estimated_minutes"},
         )
+
+
+def _goal_start_date(goal: dict[str, Any]) -> date:
+    """Read-side start_date of a goal (Phase 5B).
+
+    Goals saved before Phase 5B have no start_date; for them the Asia/Seoul calendar date of
+    created_at stands in. Stored data is not migrated - every reader goes through here.
+    """
+    stored = goal.get("start_date")
+    if stored:
+        return date.fromisoformat(stored)
+    return clock.date_from_utc_iso(goal["created_at"])
+
+
+def _goal_out(goal: dict[str, Any]) -> dict[str, Any]:
+    return {**goal, "start_date": _goal_start_date(goal).isoformat()}
+
+
+def _check_goal_period_overlap(db, uid: str, start: date, target: date) -> None:
+    """Phase 5B: a new goal's [start, target] (both ends inclusive) may not share even one day
+    with another *active* goal of the same user. completed/archived goals are not compared.
+
+    Called by both goal-creation paths (POST /api/plan/confirm, POST /api/goals) after all
+    other validation and right before the first write, so a rejection saves nothing.
+    """
+    for other in db.find("goals", user_id=uid, status="active"):
+        other_start = _goal_start_date(other)
+        other_target = date.fromisoformat(other["target_date"])
+        if start <= other_target and other_start <= target:
+            raise api_error(
+                status.HTTP_409_CONFLICT,
+                "GOAL_PERIOD_OVERLAP",
+                f"'{other['course']}' 학습({other_start.isoformat()} ~ {other_target.isoformat()})과 "
+                "기간이 겹쳐 새 학습을 만들 수 없습니다. 목표 완료일을 조정해 주세요.",
+                {
+                    "goal_id": other["id"],
+                    "course": other["course"],
+                    "start_date": other_start.isoformat(),
+                    "target_date": other_target.isoformat(),
+                },
+            )
+
+
+def _register_new_goal_as_recent(db, uid: str, goal_id: str) -> None:
+    """The most recent learning is users.active_goal_id; a newly registered goal becomes it."""
+    if db.get("users", uid):
+        db.update("users", uid, {"active_goal_id": goal_id})
 
 
 def _delete_task_children(db, uid: str, task_id: str) -> None:
@@ -528,7 +578,7 @@ def confirm_plan(
             response.status_code = status.HTTP_200_OK
             existing_tasks = db.find("tasks", user_id=uid, goal_id=existing_goal["id"])
             existing_tasks.sort(key=lambda t: t["order_index"])
-            return PlanConfirmResponse(goal=existing_goal, tasks=existing_tasks)
+            return PlanConfirmResponse(goal=_goal_out(existing_goal), tasks=existing_tasks)
 
     goal_data = {
         "field": payload.field,
@@ -554,12 +604,21 @@ def confirm_plan(
     total_minutes = sum(t.estimated_minutes for t in payload.tasks)
     if total_minutes > payload.weekly_hours * 60:
         raise bad_request("과업 총 예상 시간이 주당 가능 시간을 초과합니다.", {"field": "tasks"})
+    _check_goal_period_overlap(db, uid, week_start, target_date)
 
     now = _now_iso()
-    goal = db.create("goals", {**goal_data, "user_id": uid, "status": "active", "created_at": now, "updated_at": now})
-    user = db.get("users", uid)
-    if user and not user.get("active_goal_id"):
-        db.update("users", uid, {"active_goal_id": goal["id"]})
+    goal = db.create(
+        "goals",
+        {
+            **goal_data,
+            "start_date": week_start.isoformat(),
+            "user_id": uid,
+            "status": "active",
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    _register_new_goal_as_recent(db, uid, goal["id"])
 
     tasks = []
     for idx, t in enumerate(payload.tasks):
@@ -580,14 +639,16 @@ def confirm_plan(
             },
         )
         tasks.append(task)
-    return PlanConfirmResponse(goal=goal, tasks=tasks)
+    return PlanConfirmResponse(goal=_goal_out(goal), tasks=tasks)
 
 
 # 3. Goals CRUD
 @app.get("/api/goals", response_model=List[GoalResponse], tags=["goals"], summary="사용자의 학습 목표 목록 조회")
 def list_goals(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
-    goals = db.find("goals", user_id=uid)
-    return sorted(goals, key=lambda g: g["created_at"], reverse=True)
+    # Newest registration first. created_at has one-second resolution, so goals registered in
+    # the same second fall back to the later schedule first.
+    goals = [_goal_out(g) for g in db.find("goals", user_id=uid)]
+    return sorted(goals, key=lambda g: (g["created_at"], g["start_date"]), reverse=True)
 
 
 @app.post("/api/goals", response_model=GoalResponse, status_code=status.HTTP_201_CREATED, tags=["goals"], summary="학습 목표 저장")
@@ -595,17 +656,20 @@ def create_goal(payload: GoalCreateRequest, uid: str = Depends(require_consented
     data = payload.model_dump()
     _validate_goal_levels(data)
     _validate_target_date_not_past(data["target_date"])
+    start = clock.week_monday(clock.today())
+    _check_goal_period_overlap(db, uid, start, _parse_date(data["target_date"], "target_date"))
     now = _now_iso()
-    goal = db.create("goals", {**data, "user_id": uid, "status": "active", "created_at": now, "updated_at": now})
-    user = db.get("users", uid)
-    if user and not user.get("active_goal_id"):
-        db.update("users", uid, {"active_goal_id": goal["id"]})
-    return goal
+    goal = db.create(
+        "goals",
+        {**data, "start_date": start.isoformat(), "user_id": uid, "status": "active", "created_at": now, "updated_at": now},
+    )
+    _register_new_goal_as_recent(db, uid, goal["id"])
+    return _goal_out(goal)
 
 
 @app.get("/api/goals/{goal_id}", response_model=GoalResponse, tags=["goals"], summary="목표 상세 조회")
 def get_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
-    return _get_owned(db, "goals", goal_id, uid)
+    return _goal_out(_get_owned(db, "goals", goal_id, uid))
 
 
 @app.patch("/api/goals/{goal_id}", response_model=GoalResponse, tags=["goals"], summary="목표 수정")
@@ -615,7 +679,9 @@ def update_goal(goal_id: str, payload: GoalUpdateRequest, uid: str = Depends(req
     _validate_goal_levels({**goal, **changes})
     if "target_date" in changes:
         _validate_target_date_not_past(changes["target_date"])
-    return db.update("goals", goal_id, {**changes, "updated_at": _now_iso()})
+    # Phase 5B (user decision): changing an existing goal's schedule is deliberately NOT
+    # checked for overlap with other active goals. Only goal creation is.
+    return _goal_out(db.update("goals", goal_id, {**changes, "updated_at": _now_iso()}))
 
 
 @app.delete("/api/goals/{goal_id}", tags=["goals"], summary="목표 삭제 (하위 과제·기록·회고 포함)")
@@ -705,6 +771,7 @@ def _parse_iso_dt(value: str) -> datetime:
 def list_study_logs(
     response: Response,
     task_id: Optional[str] = Query(None, description="과제 ID 필터"),
+    goal_id: Optional[str] = Query(None, description="목표 ID 필터 (복수 학습 화면용)"),
     period: str = Query("week", description="조회 기간 (week | all)"),
     uid: str = Depends(require_consented_uid),
     db=Depends(get_db),
@@ -714,6 +781,8 @@ def list_study_logs(
     filters: dict[str, Any] = {"user_id": uid}
     if task_id:
         filters["task_id"] = task_id
+    if goal_id:
+        filters["goal_id"] = goal_id
     logs = db.find("study_logs", **filters)
     if period == "week":
         week_start = clock.week_monday(clock.today())
@@ -999,6 +1068,49 @@ DASHBOARD_INSIGHT_MIN_REFLECTIONS = 1
 TODAY_TASKS_LIMIT = 5
 
 
+def _tasks_and_logs_by_goal(db, uid: str) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    tasks: dict[str, list[dict[str, Any]]] = {}
+    for t in db.find("tasks", user_id=uid):
+        tasks.setdefault(t["goal_id"], []).append(t)
+    logs: dict[str, list[dict[str, Any]]] = {}
+    for log in db.find("study_logs", user_id=uid):
+        logs.setdefault(log["goal_id"], []).append(log)
+    return tasks, logs
+
+
+def _active_goals_sorted(db, uid: str) -> list[dict[str, Any]]:
+    """The user's status="active" goals, earliest schedule first. Shared by the dashboard's
+    goals_overview and the analytics screen so their numbers can't diverge."""
+    return sorted(
+        (_goal_out(g) for g in db.find("goals", user_id=uid, status="active")),
+        key=lambda g: (g["start_date"], g["created_at"]),
+    )
+
+
+def _goal_progress(tasks: list[dict[str, Any]]) -> tuple[int, int, int]:
+    total = len(tasks)
+    done = sum(1 for t in tasks if t["status"] == "completed")
+    return done, total, (round(done / total * 100) if total else 0)
+
+
+def _goals_overview(db, uid: str, tasks_by_goal: dict[str, list[dict[str, Any]]]) -> list[GoalOverviewItem]:
+    items = []
+    for g in _active_goals_sorted(db, uid):
+        done, total, pct = _goal_progress(tasks_by_goal.get(g["id"], []))
+        items.append(
+            GoalOverviewItem(
+                goal_id=g["id"],
+                course=g["course"],
+                start_date=g["start_date"],
+                target_date=g["target_date"],
+                completed_task_count=done,
+                total_task_count=total,
+                progress_percentage=pct,
+            )
+        )
+    return items
+
+
 def _empty_dashboard_summary(week_start: date, today: date) -> DashboardSummaryResponse:
     weekly_hits = [
         DailyHitItem(
@@ -1043,16 +1155,22 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
     goal = db.get("goals", goal_id) if goal_id else None
     if goal is None or goal.get("user_id") != user["uid"]:
         # No active goal, or it was deleted out from under a stale active_goal_id - both
-        # are the normal "nothing to show yet" case, not an error (always 200).
-        return _empty_dashboard_summary(week_start, today)
+        # are the normal "nothing to show yet" case, not an error (always 200). Other active
+        # goals may still exist, so the overview is filled in.
+        empty = _empty_dashboard_summary(week_start, today)
+        empty.goals_overview = _goals_overview(db, user["uid"], _tasks_and_logs_by_goal(db, user["uid"])[0])
+        return empty
 
     uid = user["uid"]
-    tasks = db.find("tasks", user_id=uid, goal_id=goal_id)
+    # One read of the user's tasks/logs, grouped per goal, serves both the recent-learning
+    # block and goals_overview (no per-goal queries).
+    all_tasks, all_logs = _tasks_and_logs_by_goal(db, uid)
+    tasks = all_tasks.get(goal_id, [])
     total_task_count = len(tasks)
     completed_task_count = sum(1 for t in tasks if t["status"] == "completed")
     progress_percentage = round(completed_task_count / total_task_count * 100) if total_task_count else 0
 
-    logs = db.find("study_logs", user_id=uid, goal_id=goal_id)
+    logs = all_logs.get(goal_id, [])
     weekly_logs = [log for log in logs if clock.is_within_week(date.fromisoformat(log["study_date"]), week_start)]
     weekly_study_minutes = sum(log["minutes"] for log in weekly_logs)
 
@@ -1116,6 +1234,42 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
         all_tasks_completed_this_week=all_tasks_completed_this_week,
         weekly_hits=weekly_hits,
         insight=insight,
+        goals_overview=_goals_overview(db, uid, all_tasks),
+    )
+
+
+# 6b. Analytics (Phase 5B) - read-only, no AI call
+@app.get(
+    "/api/analytics/overview",
+    response_model=AnalyticsOverviewResponse,
+    tags=["summary"],
+    summary="진행 중인 학습별 일정·진행률·이번 주 요일별 학습 분 (읽기 전용)",
+)
+def get_analytics_overview(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    week_start = clock.week_monday(clock.today())
+    tasks_by_goal, logs_by_goal = _tasks_and_logs_by_goal(db, uid)
+    goals = []
+    for g in _active_goals_sorted(db, uid):
+        done, total, pct = _goal_progress(tasks_by_goal.get(g["id"], []))
+        minutes_by_day = [0] * 7
+        for log in logs_by_goal.get(g["id"], []):
+            day = date.fromisoformat(log["study_date"])
+            if clock.is_within_week(day, week_start):
+                minutes_by_day[(day - week_start).days] += log["minutes"]
+        goals.append(
+            AnalyticsGoalItem(
+                goal_id=g["id"],
+                course=g["course"],
+                start_date=g["start_date"],
+                target_date=g["target_date"],
+                completed_task_count=done,
+                total_task_count=total,
+                progress_percentage=pct,
+                weekly_minutes_by_day=minutes_by_day,
+            )
+        )
+    return AnalyticsOverviewResponse(
+        week_start=week_start.isoformat(), week_end=clock.week_sunday(week_start).isoformat(), goals=goals
     )
 
 
@@ -1206,7 +1360,9 @@ def get_profile(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
 def update_profile(payload: ProfileUpdateRequest, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
     changes = payload.model_dump(exclude_unset=True)
     if changes.get("active_goal_id"):
-        _get_owned(db, "goals", changes["active_goal_id"], uid)
+        goal = _get_owned(db, "goals", changes["active_goal_id"], uid)
+        if goal.get("status") != "active":
+            raise bad_request("진행 중인 학습으로만 전환할 수 있습니다.", {"field": "active_goal_id"})
     user = db.update("users", uid, {**changes, "last_active_at": _now_iso()})
     return _profile(user)
 

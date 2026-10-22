@@ -172,6 +172,7 @@ class GoalResponse(BaseModel):
     target_level_name: str
     target_level_description: Optional[str] = None
     weekly_hours: int
+    start_date: str = Field(..., description="일정 시작일(YYYY-MM-DD). 기존 목표는 created_at의 서비스 시간대 날짜로 보정")
     target_date: str
     status: str
     created_at: str
@@ -473,6 +474,16 @@ class AIInsightSummary(BaseModel):
     is_insufficient: bool = Field(False, description="기록이 부족하여 기본 안내인 경우 true")
 
 
+class GoalOverviewItem(BaseModel):
+    goal_id: str
+    course: str
+    start_date: str
+    target_date: str
+    completed_task_count: int
+    total_task_count: int
+    progress_percentage: int
+
+
 class DashboardSummaryResponse(BaseModel):
     active_goal_title: str
     level_progress_text: str
@@ -488,6 +499,26 @@ class DashboardSummaryResponse(BaseModel):
     )
     weekly_hits: List[DailyHitItem]
     insight: AIInsightSummary
+    goals_overview: List[GoalOverviewItem] = Field(
+        default_factory=list, description="진행 중(active)인 모든 학습의 종합 현황 (Phase 5B). 위 필드는 최근 학습(active_goal_id) 기준"
+    )
+
+
+class AnalyticsGoalItem(BaseModel):
+    goal_id: str
+    course: str
+    start_date: str
+    target_date: str
+    completed_task_count: int
+    total_task_count: int
+    progress_percentage: int
+    weekly_minutes_by_day: List[int] = Field(..., min_length=7, max_length=7, description="이번 주 월~일 학습 분")
+
+
+class AnalyticsOverviewResponse(BaseModel):
+    week_start: str = Field(..., description="이번 주 월요일 (Asia/Seoul)")
+    week_end: str = Field(..., description="이번 주 일요일")
+    goals: List[AnalyticsGoalItem]
 
 
 # --- 7. Conversations (AI Tutor) ---

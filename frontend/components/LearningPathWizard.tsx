@@ -259,6 +259,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
   // --- Step 3: confirm (목표+과제 저장) ---
   const [confirmStatus, setConfirmStatus] = useState<ConfirmStatus>("idle");
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [confirmErrorCode, setConfirmErrorCode] = useState<string | null>(null);
   const [savedTasks, setSavedTasks] = useState<SavedTask[] | null>(null);
   const [savedGoalField, setSavedGoalField] = useState<string>("");
 
@@ -271,6 +272,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
     }
     setConfirmStatus("saving");
     setConfirmError(null);
+    setConfirmErrorCode(null);
     try {
       const token = await session.getToken();
       const result = await apiRequest<{ goal: { id: string }; tasks: unknown[] }>("/api/plan/confirm", {
@@ -306,6 +308,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
       setConfirmStatus("done");
     } catch (error) {
       setConfirmError(error instanceof ApiError ? error.message : "알 수 없는 오류가 발생했습니다.");
+      setConfirmErrorCode(error instanceof ApiError ? error.code : null);
       setConfirmStatus("error");
     }
   }
@@ -736,7 +739,9 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           </button>
           {confirmStatus === "error" && (
             <p className="error" role="alert">
-              {confirmError} 같은 저장 버튼으로 다시 시도해도 중복 저장되지 않습니다.
+              {confirmErrorCode === "GOAL_PERIOD_OVERLAP"
+                ? `${confirmError} 입력한 내용은 그대로 남아 있어요.`
+                : `${confirmError} 같은 저장 버튼으로 다시 시도해도 중복 저장되지 않습니다.`}
             </p>
           )}
         </section>

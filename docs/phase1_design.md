@@ -297,7 +297,7 @@ erDiagram
 | `POST` | `/api/path/recommend` | 1단계: 분야 입력 기반 세부 과정 및 수준 제안 | `path` |
 | `POST` | `/api/plan/generate` | 2단계: 과정·수준·시간 선택 기반 주간 과업·조언·자료 생성 | `plan` |
 | `GET` | `/api/goals` | 사용자의 목표 목록 조회 | `goals` |
-| `POST` | `/api/goals` | 학습 목표 생성 및 확정 | `goals` |
+| `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 활성 목표와 기간이 겹치면 409 `GOAL_PERIOD_OVERLAP`. `/api/plan/confirm` 도 동일 검사) | `goals` |
 | `GET` | `/api/goals/{goal_id}` | 목표 상세 조회 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |
@@ -305,7 +305,7 @@ erDiagram
 | `POST` | `/api/tasks` | 과제 생성 (단건 또는 다건) | `tasks` |
 | `PATCH` | `/api/tasks/{task_id}` | 과제 상태(완료 토글) 또는 추천 요일 수정 | `tasks` |
 | `DELETE` | `/api/tasks/{task_id}` | 과제 삭제 | `tasks` |
-| `GET` | `/api/study-logs` | 과제별/기간별 학습 실행 기록 조회 | `study-logs` |
+| `GET` | `/api/study-logs` | 과제별/목표별(`goal_id`)/기간별 학습 실행 기록 조회 | `study-logs` |
 | `POST` | `/api/study-logs` | 학습 기록 등록 (단순 타이머 결과 또는 수동 입력) 및 회고 저장 | `study-logs` |
 | `PATCH` | `/api/study-logs/{log_id}` | 학습 기록 및 회고 내용 수정 | `study-logs` |
 | `DELETE` | `/api/study-logs/{log_id}` | 학습 기록 삭제 (회고 동반 삭제, 과제는 유지) | `study-logs` |
@@ -314,14 +314,15 @@ erDiagram
 | `POST` | `/api/timer/finish` | 타이머 종료, 학습 기록으로 저장 | `study-logs` |
 | `POST` | `/api/timer/cancel` | 활성 타이머 취소 (기록 생성 없음) | `users.active_timer` |
 | `GET` | `/api/data/summary` | **AI 튜터 컨텍스트용** 학습 요약 및 최근 회고(최대 5건) 집계 | `summary` |
-| `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트 | `summary` |
+| `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트(최근 학습=active_goal_id 기준) + `goals_overview`(진행 중인 모든 학습의 일정·진행률) | `summary` |
+| `GET` | `/api/analytics/overview` | **종합 학습 분석 화면용** 진행 중 학습별 일정·진행률·이번 주 요일별 학습 분(읽기 전용, AI 호출 없음) | `summary` |
 | `POST` | `/api/conversations` | 새 튜터 대화 세션 생성 | `conversations` |
 | `GET` | `/api/conversations` | 최근 튜터 대화 세션 목록 조회 (메시지 제외) | `conversations` |
 | `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 | `conversations` |
 | `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화)** | `conversations` |
 | `GET` | `/api/resources` | 사전 검토된 읽기 전용 참고자료 목록 검색·조회 | `resources` |
 | `GET` | `/api/user/profile` | 익명 사용자 프로필 조회 | `user` |
-| `PATCH` | `/api/user/profile` | 사용자 프로필 수정 | `user` |
+| `PATCH` | `/api/user/profile` | 사용자 프로필 수정. `active_goal_id` 변경(학습 전환)은 본인 소유이고 status=active 인 목표만 허용 | `user` |
 | `POST` | `/api/user/delete-data` | 내 학습 데이터 전체 삭제 요청 | `user` |
 
 ---

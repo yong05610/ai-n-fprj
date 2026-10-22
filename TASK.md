@@ -123,14 +123,16 @@
 
 ## Phase 5B — 복수 학습 운용 (MULTI · P0, Phase 6 앞)
 결정 문서: docs/multi_goal_design.md. 지시서: docs/phase5b_dev_prompt.md.
-- [ ] B.1 일정 겹침 검사(active 목표끼리, 409 GOAL_PERIOD_OVERLAP), goals.start_date
-- [ ] B.2 학습 전환(active_goal_id 변경, 소유·active 검사)
-- [ ] B.3 대시보드 요약에 진행 중 전체 학습 현황(goals_overview) 추가
-- [ ] B.4 종합 분석 API(GET /api/analytics/overview, 진행 중 학습의 일정·일자별 투입 시간·진행률)
-- [ ] B.5 백엔드 테스트
-- [ ] B.6 학습 전환 드롭다운(계획·실행 화면)
-- [ ] B.7 대시보드 최근 학습 / 종합 현황 2영역, 겹침 오류 안내
-- [ ] B.8 종합 학습 분석 화면
+- [x] B.1 일정 겹침 검사(active 목표끼리, 409 GOAL_PERIOD_OVERLAP), goals.start_date
+- [x] B.2 학습 전환(active_goal_id 변경, 소유·active 검사)
+- [x] B.3 대시보드 요약에 진행 중 전체 학습 현황(goals_overview) 추가
+- [x] B.4 종합 분석 API(GET /api/analytics/overview, 진행 중 학습의 일정·일자별 투입 시간·진행률)
+- [x] B.5 백엔드 테스트
+- [ ] B.6 학습 전환 드롭다운(계획·실행 화면) ← 구현됨, 브라우저 화면 미검증
+- [ ] B.7 대시보드 최근 학습 / 종합 현황 2영역, 겹침 오류 안내 ← 구현됨, 브라우저 화면 미검증
+- [ ] B.8 종합 학습 분석 화면 ← 구현됨, 브라우저 화면 미검증
+
+**결과:** docs/phase5b_report.md (backend 225건 통과, 프론트 typecheck/test/build 통과. 화면 미검증. 재검증 대기)
 
 ## Phase 6 — RAG·Long-term Memory 튜터·인사이트 (AI · P0)
 

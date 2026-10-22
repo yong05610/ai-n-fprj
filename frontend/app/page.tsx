@@ -3,13 +3,14 @@
 import { useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
+import { AnalysisScreen } from "@/components/AnalysisScreen";
 import { ConsentModal } from "@/components/ConsentModal";
 import { Dashboard } from "@/components/Dashboard";
 import { DeleteDataSection } from "@/components/DeleteDataSection";
 import { ExecutionScreen } from "@/components/ExecutionScreen";
 import { LearningPathWizard } from "@/components/LearningPathWizard";
 
-type View = "dashboard" | "execution" | "wizard";
+type View = "dashboard" | "execution" | "analysis" | "wizard";
 
 function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (
@@ -19,6 +20,9 @@ function NavBar({ view, onChange }: { view: View; onChange: (v: View) => void })
       </button>
       <button className={`btn${view === "execution" ? " active" : ""}`} onClick={() => onChange("execution")}>
         학습 실행 기록
+      </button>
+      <button className={`btn${view === "analysis" ? " active" : ""}`} onClick={() => onChange("analysis")}>
+        종합 학습 분석
       </button>
       <button className={`btn${view === "wizard" ? " active" : ""}`} onClick={() => onChange("wizard")}>
         학습 경로 만들기
@@ -94,6 +98,7 @@ export default function Home() {
         </div>
       )}
       {view === "execution" && <ExecutionScreen />}
+      {view === "analysis" && <AnalysisScreen onCreatePath={() => setView("wizard")} />}
     </main>
   );
 }

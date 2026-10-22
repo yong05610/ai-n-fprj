@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
+import { type GoalOption, GoalSwitch } from "@/components/GoalSwitch";
 import { ApiError, apiRequest, apiRequestWithHeaders } from "@/lib/api";
 import { todayKSTDateString } from "@/lib/week";
 
@@ -73,6 +74,10 @@ export function ExecutionScreen() {
   const [confirmingCancelTimer, setConfirmingCancelTimer] = useState(false);
   const [requestId, setRequestId] = useState(newRequestId());
   const [logsTruncated, setLogsTruncated] = useState(false);
+  const [goals, setGoals] = useState<GoalOption[]>([]);
+  const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
+  const [switching, setSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
 
   async function load() {
     if (!session) return;
@@ -80,14 +85,25 @@ export function ExecutionScreen() {
     setLoadError(null);
     try {
       const token = await session.getToken();
-      const profile = await apiRequest<{ active_goal_id: string | null }>("/api/user/profile", { token });
+      const [profile, goalList] = await Promise.all([
+        apiRequest<{ active_goal_id: string | null }>("/api/user/profile", { token }),
+        apiRequest<GoalOption[]>("/api/goals", { token }),
+      ]);
       const [taskList, logsResult, active] = await Promise.all([
         profile.active_goal_id
           ? apiRequest<TaskItem[]>(`/api/tasks?goal_id=${encodeURIComponent(profile.active_goal_id)}`, { token })
           : Promise.resolve([] as TaskItem[]),
-        apiRequestWithHeaders<StudyLog[]>(`/api/study-logs?period=${period}`, { token }),
+        // Only the current learning's records, so the stats don't mix in other learnings.
+        apiRequestWithHeaders<StudyLog[]>(
+          profile.active_goal_id
+            ? `/api/study-logs?period=${period}&goal_id=${encodeURIComponent(profile.active_goal_id)}`
+            : `/api/study-logs?period=${period}`,
+          { token },
+        ),
         apiRequest<ActiveTimer>("/api/timer/active", { token }),
       ]);
+      setGoals(goalList);
+      setActiveGoalId(profile.active_goal_id);
       setTasks(taskList);
       setLogs(logsResult.data);
       setLogsTruncated(logsResult.headers.get("x-study-logs-truncated") === "true");
@@ -268,6 +284,27 @@ export function ExecutionScreen() {
     }
   }
 
+  // Switching does not touch a running timer; the timer keeps belonging to its own learning.
+  async function switchGoal(goalId: string) {
+    if (!session || goalId === activeGoalId || switching) return;
+    setSwitching(true);
+    setSwitchError(null);
+    try {
+      const token = await session.getToken();
+      await apiRequest("/api/user/profile", { method: "PATCH", token, body: { active_goal_id: goalId } });
+      setSelectedTaskId(null);
+      setSelectedLogId(null);
+      setConfirmingDeleteId(null);
+      setConfirmingCancelTimer(false);
+      setSaveError(null);
+      await load();
+    } catch (error) {
+      setSwitchError(error instanceof ApiError ? error.message : "학습을 전환하지 못했습니다.");
+    } finally {
+      setSwitching(false);
+    }
+  }
+
   const weeklyMinutes = (logs ?? []).reduce((sum, l) => sum + l.minutes, 0);
   const recordCount = (logs ?? []).length;
   const activeTaskCount = (tasks ?? []).filter((t) => t.status !== "completed").length;
@@ -276,6 +313,23 @@ export function ExecutionScreen() {
 
   const timerRunsHere = timer?.active && timer.task_id === selectedTaskId;
   const timerRunsElsewhere = timer?.active && timer.task_id !== selectedTaskId;
+
+  const timerGoal = timer?.active && timer.goal_id && timer.goal_id !== activeGoalId ? goals.find((g) => g.id === timer.goal_id) : null;
+  const switcher = (
+    <>
+      <GoalSwitch goals={goals} activeGoalId={activeGoalId} busy={switching} onSelect={switchGoal} />
+      {switchError && (
+        <p className="error" role="alert">
+          {switchError}
+        </p>
+      )}
+      {timer?.active && timer.goal_id && timer.goal_id !== activeGoalId && (
+        <p className="small muted" role="status">
+          진행 중인 타이머는 {timerGoal ? `'${timerGoal.course}'` : "다른"} 학습의 과제입니다. 그 학습으로 전환하면 종료하거나 취소할 수 있어요.
+        </p>
+      )}
+    </>
+  );
 
   if (loadStatus === "loading") {
     return (
@@ -300,15 +354,19 @@ export function ExecutionScreen() {
 
   if (!tasks || tasks.length === 0) {
     return (
-      <section className="card">
-        <h2>학습 과제가 없습니다</h2>
-        <p className="description">학습 경로를 만들어 과제를 먼저 확정해 주세요.</p>
-      </section>
+      <div className="stack">
+        {switcher}
+        <section className="card">
+          <h2>학습 과제가 없습니다</h2>
+          <p className="description">학습 경로를 만들어 과제를 먼저 확정해 주세요.</p>
+        </section>
+      </div>
     );
   }
 
   return (
     <div className="stack">
+      {switcher}
       <div className="grid stats">
         <article className="card stat">
           <label>학습 시간</label>

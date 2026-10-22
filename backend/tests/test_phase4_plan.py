@@ -297,6 +297,9 @@ CONFIRM_REQUEST = {
     ],
 }
 
+# A period that starts after CONFIRM_REQUEST's (2026-10-19 ~ 2026-12-31) ends (Phase 5B overlap rule).
+LATER_PERIOD = {"plan_week_start": "2027-01-04", "target_date": "2027-03-31"}
+
 
 class TestPlanConfirm:
     def test_success_saves_goal_and_tasks_and_they_are_retrievable(self, client: TestClient, consented_headers):
@@ -377,12 +380,17 @@ class TestPlanConfirm:
 
     def test_different_client_request_id_creates_a_new_goal(self, client: TestClient, consented_headers):
         client.post("/api/plan/confirm", json={**CONFIRM_REQUEST, "client_request_id": "key-a"}, headers=consented_headers)
-        client.post("/api/plan/confirm", json={**CONFIRM_REQUEST, "client_request_id": "key-b"}, headers=consented_headers)
+        # Phase 5B: the second goal must not overlap the first goal's period.
+        client.post(
+            "/api/plan/confirm",
+            json={**CONFIRM_REQUEST, "client_request_id": "key-b", **LATER_PERIOD},
+            headers=consented_headers,
+        )
         assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
 
     def test_omitting_client_request_id_keeps_old_always_create_behavior(self, client: TestClient, consented_headers):
         client.post("/api/plan/confirm", json=CONFIRM_REQUEST, headers=consented_headers)
-        client.post("/api/plan/confirm", json=CONFIRM_REQUEST, headers=consented_headers)
+        client.post("/api/plan/confirm", json={**CONFIRM_REQUEST, **LATER_PERIOD}, headers=consented_headers)
         assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
 
 
