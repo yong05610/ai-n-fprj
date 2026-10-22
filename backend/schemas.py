@@ -56,6 +56,22 @@ class PathRecommendationResponse(BaseModel):
     suggested_roles: List[str] = Field(default_factory=list, max_length=5, description="AI가 제안한 직무/역할명 목록 (최대 5개, 선택)")
 
 
+class RoleIdeasRequest(BaseModel):
+    field: str = Field(..., min_length=1, max_length=100, description="학습하고 싶은 분야 (자유 입력)")
+
+    @field_validator("field")
+    @classmethod
+    def _field_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("field는 공백만으로 구성될 수 없습니다.")
+        return value
+
+
+class RoleIdeasResponse(BaseModel):
+    field: str
+    suggested_roles: List[str] = Field(..., min_length=3, max_length=5, description="대표 직무·목표 예시 3~5개 (참고용, 선택 사항)")
+
+
 # --- 2. Plan Generation (FR-02 Step 2) ---
 
 class WeeklyTaskPlanItem(BaseModel):
@@ -93,7 +109,12 @@ class PlanGenerateRequest(BaseModel):
     target_level_description: Optional[str] = Field(None, max_length=2000)
     weekly_hours: int = Field(..., ge=1, le=100, description="주당 학습 가능 시간 (시간 단위)")
     target_date: str = Field(..., pattern=DATE_PATTERN, description="목표 완료 희망일 (YYYY-MM-DD, 오늘 이후)")
-    plan_week_start: Optional[str] = Field(None, pattern=DATE_PATTERN, description="계획 주간 시작일 (YYYY-MM-DD, 기본 이번 주 월요일)")
+    start_date: str = Field(..., pattern=DATE_PATTERN, description="학습 시작일 (YYYY-MM-DD, 아무 요일, 오늘 이후). 계획 주간은 이 날짜가 속한 주(월~일)로 서버가 정한다")
+    plan_week_start: Optional[str] = Field(
+        None,
+        pattern=DATE_PATTERN,
+        description="선택. 주어지면 start_date가 속한 주의 월요일과 같아야 한다(다르면 400). 생략 권장",
+    )
 
     @field_validator("field", "course")
     @classmethod
@@ -260,7 +281,12 @@ class PlanConfirmRequest(BaseModel):
     target_level_description: Optional[str] = Field(None, max_length=2000)
     weekly_hours: int = Field(..., ge=1, le=100)
     target_date: str = Field(..., pattern=DATE_PATTERN)
-    plan_week_start: str = Field(..., pattern=DATE_PATTERN, description="YYYY-MM-DD (월요일)")
+    start_date: str = Field(..., pattern=DATE_PATTERN, description="학습 시작일 (YYYY-MM-DD, 아무 요일, 오늘 이후). goals.start_date 로 저장되고 일정 겹침 검사의 시작점이다")
+    plan_week_start: Optional[str] = Field(
+        None,
+        pattern=DATE_PATTERN,
+        description="선택. 주어지면 start_date가 속한 주의 월요일과 같아야 한다(다르면 400). 서버가 start_date에서 도출한다",
+    )
     tasks: List[PlanConfirmTaskItem] = Field(..., min_length=1)
     client_request_id: Optional[str] = Field(
         None,

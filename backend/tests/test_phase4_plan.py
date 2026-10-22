@@ -5,12 +5,24 @@ dependency override, per docs/phase4_dev_prompt.md's test requirements.
 """
 
 import json
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
 
+import clock
 from ai_client import AIRetryableError, AIClient, MAX_RETRIES, get_ai_client
 from main import app
+
+TODAY = date(2026, 10, 21)  # Wednesday; its week starts Monday 2026-10-19
+
+
+@pytest.fixture(autouse=True)
+def pinned_today(monkeypatch):
+    """start_date must be today or later (KST), so these tests pin "today" instead of
+    depending on the real calendar."""
+    monkeypatch.setattr(clock, "today", lambda: TODAY)
+
 
 VALID_PATH_RESPONSE = {
     "courses": [
@@ -44,7 +56,7 @@ PLAN_REQUEST_BASE = {
     "target_level_name": "실무 기초",
     "weekly_hours": 7,
     "target_date": "2026-12-31",
-    "plan_week_start": "2026-10-19",
+    "start_date": "2026-10-21",  # Wednesday: the plan week (Mon 2026-10-19) is derived by the server
 }
 
 
@@ -215,22 +227,45 @@ class TestPlanGenerate:
         payload = {**PLAN_REQUEST_BASE, "target_date": "2020-01-01"}
         assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 400
 
-    def test_rejects_non_monday_week_start(self, client: TestClient, consented_headers):
-        payload = {**PLAN_REQUEST_BASE, "plan_week_start": "2026-10-20"}
-        assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 400
-
-    def test_rejects_week_start_after_target_date(self, client: TestClient, consented_headers):
-        payload = {**PLAN_REQUEST_BASE, "target_date": "2026-10-20", "plan_week_start": "2026-10-26"}
-        assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 400
-
-    def test_defaults_plan_week_start_to_this_week_monday_when_omitted(self, client: TestClient, consented_headers, override_ai):
-        import clock
-
+    def test_start_date_may_be_any_weekday_and_week_is_derived(self, client: TestClient, consented_headers, override_ai):
         override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
-        payload = {k: v for k, v in PLAN_REQUEST_BASE.items() if k != "plan_week_start"}
+        payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-25"}  # Sunday
+        body = client.post("/api/plan/generate", json=payload, headers=consented_headers).json()
+        assert body["plan_week_start"] == "2026-10-19" and body["plan_week_end"] == "2026-10-25"
+
+    def test_start_date_is_required(self, client: TestClient, consented_headers):
+        payload = {k: v for k, v in PLAN_REQUEST_BASE.items() if k != "start_date"}
+        assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 422
+
+    def test_rejects_past_start_date(self, client: TestClient, consented_headers):
+        payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-20"}
         response = client.post("/api/plan/generate", json=payload, headers=consented_headers)
-        assert response.status_code == 200
-        assert response.json()["plan_week_start"] == clock.week_monday(clock.today()).isoformat()
+        assert response.status_code == 400
+        assert response.json()["detail"]["details"]["field"] == "start_date"
+
+    def test_accepts_start_date_today(self, client: TestClient, consented_headers, override_ai):
+        override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
+        assert client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers).status_code == 200
+
+    def test_rejects_mismatching_plan_week_start(self, client: TestClient, consented_headers):
+        payload = {**PLAN_REQUEST_BASE, "plan_week_start": "2026-10-26"}  # a Monday, but not the start week's
+        assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 400
+
+    def test_accepts_matching_plan_week_start(self, client: TestClient, consented_headers, override_ai):
+        override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
+        payload = {**PLAN_REQUEST_BASE, "plan_week_start": "2026-10-19"}
+        assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 200
+
+    def test_rejects_target_date_before_start_date(self, client: TestClient, consented_headers):
+        payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-26", "target_date": "2026-10-25"}
+        response = client.post("/api/plan/generate", json=payload, headers=consented_headers)
+        assert response.status_code == 400
+        assert response.json()["detail"]["details"]["field"] == "target_date"
+
+    def test_target_date_same_as_start_date_is_allowed(self, client: TestClient, consented_headers, override_ai):
+        override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
+        payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-26", "target_date": "2026-10-26"}
+        assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 200
 
     def test_ai_exceeding_weekly_budget_is_retried_then_fails_without_silent_truncation(
         self, client: TestClient, consented_headers, override_ai
@@ -290,7 +325,7 @@ CONFIRM_REQUEST = {
     "target_level_description": "간단한 스크립트 작성 가능",
     "weekly_hours": 7,
     "target_date": "2026-12-31",
-    "plan_week_start": "2026-10-19",
+    "start_date": "2026-10-21",
     "tasks": [
         {"title": "변수와 자료형", "description": "기본 문법 실습", "estimated_minutes": 60, "suggested_weekday": "mon"},
         {"title": "조건문 연습", "description": "if문 실습", "estimated_minutes": 60, "suggested_weekday": "none"},
@@ -298,7 +333,7 @@ CONFIRM_REQUEST = {
 }
 
 # A period that starts after CONFIRM_REQUEST's (2026-10-19 ~ 2026-12-31) ends (Phase 5B overlap rule).
-LATER_PERIOD = {"plan_week_start": "2027-01-04", "target_date": "2027-03-31"}
+LATER_PERIOD = {"start_date": "2027-01-04", "target_date": "2027-03-31"}
 
 
 class TestPlanConfirm:
@@ -327,12 +362,22 @@ class TestPlanConfirm:
         payload = {**CONFIRM_REQUEST, "target_date": "2020-01-01"}
         assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
 
-    def test_rejects_non_monday_week_start(self, client: TestClient, consented_headers):
+    def test_start_date_any_weekday_stores_start_date_and_derives_week(self, client: TestClient, consented_headers):
+        payload = {**CONFIRM_REQUEST, "start_date": "2026-10-23"}  # Friday
+        body = client.post("/api/plan/confirm", json=payload, headers=consented_headers).json()
+        assert body["goal"]["start_date"] == "2026-10-23"
+        assert {t["plan_week_start"] for t in body["tasks"]} == {"2026-10-19"}
+
+    def test_rejects_past_start_date(self, client: TestClient, consented_headers):
+        payload = {**CONFIRM_REQUEST, "start_date": "2026-10-20"}
+        assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
+
+    def test_rejects_mismatching_plan_week_start(self, client: TestClient, consented_headers):
         payload = {**CONFIRM_REQUEST, "plan_week_start": "2026-10-20"}
         assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
 
-    def test_rejects_week_start_after_target_date(self, client: TestClient, consented_headers):
-        payload = {**CONFIRM_REQUEST, "target_date": "2026-10-20", "plan_week_start": "2026-10-26"}
+    def test_rejects_target_date_before_start_date(self, client: TestClient, consented_headers):
+        payload = {**CONFIRM_REQUEST, "start_date": "2026-10-26", "target_date": "2026-10-25"}
         assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
 
     def test_rejects_total_minutes_exceeding_weekly_hours(self, client: TestClient, consented_headers):

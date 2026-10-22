@@ -103,6 +103,7 @@ class TestSchemaValidation:
             target_level_name="실무 기초",
             weekly_hours=7,
             target_date="2026-11-30",
+            start_date="2026-10-21",
         )
         assert valid.current_level_order == 1
         assert valid.target_level_order == 4
@@ -120,6 +121,7 @@ class TestSchemaValidation:
                 target_level_name="실무 기초",
                 weekly_hours=7,
                 target_date="2026-11-30",
+                start_date="2026-10-21",
             )
 
     def test_task_estimated_minutes_positive(self):

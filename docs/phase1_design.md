@@ -294,10 +294,11 @@ erDiagram
 
 | 메서드 | 경로 | 역할 및 설명 | 태그 |
 |---|---|---|---|
-| `POST` | `/api/path/recommend` | 1단계: 분야 입력 기반 세부 과정 및 수준 제안 | `path` |
-| `POST` | `/api/plan/generate` | 2단계: 과정·수준·시간 선택 기반 주간 과업·조언·자료 생성 | `plan` |
+| `POST` | `/api/path/ideas` | 1단계 보조: 분야 입력 기반 대표 직무·목표 예시 3~5개(`suggested_roles`, 참고용). 버튼을 눌렀을 때만 호출 | `path` |
+| `POST` | `/api/path/recommend` | 1단계: 분야 입력 기반 세부 과정 및 수준 제안 (`suggested_roles` 는 호환용 선택 필드, 화면은 `/api/path/ideas` 를 쓴다) | `path` |
+| `POST` | `/api/plan/generate` | 2단계: 과정·수준·시간 선택 기반 주간 과업·조언·자료 생성. `start_date`(필수, 오늘 이후 아무 요일) 가 속한 주의 월요일이 계획 주간. `plan_week_start` 는 선택이며 주어지면 그 월요일과 같아야 한다 | `plan` |
 | `GET` | `/api/goals` | 사용자의 목표 목록 조회 | `goals` |
-| `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 활성 목표와 기간이 겹치면 409 `GOAL_PERIOD_OVERLAP`. `/api/plan/confirm` 도 동일 검사) | `goals` |
+| `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 활성 목표와 기간이 겹치면 409 `GOAL_PERIOD_OVERLAP`, `details.overlaps` 에 겹친 학습 전부. `/api/plan/confirm` 은 사용자가 고른 `start_date` 로 동일 검사) | `goals` |
 | `GET` | `/api/goals/{goal_id}` | 목표 상세 조회 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |

@@ -21,7 +21,7 @@ def pinned_today(monkeypatch):
     monkeypatch.setattr(clock, "today", lambda: TODAY)
 
 
-def _confirm_payload(course="기본문법", week_start="2026-10-19", target="2026-11-30", **overrides) -> dict:
+def _confirm_payload(course="기본문법", start="2026-10-21", target="2026-11-30", **overrides) -> dict:
     return {
         "field": "Python 개발",
         "course": course,
@@ -31,7 +31,7 @@ def _confirm_payload(course="기본문법", week_start="2026-10-19", target="202
         "target_level_name": "실무 기초",
         "weekly_hours": 7,
         "target_date": target,
-        "plan_week_start": week_start,
+        "start_date": start,
         "tasks": [{"title": "변수", "estimated_minutes": 60, "suggested_weekday": "mon"}],
         **overrides,
     }
@@ -65,10 +65,10 @@ def _other_user(client) -> dict:
 
 
 class TestOverlapOnPlanConfirm:
-    def test_first_goal_gets_start_date_from_plan_week_start(self, client: TestClient, consented_headers):
+    def test_first_goal_stores_the_chosen_start_date(self, client: TestClient, consented_headers):
         res = _confirm(client, consented_headers)
         assert res.status_code == 201
-        assert res.json()["goal"]["start_date"] == "2026-10-19"
+        assert res.json()["goal"]["start_date"] == "2026-10-21"  # not the week's Monday
 
     def test_same_period_is_rejected_with_409_and_details(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="A과정")
@@ -76,9 +76,9 @@ class TestOverlapOnPlanConfirm:
         assert res.status_code == 409
         err = res.json()["detail"]
         assert err["code"] == "GOAL_PERIOD_OVERLAP"
-        assert "A과정" in err["message"] and "2026-10-19" in err["message"] and "2026-11-30" in err["message"]
+        assert "A과정" in err["message"] and "2026-10-21" in err["message"] and "2026-11-30" in err["message"]
         assert err["details"]["course"] == "A과정"
-        assert err["details"]["start_date"] == "2026-10-19"
+        assert err["details"]["start_date"] == "2026-10-21"
         assert err["details"]["target_date"] == "2026-11-30"
 
     def test_rejection_saves_nothing(self, client: TestClient, consented_headers):
@@ -90,19 +90,19 @@ class TestOverlapOnPlanConfirm:
         assert _active_goal_id(client, consented_headers) == before_goal
 
     def test_overlap_by_a_single_day_is_rejected(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, week_start="2026-10-19", target="2026-11-30")
+        _confirm(client, consented_headers, start="2026-10-21", target="2026-11-30")
         # New period starts on the first goal's last day (2026-11-30 is a Monday).
-        res = _confirm(client, consented_headers, course="B", week_start="2026-11-30", target="2026-12-31")
+        res = _confirm(client, consented_headers, course="B", start="2026-11-30", target="2026-12-31")
         assert res.status_code == 409
 
     def test_adjacent_periods_are_allowed(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, week_start="2026-10-19", target="2026-11-29")
-        res = _confirm(client, consented_headers, course="B", week_start="2026-11-30", target="2026-12-31")
+        _confirm(client, consented_headers, start="2026-10-21", target="2026-11-29")
+        res = _confirm(client, consented_headers, course="B", start="2026-11-30", target="2026-12-31")
         assert res.status_code == 201
 
     def test_new_period_enclosing_existing_is_rejected(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, week_start="2026-11-02", target="2026-11-15")
-        res = _confirm(client, consented_headers, course="B", week_start="2026-10-19", target="2026-12-31")
+        _confirm(client, consented_headers, start="2026-11-02", target="2026-11-15")
+        res = _confirm(client, consented_headers, course="B", start="2026-10-21", target="2026-12-31")
         assert res.status_code == 409
 
     @pytest.mark.parametrize("status_value", ["completed", "archived"])
@@ -118,7 +118,7 @@ class TestOverlapOnPlanConfirm:
         second = client.post("/api/plan/confirm", json=payload, headers=consented_headers)
         assert second.status_code == 200
         assert second.json()["goal"]["id"] == first.json()["goal"]["id"]
-        assert second.json()["goal"]["start_date"] == "2026-10-19"
+        assert second.json()["goal"]["start_date"] == "2026-10-21"
 
     def test_other_users_goals_are_irrelevant(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers)
@@ -128,9 +128,9 @@ class TestOverlapOnPlanConfirm:
     def test_invalid_input_is_reported_before_overlap(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers)
         res = client.post(
-            "/api/plan/confirm", json=_confirm_payload(course="B", week_start="2026-10-20"), headers=consented_headers
+            "/api/plan/confirm", json=_confirm_payload(course="B", start="2026-10-20"), headers=consented_headers
         )
-        assert res.status_code == 400  # not a Monday: ordinary validation comes first
+        assert res.status_code == 400  # a past start date is ordinary validation, reported first
 
 
 class TestOverlapOnGoalsPost:
@@ -147,13 +147,24 @@ class TestOverlapOnGoalsPost:
         assert len(client.get("/api/goals", headers=consented_headers).json()) == 1
 
     def test_goal_post_allowed_after_other_goal_period_ends(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, week_start="2026-10-12", target="2026-10-18")
+        # An active goal that ended last week (inserted directly: confirm refuses past start dates).
+        get_store().create(
+            "goals",
+            {
+                **_goal_payload(course="지난 학습", target="2026-10-18"),
+                "start_date": "2026-10-05",
+                "user_id": "test-uid-alice",
+                "status": "active",
+                "created_at": "2026-10-05T00:00:00Z",
+                "updated_at": "2026-10-05T00:00:00Z",
+            },
+        )
         res = client.post("/api/goals", json=_goal_payload(), headers=consented_headers)
         assert res.status_code == 201
 
     def test_patch_target_date_is_deliberately_not_checked(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, week_start="2026-10-19", target="2026-11-01")
-        second = _confirm(client, consented_headers, course="B", week_start="2026-11-02", target="2026-11-30").json()["goal"]
+        _confirm(client, consented_headers, start="2026-10-21", target="2026-11-01")
+        second = _confirm(client, consented_headers, course="B", start="2026-11-02", target="2026-11-30").json()["goal"]
         res = client.patch(f"/api/goals/{second['id']}", json={"target_date": "2026-12-31"}, headers=consented_headers)
         assert res.status_code == 200
         # Extending the first goal into the second one's period is also allowed (user decision).
@@ -192,15 +203,15 @@ class TestLegacyGoalWithoutStartDate:
                 "updated_at": "2026-10-20T16:00:00Z",
             },
         )
-        res = _confirm(client, consented_headers, week_start="2026-11-23", target="2026-12-31")
+        res = _confirm(client, consented_headers, start="2026-11-23", target="2026-12-31")
         assert res.status_code == 409
         assert res.json()["detail"]["details"]["start_date"] == "2026-10-21"
 
 
 class TestLearningSwitch:
     def _two_goals(self, client, headers):
-        a = _confirm(client, headers, course="A과정", week_start="2026-10-19", target="2026-10-31").json()["goal"]
-        b = _confirm(client, headers, course="B과정", week_start="2026-11-02", target="2026-11-30").json()["goal"]
+        a = _confirm(client, headers, course="A과정", start="2026-10-21", target="2026-10-31").json()["goal"]
+        b = _confirm(client, headers, course="B과정", start="2026-11-02", target="2026-11-30").json()["goal"]
         return a, b
 
     def test_new_registration_becomes_recent_learning(self, client: TestClient, consented_headers):
@@ -246,9 +257,9 @@ class TestLearningSwitch:
         assert _active_goal_id(client, consented_headers) == a["id"]  # P5B-1 (was: null)
 
     def _three_goals(self, client, headers):
-        a = _confirm(client, headers, course="A과정", week_start="2026-10-19", target="2026-10-31").json()["goal"]
-        b = _confirm(client, headers, course="B과정", week_start="2026-11-02", target="2026-11-30").json()["goal"]
-        c = _confirm(client, headers, course="C과정", week_start="2026-12-07", target="2026-12-31").json()["goal"]
+        a = _confirm(client, headers, course="A과정", start="2026-10-21", target="2026-10-31").json()["goal"]
+        b = _confirm(client, headers, course="B과정", start="2026-11-02", target="2026-11-30").json()["goal"]
+        c = _confirm(client, headers, course="C과정", start="2026-12-07", target="2026-12-31").json()["goal"]
         return a, b, c
 
     def test_deleting_current_goal_falls_back_to_most_recent_remaining_active(self, client: TestClient, consented_headers):
@@ -305,19 +316,19 @@ class TestLearningSwitch:
         a, b = self._two_goals(client, consented_headers)
         listed = client.get("/api/goals", headers=consented_headers).json()
         assert [g["id"] for g in listed] == [b["id"], a["id"]]
-        assert [g["start_date"] for g in listed] == ["2026-11-02", "2026-10-19"]
+        assert [g["start_date"] for g in listed] == ["2026-11-02", "2026-10-21"]
 
 
 def _two_goals_with_data(client, headers):
     """Goal A: 2 tasks (1 completed), 30+45 min this week. Goal B: 1 task, 20 min this week."""
     a = _confirm(
-        client, headers, course="A과정", week_start="2026-10-19", target="2026-10-31",
+        client, headers, course="A과정", start="2026-10-21", target="2026-10-31",
         tasks=[
             {"title": "A1", "estimated_minutes": 60, "suggested_weekday": "mon"},
             {"title": "A2", "estimated_minutes": 60, "suggested_weekday": "tue"},
         ],
     ).json()
-    b = _confirm(client, headers, course="B과정", week_start="2026-11-02", target="2026-11-30").json()
+    b = _confirm(client, headers, course="B과정", start="2026-11-02", target="2026-11-30").json()
     a_tasks = sorted(a["tasks"], key=lambda t: t["order_index"])
     client.patch(f"/api/tasks/{a_tasks[0]['id']}", json={"status": "completed"}, headers=headers)
     for task_id, study_date, minutes in (
@@ -343,7 +354,7 @@ class TestDashboardGoalsOverview:
         assert set(by_id) == {a["id"], b["id"]}
         assert (by_id[a["id"]]["completed_task_count"], by_id[a["id"]]["total_task_count"], by_id[a["id"]]["progress_percentage"]) == (1, 2, 50)
         assert (by_id[b["id"]]["completed_task_count"], by_id[b["id"]]["total_task_count"], by_id[b["id"]]["progress_percentage"]) == (0, 1, 0)
-        assert by_id[a["id"]]["course"] == "A과정" and by_id[a["id"]]["start_date"] == "2026-10-19"
+        assert by_id[a["id"]]["course"] == "A과정" and by_id[a["id"]]["start_date"] == "2026-10-21"
         assert [g["goal_id"] for g in body["goals_overview"]] == [a["id"], b["id"]]  # earliest schedule first
 
     def test_recent_learning_block_follows_active_goal_id(self, client: TestClient, consented_headers):

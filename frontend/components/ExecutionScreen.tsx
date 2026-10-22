@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { type GoalOption, GoalSwitch } from "@/components/GoalSwitch";
 import { ApiError, apiRequest, apiRequestWithHeaders } from "@/lib/api";
+import { taskToSelectForTimer, timerLocation } from "@/lib/timerSelection";
 import { todayKSTDateString } from "@/lib/week";
 
 type Weekday = "none" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
@@ -108,6 +109,10 @@ export function ExecutionScreen() {
       setLogs(logsResult.data);
       setLogsTruncated(logsResult.headers.get("x-study-logs-truncated") === "true");
       setTimer(active);
+      // F3: a timer still running on the server must be visible after a refresh or after
+      // switching away and back, so its task is selected unless the user already picked one.
+      const timerTask = taskToSelectForTimer(active, profile.active_goal_id, taskList.map((t) => t.id));
+      if (timerTask) setSelectedTaskId((prev) => prev ?? timerTask);
       setLoadStatus("ready");
     } catch (error) {
       setLoadError(error instanceof ApiError ? error.message : "불러오지 못했습니다.");
@@ -229,7 +234,14 @@ export function ExecutionScreen() {
       setTimer(result);
     } catch (error) {
       if (error instanceof ApiError && error.code === "TIMER_ALREADY_RUNNING") {
-        setSaveError("진행 중인 학습을 먼저 종료·저장하세요.");
+        // The screen's timer state was stale; refresh it so the "go to it" button appears.
+        try {
+          const token = await session.getToken();
+          setTimer(await apiRequest<ActiveTimer>("/api/timer/active", { token }));
+        } catch {
+          // keep the message below even if the refresh fails
+        }
+        setSaveError("이미 진행 중인 타이머가 있어요. 아래 버튼으로 해당 과제로 이동해 먼저 종료하거나 취소해 주세요.");
       } else {
         setSaveError(error instanceof ApiError ? error.message : "타이머를 시작하지 못했습니다.");
       }
@@ -313,6 +325,18 @@ export function ExecutionScreen() {
 
   const timerRunsHere = timer?.active && timer.task_id === selectedTaskId;
   const timerRunsElsewhere = timer?.active && timer.task_id !== selectedTaskId;
+  const location = timerLocation(timer, activeGoalId, selectedTaskId);
+
+  // Jump to the running timer: same learning -> select its task; another learning -> switch
+  // back to it (the reload then auto-selects the task).
+  function goToTimerTask() {
+    if (!timer?.active || !timer.task_id) return;
+    if (timer.goal_id && timer.goal_id !== activeGoalId) {
+      switchGoal(timer.goal_id);
+      return;
+    }
+    resetFormForNew(timer.task_id);
+  }
 
   const timerGoal = timer?.active && timer.goal_id && timer.goal_id !== activeGoalId ? goals.find((g) => g.id === timer.goal_id) : null;
   const switcher = (
@@ -325,7 +349,18 @@ export function ExecutionScreen() {
       )}
       {timer?.active && timer.goal_id && timer.goal_id !== activeGoalId && (
         <p className="small muted" role="status">
-          진행 중인 타이머는 {timerGoal ? `'${timerGoal.course}'` : "다른"} 학습의 과제입니다. 그 학습으로 전환하면 종료하거나 취소할 수 있어요.
+          진행 중인 타이머는 {timerGoal ? `'${timerGoal.course}'` : "다른"} 학습의 과제입니다. 그 학습으로 전환하면 종료하거나 취소할 수 있어요.{" "}
+          <button type="button" className="link-btn" onClick={goToTimerTask} disabled={switching}>
+            그 학습으로 돌아가기
+          </button>
+        </p>
+      )}
+      {location === "other-task-same-goal" && (
+        <p className="small muted" role="status">
+          다른 과제의 타이머가 진행 중입니다.{" "}
+          <button type="button" className="link-btn" onClick={goToTimerTask}>
+            진행 중인 과제로 이동
+          </button>
         </p>
       )}
     </>

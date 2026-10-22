@@ -22,6 +22,10 @@ class AIPathRecommendation(BaseModel):
     suggested_roles: List[str] = Field(default_factory=list, max_length=5)
 
 
+class AIRoleIdeas(BaseModel):
+    suggested_roles: List[str] = Field(..., min_length=3, max_length=5)
+
+
 class AIWeeklyTask(BaseModel):
     title: str = Field(..., min_length=1, max_length=200, description="학습 과업명")
     description: str = Field(..., min_length=1, max_length=2000, description="과업 세부 내용")

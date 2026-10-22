@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiRequest } from "@/lib/api";
 import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from "@/lib/wizardStorage";
-import { isMondayDateString, mondayOfThisWeekKST, todayKSTDateString } from "@/lib/week";
+import { todayKSTDateString } from "@/lib/week";
+import { startDateError } from "@/lib/wizardDates";
 
 type LevelItem = { order: number; name: string; description: string };
 type CourseItem = { id: string; title: string; description: string; levels: LevelItem[] };
@@ -57,7 +58,8 @@ type WizardSnapshot = {
   targetLevelDesc: string;
   weeklyHours: number;
   targetDate: string;
-  planWeekStart: string;
+  startDate: string;
+  ideas: string[] | null;
   draft: PlanGenerateResponse | null;
   draftRecipeKey: string | null;
   tasks: WeeklyTask[];
@@ -92,7 +94,15 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
   const [targetLevelDesc, setTargetLevelDesc] = useState(restored?.targetLevelDesc ?? "");
   const [weeklyHours, setWeeklyHours] = useState(restored?.weeklyHours ?? 7);
   const [targetDate, setTargetDate] = useState(restored?.targetDate ?? "");
-  const [planWeekStart, setPlanWeekStart] = useState(restored?.planWeekStart ?? mondayOfThisWeekKST());
+  // F1: the user picks the start date (any weekday, today or later). A restored draft whose
+  // start date has already passed falls back to today instead of silently failing at save time.
+  const [startDate, setStartDate] = useState(
+    restored?.startDate && restored.startDate >= todayKSTDateString() ? restored.startDate : todayKSTDateString(),
+  );
+  // F5: role/goal examples are fetched only when the user presses the button.
+  const [ideas, setIdeas] = useState<string[] | null>(restored?.ideas ?? null);
+  const [ideasStatus, setIdeasStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [ideasError, setIdeasError] = useState<string | null>(null);
 
   const selectedCourse = useMemo(
     () => recommendation?.courses.find((c) => c.id === courseId) ?? null,
@@ -136,6 +146,51 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
     const lvl = selectedCourse?.levels.find((l) => l.order === order);
     setTargetLevelName(lvl?.name ?? "");
     setTargetLevelDesc(lvl?.description ?? "");
+  }
+
+  async function fetchIdeas() {
+    if (!session || !field.trim()) return;
+    setIdeasStatus("loading");
+    setIdeasError(null);
+    try {
+      const token = await session.getToken();
+      const result = await apiRequest<{ field: string; suggested_roles: string[] }>("/api/path/ideas", {
+        method: "POST",
+        token,
+        timeoutMs: AI_TIMEOUT_MS,
+        body: { field },
+      });
+      setIdeas(result.suggested_roles);
+      setIdeasStatus("idle");
+    } catch (error) {
+      setIdeasError(error instanceof ApiError ? error.message : "알 수 없는 오류가 발생했습니다.");
+      setIdeasStatus("error");
+    }
+  }
+
+  // A role chip fills the goal text. If the user then edits the text it is no longer that
+  // role, so selected_role is dropped (null) rather than sent out of sync with the goal.
+  function pickIdea(role: string) {
+    if (role === selectedRole) {
+      setSelectedRole(null);
+      return;
+    }
+    setSelectedRole(role);
+    setGoal(role);
+  }
+
+  function changeGoal(value: string) {
+    setGoal(value);
+    if (selectedRole && value !== selectedRole) setSelectedRole(null);
+  }
+
+  function changeField(value: string) {
+    setField(value);
+    if (ideas) {
+      // The examples were made for the previous field; do not leave them standing for a new one.
+      setIdeas(null);
+      setSelectedRole(null);
+    }
   }
 
   async function recommend() {
@@ -183,7 +238,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
         targetLevelDesc,
         weeklyHours,
         targetDate,
-        planWeekStart,
+        startDate,
       ]),
     [
       recommendation,
@@ -198,16 +253,16 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
       targetLevelDesc,
       weeklyHours,
       targetDate,
-      planWeekStart,
+      startDate,
     ],
   );
   const isDraftStale = draft != null && draftRecipeKey != null && draftRecipeKey !== currentRecipeKey;
 
-  const planWeekStartIsMonday = isMondayDateString(planWeekStart);
+  const dateError = startDateError(startDate, targetDate, todayKSTDateString());
 
   async function generatePlan() {
     if (!session || !recommendation || !selectedCourse || currentOrder == null || targetOrder == null || !targetDate) return;
-    if (!planWeekStartIsMonday) return;
+    if (dateError) return;
     setPlanStatus("loading");
     setPlanError(null);
     try {
@@ -228,7 +283,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           target_level_description: targetLevelDesc,
           weekly_hours: weeklyHours,
           target_date: targetDate,
-          plan_week_start: planWeekStart,
+          start_date: startDate,
         },
       });
       setDraft(result);
@@ -289,7 +344,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           target_level_description: targetLevelDesc,
           weekly_hours: weeklyHours,
           target_date: targetDate,
-          plan_week_start: draft.plan_week_start,
+          start_date: startDate,
           tasks,
           client_request_id: clientRequestId,
         },
@@ -332,7 +387,8 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
       targetLevelDesc,
       weeklyHours,
       targetDate,
-      planWeekStart,
+      startDate,
+      ideas,
       draft,
       draftRecipeKey,
       tasks,
@@ -355,13 +411,25 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
     targetLevelDesc,
     weeklyHours,
     targetDate,
-    planWeekStart,
+    startDate,
+    ideas,
     draft,
     draftRecipeKey,
     tasks,
     clientRequestId,
     confirmStatus,
   ]);
+
+  // F2: once the user changes either date after an overlap rejection, the old error no longer
+  // describes the inputs - clear it so the save button works again.
+  useEffect(() => {
+    if (confirmStatus === "error" && confirmErrorCode === "GOAL_PERIOD_OVERLAP") {
+      setConfirmStatus("idle");
+      setConfirmError(null);
+      setConfirmErrorCode(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, targetDate]);
 
   function handleClose() {
     const hasProgress = recommendation != null || draft != null;
@@ -411,19 +479,52 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           <input
             id="wizard-field"
             value={field}
-            onChange={(e) => setField(e.target.value)}
+            onChange={(e) => changeField(e.target.value)}
             placeholder="예: UX 디자인, 데이터 분석, 영어 회화"
             disabled={pathStatus === "loading"}
+            autoComplete="off"
           />
         </div>
+        <button
+          type="button"
+          className="btn secondary small"
+          onClick={fetchIdeas}
+          disabled={!field.trim() || ideasStatus === "loading" || pathStatus === "loading"}
+        >
+          {ideasStatus === "loading" ? "예시 찾는 중…" : ideas ? "예시 다시 보기" : "대표 직무·목표 예시 보기"}
+        </button>
+        {ideasStatus === "error" && (
+          <p className="error" role="alert">
+            {ideasError}
+          </p>
+        )}
+        {ideas && (
+          <div className="field">
+            <label>대표 직무·목표 예시 (참고용, 선택 사항)</label>
+            <div className="chip-row">
+              {ideas.map((role) => (
+                <button
+                  type="button"
+                  key={role}
+                  className={`chip${role === selectedRole ? " on" : ""}`}
+                  onClick={() => pickIdea(role)}
+                >
+                  {role}
+                </button>
+              ))}
+            </div>
+            <p className="small muted">누르면 아래 학습 목표 칸에 채워지며, 직접 고쳐 쓸 수 있어요. AI가 제안한 예시입니다.</p>
+          </div>
+        )}
         <div className="field">
           <label htmlFor="wizard-goal">학습 목표 (선택)</label>
           <input
             id="wizard-goal"
             value={goal}
-            onChange={(e) => setGoal(e.target.value)}
+            onChange={(e) => changeGoal(e.target.value)}
             placeholder="예: 백엔드 신입 취업"
             disabled={pathStatus === "loading"}
+            autoComplete="off"
           />
         </div>
         <button className="btn" onClick={recommend} disabled={!field.trim() || pathStatus === "loading"}>
@@ -454,7 +555,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
               {selectedCourse && (
                 <>
                   <label htmlFor="course-title">과정명 (수정 가능)</label>
-                  <input id="course-title" value={courseTitle} onChange={(e) => setCourseTitle(e.target.value)} />
+                  <input id="course-title" value={courseTitle} onChange={(e) => setCourseTitle(e.target.value)} autoComplete="off" />
                   <label htmlFor="course-description">과정 설명 (수정 가능)</label>
                   <textarea
                     id="course-description"
@@ -464,24 +565,6 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 </>
               )}
             </div>
-
-            {recommendation.suggested_roles.length > 0 && (
-              <div className="field">
-                <label>추천 직무 (선택)</label>
-                <div className="chip-row">
-                  {recommendation.suggested_roles.map((role) => (
-                    <button
-                      type="button"
-                      key={role}
-                      className={`chip${role === selectedRole ? " on" : ""}`}
-                      onClick={() => setSelectedRole(role === selectedRole ? null : role)}
-                    >
-                      {role}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {selectedCourse && (
               <div className="field">
@@ -522,11 +605,11 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 <div className="field-grid">
                   <div className="field">
                     <label htmlFor="current-level-name">현재 수준 이름</label>
-                    <input id="current-level-name" value={currentLevelName} onChange={(e) => setCurrentLevelName(e.target.value)} />
+                    <input id="current-level-name" value={currentLevelName} onChange={(e) => setCurrentLevelName(e.target.value)} autoComplete="off" />
                   </div>
                   <div className="field">
                     <label htmlFor="target-level-name">목표 수준 이름</label>
-                    <input id="target-level-name" value={targetLevelName} onChange={(e) => setTargetLevelName(e.target.value)} />
+                    <input id="target-level-name" value={targetLevelName} onChange={(e) => setTargetLevelName(e.target.value)} autoComplete="off" />
                   </div>
                 </div>
                 <div className="field-grid">
@@ -555,33 +638,39 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 />
               </div>
               <div className="field">
+                <label htmlFor="start-date">학습 시작일</label>
+                <input
+                  id="start-date"
+                  type="date"
+                  min={todayKSTDateString()}
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="field-grid">
+              <div className="field">
                 <label htmlFor="target-date">목표 완료 희망일</label>
                 <input
                   id="target-date"
                   type="date"
-                  min={todayKSTDateString()}
+                  min={startDate >= todayKSTDateString() ? startDate : todayKSTDateString()}
                   value={targetDate}
                   onChange={(e) => setTargetDate(e.target.value)}
                 />
               </div>
             </div>
-            <div className="field">
-              <label htmlFor="plan-week-start">계획 주간 시작일 (월요일)</label>
-              <input
-                id="plan-week-start"
-                type="date"
-                value={planWeekStart}
-                onChange={(e) => setPlanWeekStart(e.target.value)}
-              />
-              {!planWeekStartIsMonday && (
-                <p className="error" role="alert">
-                  계획 주간 시작일은 월요일이어야 합니다.{" "}
-                  <button type="button" className="link-btn" onClick={() => setPlanWeekStart(mondayOfThisWeekKST())}>
-                    이번 주 월요일로 설정
-                  </button>
-                </p>
-              )}
-            </div>
+            <p className="small muted">진행 중인 학습과 일정이 겹치면 새 학습을 만들 수 없어요.</p>
+            {dateError && (
+              <p className="error" role="alert">
+                {dateError}
+              </p>
+            )}
+            {confirmStatus === "error" && confirmErrorCode === "GOAL_PERIOD_OVERLAP" && (
+              <p className="error" role="alert">
+                {confirmError} 날짜를 바꾸면 다시 저장할 수 있어요.
+              </p>
+            )}
 
             <button
               className="btn"
@@ -591,7 +680,8 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                 currentOrder == null ||
                 targetOrder == null ||
                 !targetDate ||
-                !planWeekStartIsMonday ||
+                !startDate ||
+                Boolean(dateError) ||
                 onlyOneLevelInCourse ||
                 planStatus === "loading"
               }
@@ -658,6 +748,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
                     value={t.title}
                     onChange={(e) => updateTask(i, { title: e.target.value })}
                     placeholder="과업 제목"
+                    autoComplete="off"
                   />
                   <textarea
                     value={t.description}
@@ -740,7 +831,7 @@ export function LearningPathWizard({ onClose }: { onClose: () => void }) {
           {confirmStatus === "error" && (
             <p className="error" role="alert">
               {confirmErrorCode === "GOAL_PERIOD_OVERLAP"
-                ? `${confirmError} 입력한 내용은 그대로 남아 있어요.`
+                ? "일정이 겹쳐 저장하지 못했어요. 위의 학습 시작일·목표 완료일을 바꾸면 다시 저장할 수 있어요. 입력한 내용은 그대로 남아 있어요."
                 : `${confirmError} 같은 저장 버튼으로 다시 시도해도 중복 저장되지 않습니다.`}
             </p>
           )}

@@ -8,15 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import clock
 from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
-from ai_schemas import AIPathRecommendation, AIPlanDraft
+from ai_schemas import AIPathRecommendation, AIPlanDraft, AIRoleIdeas
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
-from prompts import PATH_RECOMMEND_SYSTEM_PROMPT, PLAN_GENERATE_SYSTEM_PROMPT
+from prompts import PATH_RECOMMEND_SYSTEM_PROMPT, PLAN_GENERATE_SYSTEM_PROMPT, ROLE_IDEAS_SYSTEM_PROMPT
 from resources_catalog import match_references, no_match_notice
 from schemas import (
     ErrorResponse,
     PathRecommendationRequest,
     PathRecommendationResponse,
+    RoleIdeasRequest,
+    RoleIdeasResponse,
     CourseItem,
     PlanGenerateRequest,
     PlanGenerateResponse,
@@ -202,6 +204,25 @@ def _validate_week_within_target(week_start: date, target_date: date) -> None:
         raise bad_request("계획 주간이 목표 완료 희망일을 넘습니다.", {"field": "plan_week_start"})
 
 
+def _resolve_plan_period(start_date_str: str, plan_week_start: Optional[str], target_date: date) -> tuple[date, date]:
+    """F1: the user picks any start date (today or later, KST); the plan week is the Monday
+    week that contains it, derived here via clock.py. A caller-supplied plan_week_start is
+    only accepted when it agrees with that derived Monday. target_date may equal start_date.
+    Returns (start_date, week_start)."""
+    start = _parse_date(start_date_str, "start_date")
+    if start < clock.today():
+        raise bad_request("학습 시작일은 오늘 이후여야 합니다.", {"field": "start_date"})
+    if target_date < start:
+        raise bad_request("목표 완료 희망일은 학습 시작일 이후여야 합니다.", {"field": "target_date"})
+    week_start = clock.week_monday(start)
+    if plan_week_start is not None and _parse_date(plan_week_start, "plan_week_start") != week_start:
+        raise bad_request(
+            "plan_week_start가 학습 시작일이 속한 주의 월요일과 다릅니다.", {"field": "plan_week_start"}
+        )
+    _validate_week_within_target(week_start, target_date)
+    return start, week_start
+
+
 def _validate_task_time_budget(
     db,
     uid: str,
@@ -243,24 +264,34 @@ def _check_goal_period_overlap(db, uid: str, start: date, target: date) -> None:
     with another *active* goal of the same user. completed/archived goals are not compared.
 
     Called by both goal-creation paths (POST /api/plan/confirm, POST /api/goals) after all
-    other validation and right before the first write, so a rejection saves nothing.
+    other validation and right before the first write, so a rejection saves nothing. Every
+    overlapping goal is reported (F2), earliest schedule first.
     """
+    overlaps = []
     for other in db.find("goals", user_id=uid, status="active"):
         other_start = _goal_start_date(other)
         other_target = date.fromisoformat(other["target_date"])
         if start <= other_target and other_start <= target:
-            raise api_error(
-                status.HTTP_409_CONFLICT,
-                "GOAL_PERIOD_OVERLAP",
-                f"'{other['course']}' 학습({other_start.isoformat()} ~ {other_target.isoformat()})과 "
-                "기간이 겹쳐 새 학습을 만들 수 없습니다. 목표 완료일을 조정해 주세요.",
+            overlaps.append(
                 {
                     "goal_id": other["id"],
                     "course": other["course"],
                     "start_date": other_start.isoformat(),
                     "target_date": other_target.isoformat(),
-                },
+                }
             )
+    if not overlaps:
+        return
+    overlaps.sort(key=lambda o: (o["start_date"], o["target_date"]))
+    listing = ", ".join(f"'{o['course']}'({o['start_date']} ~ {o['target_date']})" for o in overlaps)
+    first = overlaps[0]
+    raise api_error(
+        status.HTTP_409_CONFLICT,
+        "GOAL_PERIOD_OVERLAP",
+        f"이 기간에 이미 {len(overlaps)}개의 학습이 있습니다: {listing}. 학습 시작일이나 목표 완료일을 조정해 주세요.",
+        # The flat fields mirror the first overlap for clients written before `overlaps` existed.
+        {**first, "overlaps": overlaps},
+    )
 
 
 def _goal_recency_key(goal: dict[str, Any]) -> tuple[str, str]:
@@ -459,6 +490,21 @@ def _validate_ai_path(parsed: AIPathRecommendation) -> None:
                 raise ValueError("수준 이름/설명이 비어 있습니다.")
 
 
+ROLE_IDEA_MAX_LENGTH = 40
+
+
+def _validate_ai_role_ideas(parsed: AIRoleIdeas) -> None:
+    roles = [r.strip() for r in parsed.suggested_roles]
+    if not 3 <= len(roles) <= 5:
+        raise ValueError("직무·목표 예시는 3개 이상 5개 이하여야 합니다.")
+    if any(not r for r in roles):
+        raise ValueError("직무·목표 예시가 비어 있습니다.")
+    if any(len(r) > ROLE_IDEA_MAX_LENGTH for r in roles):
+        raise ValueError(f"직무·목표 예시는 {ROLE_IDEA_MAX_LENGTH}자 이하여야 합니다.")
+    if len({r.lower() for r in roles}) != len(roles):
+        raise ValueError("직무·목표 예시에 중복이 있습니다.")
+
+
 def _validate_ai_plan(parsed: AIPlanDraft, max_total_minutes: int) -> None:
     total = sum(t.estimated_minutes for t in parsed.tasks)
     if total > max_total_minutes:
@@ -473,6 +519,27 @@ def _validate_ai_plan(parsed: AIPlanDraft, max_total_minutes: int) -> None:
             raise ValueError("과업 제목/설명이 비어 있습니다.")
     if not parsed.advice_title.strip() or not parsed.advice_content.strip():
         raise ValueError("조언 제목/내용이 비어 있습니다.")
+
+
+# 1a. Role / goal ideas - a light, button-triggered AI call (F5). Output is only the role list.
+@app.post(
+    "/api/path/ideas",
+    response_model=RoleIdeasResponse,
+    tags=["path"],
+    summary="1단계 보조: 분야 기준 대표 직무·목표 예시 3~5개 (참고용)",
+)
+def suggest_role_ideas(
+    payload: RoleIdeasRequest,
+    uid: str = Depends(require_consented_uid),
+    ai: AIClient = Depends(get_ai_client),
+):
+    try:
+        parsed = ai.generate(
+            ROLE_IDEAS_SYSTEM_PROMPT, {"field": payload.field}, AIRoleIdeas, validator=_validate_ai_role_ideas
+        )
+    except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
+        raise _ai_error_response(exc)
+    return RoleIdeasResponse(field=payload.field, suggested_roles=[r.strip() for r in parsed.suggested_roles])
 
 
 # 1. Path Recommendation
@@ -518,10 +585,7 @@ def generate_plan(
     if target_date < clock.today():
         raise bad_request("목표 완료 희망일은 오늘 이후여야 합니다.", {"field": "target_date"})
 
-    week_start_str = payload.plan_week_start or clock.week_monday(clock.today()).isoformat()
-    _validate_week_start(week_start_str)
-    week_start = _parse_date(week_start_str, "plan_week_start")
-    _validate_week_within_target(week_start, target_date)
+    _, week_start = _resolve_plan_period(payload.start_date, payload.plan_week_start, target_date)
     week_end = week_start + timedelta(days=6)
 
     max_total_minutes = payload.weekly_hours * 60
@@ -619,21 +683,19 @@ def confirm_plan(
     # partial save (the store layer has no multi-document transaction to roll back).
     _validate_goal_levels(goal_data)
     _validate_target_date_not_past(goal_data["target_date"])
-    _validate_week_start(payload.plan_week_start)
     target_date = _parse_date(payload.target_date, "target_date")
-    week_start = _parse_date(payload.plan_week_start, "plan_week_start")
-    _validate_week_within_target(week_start, target_date)
+    start_date, week_start = _resolve_plan_period(payload.start_date, payload.plan_week_start, target_date)
     total_minutes = sum(t.estimated_minutes for t in payload.tasks)
     if total_minutes > payload.weekly_hours * 60:
         raise bad_request("과업 총 예상 시간이 주당 가능 시간을 초과합니다.", {"field": "tasks"})
-    _check_goal_period_overlap(db, uid, week_start, target_date)
+    _check_goal_period_overlap(db, uid, start_date, target_date)
 
     now = _now_iso()
     goal = db.create(
         "goals",
         {
             **goal_data,
-            "start_date": week_start.isoformat(),
+            "start_date": start_date.isoformat(),
             "user_id": uid,
             "status": "active",
             "created_at": now,
@@ -653,7 +715,7 @@ def confirm_plan(
                 **task_data,
                 "goal_id": goal["id"],
                 "user_id": uid,
-                "plan_week_start": payload.plan_week_start,
+                "plan_week_start": week_start.isoformat(),
                 "status": "pending",
                 "order_index": idx,
                 "created_at": now,
