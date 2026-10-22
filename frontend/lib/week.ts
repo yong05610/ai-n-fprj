@@ -53,3 +53,28 @@ export function todayKSTLabel(now: Date = new Date()): string {
   const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? "";
   return `${get("year")}년 ${get("month")} ${get("day")}일 · ${get("weekday")}`;
 }
+
+function kstParts(iso: string): Record<string, string> {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date(iso));
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]));
+}
+
+/** "14:05" in Asia/Seoul for an ISO instant (chat message time). */
+export function timeKSTLabel(iso: string): string {
+  const p = kstParts(iso);
+  return `${p.hour}:${p.minute}`;
+}
+
+/** "10/22 14:05" in Asia/Seoul for an ISO instant (conversation list). */
+export function dateTimeKSTLabel(iso: string): string {
+  const p = kstParts(iso);
+  return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+}

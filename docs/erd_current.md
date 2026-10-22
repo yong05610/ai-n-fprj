@@ -90,7 +90,8 @@ erDiagram
         string id PK
         string user_id FK
         string title
-        list messages "role, content, timestamp"
+        list messages "role, content, timestamp + assistant 는 sources[{doc_id,title,source_name,url}], refused / user 는 client_request_id (Phase 6)"
+        string client_request_id "새 대화 생성 멱등 키, 선택 (Phase 6)"
         string created_at
         string updated_at
     }

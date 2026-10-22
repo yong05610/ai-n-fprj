@@ -9,6 +9,8 @@ import { Dashboard } from "@/components/Dashboard";
 import { ExecutionScreen } from "@/components/ExecutionScreen";
 import { LearningPathWizard } from "@/components/LearningPathWizard";
 import { SettingsScreen } from "@/components/SettingsScreen";
+import { TutorScreen } from "@/components/TutorScreen";
+import { type View, buildHash, parseHash } from "@/lib/viewHash";
 import { todayKSTLabel } from "@/lib/week";
 
 /**
@@ -17,9 +19,6 @@ import { todayKSTLabel } from "@/lib/week";
  * replaceState (no history entries), so the in-wizard "leave?" confirmation covers every
  * way of leaving that the app itself offers.
  */
-type View = "dashboard" | "path" | "execution" | "analysis" | "settings";
-const VIEWS: readonly View[] = ["dashboard", "path", "execution", "analysis", "settings"];
-
 type NavEntry = { view: View | null; icon: string; label: string };
 
 const USER_NAV: NavEntry[] = [
@@ -28,8 +27,8 @@ const USER_NAV: NavEntry[] = [
   { view: null, icon: "▦", label: "학습 과제 계획" }, // Phase 5D
   { view: "execution", icon: "◷", label: "학습 실행 기록" },
   { view: "analysis", icon: "▥", label: "종합 학습 분석" },
-  { view: null, icon: "◌", label: "AI 튜터" }, // Phase 6
-  { view: null, icon: "▤", label: "참고자료 보관함" }, // Phase 6
+  { view: "tutor", icon: "◌", label: "AI 튜터" },
+  { view: null, icon: "▤", label: "참고자료 보관함" }, // Phase 6B+
   { view: "settings", icon: "⚙", label: "내 정보·설정" },
 ];
 
@@ -42,10 +41,6 @@ const ADMIN_NAV: NavEntry[] = [
   { view: null, icon: "♡", label: "사용자 피드백" },
   { view: null, icon: "⚙", label: "서비스 설정" },
 ];
-
-function isView(value: string): value is View {
-  return (VIEWS as readonly string[]).includes(value);
-}
 
 function NavButton({ entry, current, onGo }: { entry: NavEntry; current: View; onGo: (v: View) => void }) {
   if (entry.view === null) {
@@ -80,8 +75,7 @@ export default function Home() {
   const leaveGuard = useRef<(() => boolean) | null>(null);
 
   useEffect(() => {
-    const fromHash = window.location.hash.replace("#", "");
-    setView(isView(fromHash) ? fromHash : "dashboard");
+    setView(parseHash(window.location.hash).view ?? "dashboard");
     setToday(todayKSTLabel());
   }, []);
 
@@ -90,7 +84,7 @@ export default function Home() {
       if (next === view) return;
       if (leaveGuard.current && !leaveGuard.current()) return;
       setView(next);
-      window.history.replaceState(null, "", `#${next}`);
+      window.history.replaceState(null, "", buildHash(next));
     },
     [view],
   );
@@ -218,12 +212,13 @@ export default function Home() {
         <main className="main">
           {view !== null && (
             <div className="page">
-              {current === "dashboard" && <Dashboard onCreatePath={() => go("path")} onOpenAnalysis={() => go("analysis")} />}
+              {current === "dashboard" && <Dashboard onCreatePath={() => go("path")} onOpenAnalysis={() => go("analysis")} onOpenTutor={() => go("tutor")} />}
               {current === "path" && (
                 <LearningPathWizard onClose={() => go("dashboard")} registerLeaveGuard={registerLeaveGuard} />
               )}
               {current === "execution" && <ExecutionScreen />}
               {current === "analysis" && <AnalysisScreen onCreatePath={() => go("path")} />}
+              {current === "tutor" && <TutorScreen />}
               {current === "settings" && <SettingsScreen />}
             </div>
           )}

@@ -37,3 +37,15 @@ class AIPlanDraft(BaseModel):
     tasks: List[AIWeeklyTask] = Field(..., min_length=1)
     advice_title: str = Field(..., min_length=1, max_length=200)
     advice_content: str = Field(..., min_length=1, max_length=4000)
+
+
+class AITutorAnswer(BaseModel):
+    """One structured tutor reply: relevance filter, answer and the reference ids it used.
+
+    `used_source_ids` are doc ids taken from the `reference_chunks` the server sent; the server
+    builds the visible source list (title, URL) itself and rejects ids it did not send.
+    """
+
+    relevant: bool
+    answer: str = ""
+    used_source_ids: List[str] = Field(default_factory=list, max_length=10)

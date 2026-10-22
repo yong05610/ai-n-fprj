@@ -56,7 +56,15 @@ function SoonLink({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function Dashboard({ onCreatePath, onOpenAnalysis }: { onCreatePath: () => void; onOpenAnalysis: () => void }) {
+export function Dashboard({
+  onCreatePath,
+  onOpenAnalysis,
+  onOpenTutor,
+}: {
+  onCreatePath: () => void;
+  onOpenAnalysis: () => void;
+  onOpenTutor: () => void;
+}) {
   const { session } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [status, setStatus] = useState<Status>("loading");
@@ -335,8 +343,8 @@ export function Dashboard({ onCreatePath, onOpenAnalysis }: { onCreatePath: () =
               <p className="kicker">AI LEARNING INSIGHT</p>
               <h3>{summary.insight.text}</h3>
               {summary.insight.notice && <p>{summary.insight.notice}</p>}
-              <button type="button" className="btn" disabled aria-disabled="true">
-                AI 튜터에게 물어보기 → (준비 중)
+              <button type="button" className="btn" onClick={onOpenTutor}>
+                AI 튜터에게 물어보기 →
               </button>
             </section>
             <section className="card" style={{ marginTop: 13 }}>

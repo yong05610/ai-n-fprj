@@ -8,10 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import clock
 from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
-from ai_schemas import AIPathRecommendation, AIPlanDraft, AIRoleIdeas
+from ai_schemas import AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
-from prompts import PATH_RECOMMEND_SYSTEM_PROMPT, PLAN_GENERATE_SYSTEM_PROMPT, ROLE_IDEAS_SYSTEM_PROMPT
+import rag
+import tutor
+from prompts import (
+    PATH_RECOMMEND_SYSTEM_PROMPT,
+    PLAN_GENERATE_SYSTEM_PROMPT,
+    ROLE_IDEAS_SYSTEM_PROMPT,
+    TUTOR_SYSTEM_PROMPT,
+)
 from resources_catalog import match_references, no_match_notice
 from schemas import (
     ErrorResponse,
@@ -1171,17 +1178,81 @@ def finish_timer(
 
 
 # 6. Summaries
+RECENT_REFLECTIONS_LIMIT = 5
+
+
+def _learning_context(db, uid: str, keywords: Optional[str]):
+    """What the tutor (and GET /api/data/summary) knows about the user: every *active* learning
+    (not only users.active_goal_id) and at most RECENT_REFLECTIONS_LIMIT reflections.
+
+    Reflection rule (documented for 6.8): only reflections of tasks that belong to an active
+    learning are considered; those matching the question keywords come first, the rest are
+    filled newest first (study date, then creation time). Reflections are read from storage on
+    every call, so an edited reflection shows its latest text and a deleted one is gone.
+    One user-scoped read per collection, grouped in memory.
+    """
+    goals = _active_goals_sorted(db, uid)
+    tasks_by_goal, logs_by_goal = _tasks_and_logs_by_goal(db, uid)
+    user = db.get("users", uid) or {}
+    current = next((g for g in goals if g["id"] == user.get("active_goal_id")), None)
+
+    lines = []
+    for g in goals:
+        done, total, pct = _goal_progress(tasks_by_goal.get(g["id"], []))
+        lines.append(
+            f"{g['field']} · {g['course']} | 현재 {g['current_level_name']} → 목표 {g['target_level_name']} "
+            f"| 진행률 {pct}% ({done}/{total}개 과제)"
+        )
+    summary = "\n".join(lines) if lines else "진행 중인 학습이 없습니다."
+
+    active_ids = {g["id"] for g in goals}
+    task_by_id = {t["id"]: t for gid, ts in tasks_by_goal.items() if gid in active_ids for t in ts}
+    log_by_id = {log["id"]: log for logs in logs_by_goal.values() for log in logs}
+    query_tokens = rag.topic_tokens(keywords or "")
+
+    candidates = []
+    for r in db.find("reflections", user_id=uid):
+        task = task_by_id.get(r["task_id"])
+        if task is None:
+            continue
+        log = log_by_id.get(r["study_log_id"])
+        study_date = log["study_date"] if log else r["created_at"][:10]
+        haystack = " ".join([r["content"], " ".join(r.get("tags", [])), task["title"]])
+        matched = rag.overlaps(query_tokens, haystack)
+        candidates.append((matched, study_date, r["created_at"], r, task))
+    candidates.sort(key=lambda c: (c[0], c[1], c[2]), reverse=True)
+    reflections = [
+        {
+            "id": r["id"],
+            "study_date": study_date,
+            "task_title": task["title"],
+            "content": r["content"],
+            "tags": r.get("tags", []),
+        }
+        for _, study_date, _, r, task in candidates[:RECENT_REFLECTIONS_LIMIT]
+    ]
+    return summary, (current or {}).get("field"), (current or {}).get("course"), reflections
+
+
 @app.get(
     "/api/data/summary",
     response_model=LearningDataSummaryResponse,
     tags=["summary"],
     summary="AI 튜터 컨텍스트용 학습 요약 및 최근 회고(최대 5건) 조회",
 )
-async def get_data_summary(
-    keywords: Optional[str] = Query(None, description="질문 관련 회고 검색 키워드"),
+def get_data_summary(
+    keywords: Optional[str] = Query(None, max_length=200, description="질문 관련 회고 검색 키워드 (최대 200자)"),
     uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
 ):
-    _not_implemented()
+    summary, active_field, active_course, reflections = _learning_context(db, uid, keywords)
+    return LearningDataSummaryResponse(
+        user_id=uid,
+        learning_summary=summary,
+        active_field=active_field,
+        active_course=active_course,
+        recent_reflections=reflections,
+    )
 
 
 DASHBOARD_WEEKDAY_LABELS = ("월", "화", "수", "목", "금", "토", "일")
@@ -1400,28 +1471,59 @@ def get_analytics_overview(uid: str = Depends(require_consented_uid), db=Depends
 
 
 # 7. Conversations (AI Tutor - 단일화된 튜터 호출 엔드포인트)
+def _conversation_out(conv: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": conv["id"],
+        "user_id": conv["user_id"],
+        "title": conv["title"],
+        "messages": conv.get("messages", []),
+        "created_at": conv["created_at"],
+        "updated_at": conv["updated_at"],
+    }
+
+
 @app.post(
     "/api/conversations",
     response_model=ConversationDetailResponse,
     status_code=status.HTTP_201_CREATED,
     tags=["conversations"],
-    summary="새 튜터 대화 세션 생성",
+    summary="새 튜터 대화 세션 생성 (client_request_id 로 멱등)",
 )
-async def create_conversation(
-    payload: ConversationCreateRequest,
+def create_conversation(
+    response: Response,
+    payload: Optional[ConversationCreateRequest] = None,
     uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
 ):
-    _not_implemented()
+    payload = payload or ConversationCreateRequest()
+    existing = _find_by_client_request_id(db, "conversations", uid, payload.client_request_id)
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return _conversation_out(existing)
+    now = _now_iso()
+    conv = db.create(
+        "conversations",
+        {
+            "user_id": uid,
+            "title": (payload.title or "").strip() or tutor.DEFAULT_TITLE,
+            "messages": [],
+            "client_request_id": payload.client_request_id,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    return _conversation_out(conv)
 
 
 @app.get(
     "/api/conversations",
     response_model=List[ConversationListItem],
     tags=["conversations"],
-    summary="최근 대화 세션 목록 조회 (메시지 본문 제외)",
+    summary="최근 대화 세션 목록 조회 (최근 갱신순, 최대 50건, 메시지 본문 제외)",
 )
-async def list_conversations(uid: str = Depends(require_consented_uid)):
-    _not_implemented()
+def list_conversations(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    convs = sorted(db.find("conversations", user_id=uid), key=lambda c: c["updated_at"], reverse=True)
+    return convs[: tutor.CONVERSATION_LIST_LIMIT]
 
 
 @app.get(
@@ -1430,25 +1532,110 @@ async def list_conversations(uid: str = Depends(require_consented_uid)):
     tags=["conversations"],
     summary="대화 세션 상세 및 전체 메시지 이력 조회",
 )
-async def get_conversation(
-    conversation_id: str,
-    uid: str = Depends(require_consented_uid),
-):
-    _not_implemented()
+def get_conversation(conversation_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    return _conversation_out(_get_owned(db, "conversations", conversation_id, uid))
+
+
+def _stored_pair(conv: dict[str, Any], client_request_id: str):
+    """The (user, assistant) messages already saved for this idempotency key, if any."""
+    messages = conv.get("messages", [])
+    for i, m in enumerate(messages):
+        if m["role"] == "user" and m.get("client_request_id") == client_request_id and i + 1 < len(messages):
+            return m, messages[i + 1]
+    return None
 
 
 @app.post(
     "/api/conversations/{conversation_id}/messages",
     response_model=SendMessageResponse,
+    status_code=status.HTTP_201_CREATED,
     tags=["conversations"],
-    summary="튜터 질의 전송 및 응답 수신 (튜터 대화 단일 엔드포인트)",
+    summary="튜터 질의 전송 및 응답 수신 (학습 요약·회고 + 검토된 자료 검색, AI 1회 호출, 멱등)",
 )
-async def send_message(
+def send_message(
     conversation_id: str,
     payload: SendMessageRequest,
+    response: Response,
     uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
+    ai: AIClient = Depends(get_ai_client),
 ):
-    _not_implemented()
+    conv = _get_owned(db, "conversations", conversation_id, uid)
+
+    # Idempotency first: a retry of an already saved question returns it instead of asking again.
+    stored = _stored_pair(conv, payload.client_request_id)
+    if stored is not None:
+        response.status_code = status.HTTP_200_OK
+        return SendMessageResponse(
+            user_message=stored[0],
+            assistant_message=stored[1],
+            conversation_title=conv["title"],
+            refused=bool(stored[1].get("refused")),
+        )
+
+    history = conv.get("messages", [])
+    if len(history) + 2 > tutor.MAX_MESSAGES_PER_CONVERSATION:
+        raise api_error(
+            status.HTTP_409_CONFLICT,
+            "CONVERSATION_FULL",
+            "이 대화가 너무 길어졌어요. 새 대화를 시작해 주세요.",
+        )
+
+    question = payload.content.strip()
+    # 1) summary + reflections (all active learnings), 2) reference search, 3) one AI call.
+    summary, _, _, reflections = _learning_context(db, uid, question)
+    retrieved = rag.search(question)
+    user_payload = {
+        "question": question,
+        "learning_summary": summary,
+        "recent_reflections": [
+            {"study_date": r["study_date"], "task_title": r["task_title"], "content": r["content"], "tags": r["tags"]}
+            for r in reflections
+        ],
+        "reference_chunks": [
+            {"source_id": c.doc_id, "chunk_id": c.chunk_id, "title": c.title, "text": c.text} for c in retrieved
+        ],
+        "conversation_history": [{"role": m["role"], "content": m["content"]} for m in history[-tutor.HISTORY_LIMIT :]],
+    }
+    try:
+        answer = ai.generate(
+            TUTOR_SYSTEM_PROMPT,
+            user_payload,
+            AITutorAnswer,
+            validator=lambda parsed: tutor.validate_tutor_answer(parsed, retrieved),
+        )
+    except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
+        raise _ai_error_response(exc)  # nothing has been saved
+
+    refused = not answer.relevant
+    if refused:
+        content, sources = tutor.REFUSAL_TEXT, []
+    else:
+        sources = tutor.sources_for(answer.used_source_ids, retrieved)
+        content = answer.answer.strip()
+        if not sources:
+            content = f"{content}\n\n{tutor.NO_SOURCE_NOTE}"
+
+    now = _now_iso()
+    user_message = {
+        "role": "user",
+        "content": question,
+        "timestamp": now,
+        "sources": [],
+        "client_request_id": payload.client_request_id,
+    }
+    assistant_message = {"role": "assistant", "content": content, "timestamp": now, "sources": sources, "refused": refused}
+    title = conv["title"]
+    if not history and title == tutor.DEFAULT_TITLE:
+        title = tutor.make_title(question)
+    db.update(
+        "conversations",
+        conversation_id,
+        {"messages": [*history, user_message, assistant_message], "title": title, "updated_at": now},
+    )
+    return SendMessageResponse(
+        user_message=user_message, assistant_message=assistant_message, conversation_title=title, refused=refused
+    )
 
 
 # 8. Resources

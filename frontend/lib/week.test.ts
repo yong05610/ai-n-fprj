@@ -44,3 +44,12 @@ test("todayKSTLabel uses the Seoul calendar day, not the UTC day", () => {
   assert.equal(todayKSTLabel(new Date("2026-10-21T16:00:00Z")), "2026년 10월 22일 · 목요일");
   assert.equal(todayKSTLabel(new Date("2026-10-17T03:00:00Z")), "2026년 10월 17일 · 토요일");
 });
+
+import { dateTimeKSTLabel, timeKSTLabel } from "./week";
+
+test("message time labels use Asia/Seoul, including across midnight", () => {
+  assert.equal(timeKSTLabel("2026-10-22T05:05:00Z"), "14:05");
+  assert.equal(dateTimeKSTLabel("2026-10-22T05:05:00Z"), "10/22 14:05");
+  // 15:30 UTC is already the next day in Seoul.
+  assert.equal(dateTimeKSTLabel("2026-10-21T15:30:00Z"), "10/22 00:30");
+});

@@ -262,3 +262,39 @@ ul { margin: 0; padding-left: 18px; color: #586277; line-height: 1.7; font-size:
 
 .soon-note { font-size: 9px; color: #a8aebd; margin-left: 4px; font-weight: 700; }
 .stat strong.long { font-size: 16px; line-height: 1.35; }
+
+/* AI tutor (Phase 6): ported from the mockup's page-tutor */
+.chat { min-height: 385px; display: flex; flex-direction: column; }
+.tutor-layout { grid-template-columns: 220px minmax(300px, 1fr) 250px; gap: 13px; align-items: start; }
+.conversation-panel { padding: 14px; }
+.conversation-panel .card-head { align-items: flex-start; }
+.conversation-panel .btn { white-space: nowrap; }
+.conversation-list { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.conversation-item { width: 100%; min-width: 0; overflow: hidden; text-align: left; border: 1px solid transparent; border-radius: 10px; padding: 10px; background: #f7f8fc; color: var(--ink); cursor: pointer; }
+.conversation-item:hover:not(:disabled) { border-color: #d9def4; }
+.conversation-item:disabled { cursor: default; opacity: .7; }
+.conversation-item.active { background: #eef1ff; border-color: #c9d1ff; }
+.conversation-item strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.conversation-item span { display: block; margin-top: 4px; color: var(--muted); font-size: 8px; }
+.conversation-note { line-height: 1.5; margin: 12px 2px 0; }
+.context-block { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.context-block p { margin: 9px 0 0; font-size: 10px; line-height: 1.55; }
+.context-block .small { font-size: 9px; }
+.tutor-context h3 { margin: 15px 0 9px; font-size: 12px; }
+.messages { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 6px 0 15px; max-height: 520px; overflow-y: auto; }
+.bubble { max-width: 82%; padding: 10px 12px; border-radius: 12px; background: #f1f2f8; font-size: 10px; align-self: flex-start; }
+.bubble.user { background: var(--blue); color: #fff; align-self: flex-end; }
+.bubble small { display: block; margin-top: 6px; font-size: 8px; color: #7e879b; }
+.bubble.user small { color: #e1e5ff; }
+.composer { border-top: 1px solid var(--line); padding-top: 12px; display: flex; gap: 7px; }
+.composer input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; font-size: 10px; }
+@media (max-width: 1050px) {
+  .tutor-layout { grid-template-columns: 1fr; }
+  .conversation-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .chat { min-height: 350px; }
+}
+.code-block { margin: 6px 0; padding: 8px 10px; border-radius: 8px; background: #e9ebf6; color: #2a3350; font: 10px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; overflow-x: auto; }
+.bubble code { padding: 1px 4px; border-radius: 4px; background: #e9ebf6; font: 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.bubble.user code { background: #ffffff30; }

@@ -549,10 +549,21 @@ class AnalyticsOverviewResponse(BaseModel):
 
 # --- 7. Conversations (AI Tutor) ---
 
+class SourceItem(BaseModel):
+    doc_id: str
+    title: str
+    source_name: str
+    url: Optional[str] = None
+
+
 class MessageItem(BaseModel):
     role: str = Field(..., description="user 또는 assistant")
     content: str = Field(..., description="메시지 내용")
     timestamp: str = Field(..., description="ISO 8601 UTC")
+    sources: List[SourceItem] = Field(
+        default_factory=list,
+        description="assistant 메시지에서 답변에 실제 쓴 참고자료. 서버가 검색된 자료에서 만들며 AI 가 만들지 않는다",
+    )
 
 
 class ConversationListItem(BaseModel):
@@ -572,19 +583,31 @@ class ConversationDetailResponse(BaseModel):
 
 
 class ConversationCreateRequest(BaseModel):
-    title: Optional[str] = Field("새 학습 대화", description="세션 제목")
+    title: Optional[str] = Field("새 대화", max_length=100, description="세션 제목 (생략하면 '새 대화', 첫 질문으로 자동 설정)")
+    client_request_id: Optional[str] = Field(
+        None, max_length=100, description="같은 값으로 재요청하면 새 대화를 또 만들지 않고 기존 대화를 돌려준다"
+    )
 
 
 class SendMessageRequest(BaseModel):
-    content: str = Field(..., min_length=1, description="사용자 질문 내용")
+    content: str = Field(..., min_length=1, max_length=1000, description="사용자 질문 내용 (1~1000자)")
+    client_request_id: str = Field(
+        ..., min_length=1, max_length=100, description="멱등 키. 같은 값으로 재요청하면 중복 저장 없이 기존 결과를 돌려준다"
+    )
+
+    @field_validator("content")
+    @classmethod
+    def _content_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("질문은 공백만으로 구성될 수 없습니다.")
+        return value
 
 
 class SendMessageResponse(BaseModel):
     user_message: MessageItem
     assistant_message: MessageItem
-    sources_used: List[str] = Field(default_factory=list, description="답변에 활용된 참고자료명")
-    reflections_used: List[str] = Field(default_factory=list, description="답변에 활용된 본인 회고 요약")
-    is_fallback: bool = Field(False, description="자료 미검색 일반 답변 여부")
+    conversation_title: str = Field(..., description="저장 후의 대화 제목 (첫 질문이면 방금 정해진 제목)")
+    refused: bool = Field(False, description="학습과 무관한 질문이라 서버의 고정 문구로 거절한 경우 true")
 
 
 # --- 8. Resources ---

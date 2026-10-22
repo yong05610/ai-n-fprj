@@ -163,7 +163,8 @@ erDiagram
         string id PK
         string user_id FK "users.uid"
         string title "대화 세션 제목"
-        list messages "메시지 객체 배열 [role, content, timestamp]"
+        list messages "메시지 객체 배열 [role, content, timestamp, sources(assistant 의 참고자료), client_request_id(user 의 멱등 키), refused(assistant)]"
+        string client_request_id "새 대화 생성 멱등 키, 선택"
         timestamp created_at
         timestamp updated_at
     }
@@ -314,13 +315,13 @@ erDiagram
 | `GET` | `/api/timer/active` | 활성 타이머 조회 (새로고침 복원용) | `users.active_timer` |
 | `POST` | `/api/timer/finish` | 타이머 종료, 학습 기록으로 저장 | `study-logs` |
 | `POST` | `/api/timer/cancel` | 활성 타이머 취소 (기록 생성 없음) | `users.active_timer` |
-| `GET` | `/api/data/summary` | **AI 튜터 컨텍스트용** 학습 요약 및 최근 회고(최대 5건) 집계 | `summary` |
+| `GET` | `/api/data/summary` | **AI 튜터 컨텍스트용** 진행 중인 모든 학습의 요약(`learning_summary`, 줄바꿈으로 학습 구분) 및 최근 회고(최대 5건, `keywords` 일치 우선 후 최신순, 진행 중 학습의 과제 회고만) | `summary` |
 | `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트(최근 학습=active_goal_id 기준) + `goals_overview`(진행 중인 모든 학습의 일정·진행률) | `summary` |
 | `GET` | `/api/analytics/overview` | **종합 학습 분석 화면용** 진행 중 학습별 일정·진행률·이번 주 요일별 학습 분(읽기 전용, AI 호출 없음) | `summary` |
-| `POST` | `/api/conversations` | 새 튜터 대화 세션 생성 | `conversations` |
-| `GET` | `/api/conversations` | 최근 튜터 대화 세션 목록 조회 (메시지 제외) | `conversations` |
-| `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 | `conversations` |
-| `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화)** | `conversations` |
+| `POST` | `/api/conversations` | 새 튜터 대화 세션 생성(제목 "새 대화", `client_request_id` 로 멱등: 재요청 200) | `conversations` |
+| `GET` | `/api/conversations` | 최근 갱신순 튜터 대화 목록 조회 (최대 50건, 메시지 제외) | `conversations` |
+| `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 (assistant 메시지의 `sources`: doc_id, title, source_name, url) | `conversations` |
+| `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화).** 요청 `{content(1~1000자), client_request_id}`, 응답 `{user_message, assistant_message, conversation_title, refused}`. 같은 `client_request_id` 재요청은 중복 저장 없이 200. AI 1회 호출(학습 관련 판정 + 답변 + 사용 자료), 실패 시 저장 없음(502/503/504), 대화 200메시지 초과 409 `CONVERSATION_FULL` | `conversations` |
 | `GET` | `/api/resources` | 사전 검토된 읽기 전용 참고자료 목록 검색·조회 | `resources` |
 | `GET` | `/api/user/profile` | 익명 사용자 프로필 조회 | `user` |
 | `PATCH` | `/api/user/profile` | 사용자 프로필 수정. `active_goal_id` 변경(학습 전환)은 본인 소유이고 status=active 인 목표만 허용 | `user` |

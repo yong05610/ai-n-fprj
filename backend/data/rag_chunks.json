@@ -1,0 +1,689 @@
+[
+  {
+    "doc_id": "doc_001",
+    "chunks": [
+      {
+        "id": "doc_001_c1",
+        "text": "파이썬 인터프리터는 대화형 모드에서 한 줄씩 입력하고 바로 결과를 확인할 수 있습니다. 주석은 # 로 시작하고, 변수는 = 로 값을 대입하며 따로 선언하지 않습니다. 변수에 담긴 값의 자료형은 실행 중에 정해집니다. 작은 식을 직접 입력해 보며 익히는 방식이 기본 문법 학습의 출발점입니다.",
+        "keywords": [
+          "인터프리터",
+          "주석",
+          "변수",
+          "대입",
+          "대화형"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_001_c2",
+        "text": "숫자는 정수(int)와 실수(float)가 기본이며 + - * / 연산을 쓸 수 있습니다. / 는 항상 실수 결과를, // 는 몫을, % 는 나머지를, ** 는 거듭제곱을 계산합니다. 문자열은 작은따옴표나 큰따옴표로 감싸고, 인덱스와 슬라이스로 일부를 꺼낼 수 있으며 한 번 만든 문자열은 바꿀 수 없습니다. f-string 으로 값을 문자열에 끼워 넣을 수 있습니다.",
+        "keywords": [
+          "숫자",
+          "문자열",
+          "슬라이스",
+          "f-string",
+          "연산자"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_001_c3",
+        "text": "흐름 제어에는 if / elif / else 조건문과 for, while 반복문이 있습니다. 파이썬의 for 는 리스트나 문자열 같은 시퀀스의 항목을 차례로 꺼내며, 횟수가 필요하면 range() 를 함께 씁니다. break 는 반복을 끝내고 continue 는 다음 반복으로 넘어갑니다. 코드 블록은 중괄호가 아니라 들여쓰기로 구분합니다.",
+        "keywords": [
+          "조건문",
+          "반복문",
+          "for",
+          "while",
+          "들여쓰기",
+          "range"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_001_c4",
+        "text": "내장 함수 int(), float(), str() 로 값의 자료형을 바꿀 수 있습니다. 예를 들어 입력받은 문자열 \"3\" 은 int(\"3\") 으로 숫자 3 이 됩니다. 숫자로 바꿀 수 없는 문자열을 넘기면 ValueError 가 발생하므로, 변환 전에 값을 확인하거나 예외 처리를 함께 쓰면 안전합니다.",
+        "keywords": [
+          "자료형 변환",
+          "int",
+          "float",
+          "str",
+          "ValueError"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_001_c5",
+        "text": "실행 중 오류는 예외로 알려지며 try / except 로 처리할 수 있습니다. try 블록에서 오류가 나면 해당 except 블록이 실행되고, 오류가 없을 때만 실행할 코드는 else, 항상 실행할 코드는 finally 에 둡니다. 오류 메시지의 마지막 줄에 예외 종류가 나오므로 원인을 찾는 첫 단서가 됩니다.",
+        "keywords": [
+          "예외",
+          "try",
+          "except",
+          "오류",
+          "finally"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_002",
+    "chunks": [
+      {
+        "id": "doc_002_c1",
+        "text": "리스트는 여러 값을 순서대로 담는 변경 가능한 자료형입니다. append 는 끝에 추가, extend 는 다른 리스트를 이어 붙이기, insert 는 지정 위치에 삽입, remove 는 값으로 삭제, pop 은 위치로 꺼내기, sort 와 reverse 는 정렬과 뒤집기입니다. 인덱스와 슬라이스로 일부를 읽거나 바꿀 수 있습니다.",
+        "keywords": [
+          "리스트",
+          "append",
+          "pop",
+          "슬라이스",
+          "list"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_002_c2",
+        "text": "리스트는 스택처럼 쓰기 좋습니다. append 로 쌓고 pop 으로 마지막 항목을 꺼내면 나중에 넣은 것이 먼저 나옵니다. 반면 큐처럼 앞에서 꺼내는 작업은 리스트에서 느리므로 collections.deque 를 쓰는 편이 좋습니다. 상황에 맞는 자료구조를 고르는 것이 알고리즘 학습의 기본입니다.",
+        "keywords": [
+          "스택",
+          "큐",
+          "deque",
+          "자료구조",
+          "알고리즘"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_002_c3",
+        "text": "리스트 컴프리헨션은 반복문으로 리스트를 만드는 간결한 표기입니다. [x * x for x in range(5)] 처럼 쓰고 뒤에 if 조건을 붙여 걸러낼 수도 있습니다. 코드가 짧아지지만 너무 복잡해지면 일반 for 문으로 풀어 쓰는 편이 읽기 쉽습니다.",
+        "keywords": [
+          "컴프리헨션",
+          "리스트",
+          "for",
+          "조건",
+          "range"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_002_c4",
+        "text": "튜플은 여러 값을 묶는 변경 불가능한 자료형이며, 값을 한 번에 풀어 받는 언패킹이 가능합니다. 집합(set)은 순서 없이 중복을 허용하지 않는 모음으로, 중복 제거와 합집합, 교집합, 차집합 같은 연산에 적합합니다. 빈 집합은 {} 가 아니라 set() 으로 만듭니다.",
+        "keywords": [
+          "튜플",
+          "집합",
+          "set",
+          "언패킹",
+          "중복"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_002_c5",
+        "text": "딕셔너리는 키와 값을 짝지어 저장하며, 키는 숫자나 문자열 같은 변경 불가능한 값이어야 합니다. d[키] 로 값을 읽고 쓰며, 없는 키를 읽으면 KeyError 가 발생합니다. in 으로 키 존재를 확인하고 items() 로 키와 값을 함께 순회할 수 있습니다.",
+        "keywords": [
+          "딕셔너리",
+          "dict",
+          "키",
+          "KeyError",
+          "items"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_002_c6",
+        "text": "반복 기법으로 enumerate 는 인덱스와 값을 함께, zip 은 여러 시퀀스를 짝지어, sorted 는 원본을 두고 정렬된 새 리스트를, reversed 는 거꾸로 순회합니다. 반복 중인 리스트를 직접 수정하기보다 새 리스트를 만드는 편이 안전합니다.",
+        "keywords": [
+          "enumerate",
+          "zip",
+          "sorted",
+          "반복",
+          "순회"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_003",
+    "chunks": [
+      {
+        "id": "doc_003_c1",
+        "text": "함수는 def 키워드, 이름, 괄호 안의 매개변수, 콜론으로 정의하고 본문은 들여씁니다. 본문 첫 줄에 문자열을 두면 독스트링이 되어 함수 설명으로 쓰입니다. 정의만으로는 실행되지 않고 이름 뒤에 괄호를 붙여 호출할 때 실행됩니다.",
+        "keywords": [
+          "함수",
+          "def",
+          "매개변수",
+          "독스트링",
+          "호출"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_003_c2",
+        "text": "return 으로 값을 돌려주며, return 이 없거나 값 없이 쓰면 None 이 반환됩니다. 함수 안에서 대입한 변수는 기본적으로 지역 변수라서 함수 밖의 같은 이름 변수를 바꾸지 않습니다. 바깥 값을 읽는 것은 되지만, 바꾸려면 global 이나 nonlocal 선언이 필요합니다.",
+        "keywords": [
+          "return",
+          "None",
+          "지역 변수",
+          "전역",
+          "global"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_003_c3",
+        "text": "매개변수에 기본값을 줄 수 있으며 기본값은 함수를 정의하는 시점에 한 번만 계산됩니다. 그래서 기본값으로 빈 리스트 같은 변경 가능한 객체를 쓰면 호출 사이에 내용이 공유되는 문제가 생깁니다. None 을 기본값으로 두고 함수 안에서 새로 만드는 방식이 권장됩니다.",
+        "keywords": [
+          "기본값",
+          "매개변수",
+          "변경 가능",
+          "None",
+          "인자"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_003_c4",
+        "text": "인자는 위치로 또는 이름=값 형태의 키워드로 넘길 수 있습니다. *args 는 남는 위치 인자를 튜플로, **kwargs 는 남는 키워드 인자를 딕셔너리로 받습니다. 매개변수 목록의 / 와 * 로 위치 전용과 키워드 전용 인자를 구분할 수 있습니다.",
+        "keywords": [
+          "키워드 인자",
+          "args",
+          "kwargs",
+          "위치 인자",
+          "인자"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_003_c5",
+        "text": "lambda 는 이름 없는 작은 함수를 식 하나로 만듭니다. sorted 의 key 처럼 짧은 함수를 넘길 때 편리합니다. 함수 어노테이션으로 매개변수와 반환값의 자료형 힌트를 적을 수 있지만 실행에는 영향을 주지 않는 정보입니다.",
+        "keywords": [
+          "lambda",
+          "람다",
+          "어노테이션",
+          "key",
+          "함수"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_004",
+    "chunks": [
+      {
+        "id": "doc_004_c1",
+        "text": "자바스크립트는 웹 페이지에 동작을 더하는 프로그래밍 언어입니다. 웹 페이지에서 HTML 은 구조, CSS 는 모양, 자바스크립트는 버튼 클릭에 반응하거나 내용을 바꾸는 동작을 맡습니다. 브라우저에서 바로 실행되므로 작은 예제를 만들어 결과를 눈으로 확인하며 배우기 좋습니다.",
+        "keywords": [
+          "자바스크립트",
+          "JavaScript",
+          "HTML",
+          "CSS",
+          "브라우저"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_004_c2",
+        "text": "변수는 let 과 const 로 선언합니다. let 은 다시 대입할 수 있고 const 는 한 번 정한 뒤 다시 대입할 수 없습니다. 기본 자료형에는 숫자, 문자열, 불리언이 있고, 여러 값을 담는 배열과 이름으로 값을 묶는 객체가 있습니다. 가능하면 const 를 먼저 쓰고 바뀌어야 할 때만 let 을 쓰는 습관이 좋습니다.",
+        "keywords": [
+          "변수",
+          "let",
+          "const",
+          "배열",
+          "객체"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_004_c3",
+        "text": "문자열은 백틱(`)으로 감싼 템플릿 리터럴에 ${식} 을 넣어 값을 끼워 넣을 수 있습니다. 배열에는 push 로 끝에 추가, pop 으로 끝에서 꺼내기, 길이를 나타내는 length 같은 속성과 메서드가 있습니다. 비교는 값과 자료형까지 확인하는 === 를 쓰는 것이 안전합니다.",
+        "keywords": [
+          "템플릿 리터럴",
+          "문자열",
+          "push",
+          "배열",
+          "비교"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_004_c4",
+        "text": "함수는 function 키워드나 화살표 표기로 만들고, 사용자의 클릭 같은 이벤트에는 addEventListener 로 반응할 함수를 연결합니다. 이벤트가 일어나면 연결해 둔 함수가 실행됩니다. 함수와 이벤트를 익히면 화면이 사용자 입력에 반응하는 기본 구조를 만들 수 있습니다.",
+        "keywords": [
+          "함수",
+          "이벤트",
+          "addEventListener",
+          "화살표",
+          "클릭"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_004_c5",
+        "text": "코드가 기대대로 동작하지 않을 때는 브라우저 개발자 도구의 콘솔에서 오류 메시지를 확인합니다. console.log 로 중간 값을 출력해 어느 줄에서 값이 달라지는지 좁혀 가는 것이 기본적인 디버깅 방법입니다. 오류 메시지에 적힌 줄 번호와 종류가 첫 단서입니다.",
+        "keywords": [
+          "디버깅",
+          "console.log",
+          "콘솔",
+          "오류",
+          "개발자 도구"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_005",
+    "chunks": [
+      {
+        "id": "doc_005_c1",
+        "text": "동기 코드는 앞 작업이 끝나야 다음 줄이 실행됩니다. 서버에서 데이터를 받아오는 것처럼 오래 걸리는 작업을 동기로 기다리면 화면이 멈춘 것처럼 보입니다. 비동기 프로그래밍은 오래 걸리는 작업을 시작해 두고 그동안 다른 일을 하다가 끝나면 결과를 처리하는 방식입니다.",
+        "keywords": [
+          "비동기",
+          "동기",
+          "대기",
+          "비동기 프로그래밍",
+          "화면 멈춤"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_005_c2",
+        "text": "setTimeout 은 일정 시간 뒤에 한 번, setInterval 은 일정 간격마다 반복해서 함수를 실행합니다. 예전에는 작업이 끝난 뒤 실행할 함수를 콜백으로 넘겼는데, 콜백 안에 콜백이 겹치면 코드가 읽기 어려워집니다. 이를 개선하려고 프로미스가 도입되었습니다.",
+        "keywords": [
+          "setTimeout",
+          "setInterval",
+          "콜백",
+          "타이머",
+          "콜백 지옥"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_005_c3",
+        "text": "프로미스는 나중에 끝날 작업의 결과를 나타내는 객체이며 대기, 이행, 거부 상태가 있습니다. then 으로 성공 결과를, catch 로 실패를 처리하고, 여러 then 을 이어 붙여 순서를 표현할 수 있습니다. fetch 는 프로미스를 반환하는 대표적인 함수입니다.",
+        "keywords": [
+          "프로미스",
+          "Promise",
+          "then",
+          "catch",
+          "fetch"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_005_c4",
+        "text": "async 함수는 항상 프로미스를 반환하고, 그 안에서 await 을 쓰면 프로미스가 끝날 때까지 기다린 뒤 결과 값을 얻습니다. 동기 코드처럼 위에서 아래로 읽혀 이해하기 쉽습니다. 오류는 try / catch 로 처리합니다. await 은 async 함수 안에서 쓰는 것이 기본입니다.",
+        "keywords": [
+          "async",
+          "await",
+          "try",
+          "프로미스",
+          "비동기 함수"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_005_c5",
+        "text": "서로 영향을 주지 않는 여러 비동기 작업은 하나씩 기다리지 말고 Promise.all 로 함께 시작하면 전체 시간이 줄어듭니다. 하나라도 거부되면 Promise.all 도 거부되므로 실패 처리를 함께 고려해야 합니다. 순서가 필요한 작업만 차례로 await 합니다.",
+        "keywords": [
+          "Promise.all",
+          "병렬",
+          "await",
+          "동시",
+          "비동기"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_006",
+    "chunks": [
+      {
+        "id": "doc_006_c1",
+        "text": "SQL 은 관계형 데이터베이스에서 데이터를 조회하고 바꾸는 표준 질의 언어입니다. 데이터는 행과 열로 이루어진 테이블에 저장되고, 열은 항목, 행은 하나의 기록에 해당합니다. 명령은 대소문자를 구분하지 않지만 키워드를 대문자로 쓰는 관례가 많습니다.",
+        "keywords": [
+          "SQL",
+          "테이블",
+          "데이터베이스",
+          "행",
+          "열"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_006_c2",
+        "text": "SELECT 열이름 FROM 테이블 로 원하는 열만 조회하고, SELECT * 는 모든 열을 가져옵니다. SELECT DISTINCT 는 중복된 값을 한 번씩만 보여 줍니다. 필요한 열만 고르는 습관이 결과를 이해하기 쉽게 만듭니다.",
+        "keywords": [
+          "SELECT",
+          "FROM",
+          "DISTINCT",
+          "조회",
+          "쿼리"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_006_c3",
+        "text": "WHERE 로 조건에 맞는 행만 걸러냅니다. = , > , < 같은 비교 연산자와 AND, OR, NOT 으로 조건을 결합하고, LIKE 로 문자열 패턴을, IN 으로 여러 값 중 하나를, BETWEEN 으로 범위를 검사합니다.",
+        "keywords": [
+          "WHERE",
+          "조건",
+          "LIKE",
+          "IN",
+          "BETWEEN"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_006_c4",
+        "text": "ORDER BY 로 결과를 정렬하며 기본은 오름차순(ASC), 내림차순은 DESC 를 붙입니다. 가져올 행 수를 제한하는 문법은 데이터베이스마다 다르며 MySQL 은 LIMIT, SQL Server 는 TOP 을 씁니다.",
+        "keywords": [
+          "ORDER BY",
+          "정렬",
+          "LIMIT",
+          "ASC",
+          "DESC"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_006_c5",
+        "text": "INSERT INTO 로 새 행을 넣고, UPDATE 로 값을 바꾸고, DELETE 로 행을 지웁니다. UPDATE 와 DELETE 에 WHERE 를 빼면 테이블의 모든 행이 바뀌거나 지워지므로 실행 전에 조건을 꼭 확인해야 합니다.",
+        "keywords": [
+          "INSERT",
+          "UPDATE",
+          "DELETE",
+          "WHERE",
+          "데이터 변경"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_006_c6",
+        "text": "COUNT, SUM, AVG, MIN, MAX 는 여러 행을 하나의 값으로 요약하는 집계 함수입니다. GROUP BY 와 함께 쓰면 그룹별로 계산할 수 있고, JOIN 은 공통된 열을 기준으로 여러 테이블의 행을 연결합니다. 데이터 분석에서 가장 자주 쓰는 조합입니다.",
+        "keywords": [
+          "집계",
+          "GROUP BY",
+          "JOIN",
+          "COUNT",
+          "SUM"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_007",
+    "chunks": [
+      {
+        "id": "doc_007_c1",
+        "text": "버전 관리는 파일의 변경 이력을 기록해 두고 필요할 때 이전 상태로 돌아가거나 비교하는 방법입니다. Git 은 분산 버전 관리 시스템으로 각자의 컴퓨터에 전체 이력이 있는 저장소를 둡니다. 변경 사항을 파일의 차이가 아니라 시점별 스냅샷으로 다룬다는 점이 특징입니다.",
+        "keywords": [
+          "Git",
+          "버전 관리",
+          "저장소",
+          "스냅샷",
+          "분산"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_007_c2",
+        "text": "Git 에는 작업 디렉터리, 스테이징 영역, 저장소(Git 디렉터리)의 세 영역이 있습니다. 파일을 고치면 작업 디렉터리에서 수정됨 상태가 되고, git add 로 스테이징 영역에 올리면 다음 커밋에 포함될 상태가 되며, git commit 으로 저장소에 기록됩니다.",
+        "keywords": [
+          "스테이징",
+          "커밋",
+          "git add",
+          "작업 디렉터리",
+          "상태"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_007_c3",
+        "text": "기본 명령은 git init 으로 저장소 만들기, git clone 으로 복제, git status 로 현재 상태 확인, git add 로 스테이징, git commit -m \"메시지\" 로 커밋, git log 로 이력 확인, git diff 로 변경 내용 비교입니다. 커밋 메시지는 무엇을 왜 바꿨는지 알 수 있게 씁니다.",
+        "keywords": [
+          "git init",
+          "git status",
+          "git commit",
+          "git log",
+          "명령어"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_007_c4",
+        "text": "브랜치는 작업 흐름을 갈라 독립적으로 개발하는 기능이며 Git 에서는 가볍게 만들 수 있습니다. git branch 로 만들고 git switch 나 git checkout 으로 이동하며, git merge 로 합칩니다. 같은 부분을 서로 다르게 고쳤다면 충돌이 나므로 직접 내용을 정리한 뒤 커밋해야 합니다.",
+        "keywords": [
+          "브랜치",
+          "merge",
+          "충돌",
+          "switch",
+          "branch"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_007_c5",
+        "text": "원격 저장소는 인터넷 등 다른 곳에 있는 저장소입니다. git remote 로 연결을 관리하고, git push 로 내 커밋을 올리고, git fetch 로 변경을 가져오기만 하며, git pull 은 가져온 뒤 합치기까지 합니다. 기본 원격 이름은 보통 origin 입니다.",
+        "keywords": [
+          "원격",
+          "push",
+          "pull",
+          "fetch",
+          "origin"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_008",
+    "chunks": [
+      {
+        "id": "doc_008_c1",
+        "text": "Next.js 의 App Router 는 app 디렉터리 안의 폴더 구조가 곧 주소(경로)가 되는 파일 기반 라우팅입니다. 폴더 안의 page 파일이 그 경로의 화면이 되고, layout 파일은 여러 화면이 공유하는 틀을 정의하며 화면을 옮겨도 유지됩니다.",
+        "keywords": [
+          "App Router",
+          "라우팅",
+          "page",
+          "layout",
+          "app 디렉터리"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_008_c2",
+        "text": "App Router 의 컴포넌트는 기본적으로 서버 컴포넌트이며 서버에서 렌더링됩니다. 클릭이나 입력 같은 상호작용, useState 같은 상태, 브라우저 기능이 필요한 컴포넌트는 파일 맨 위에 \"use client\" 를 적어 클라이언트 컴포넌트로 만듭니다. 필요한 부분만 클라이언트로 두면 브라우저로 보내는 코드가 줄어듭니다.",
+        "keywords": [
+          "서버 컴포넌트",
+          "use client",
+          "클라이언트 컴포넌트",
+          "useState",
+          "렌더링"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_008_c3",
+        "text": "서버 컴포넌트는 async 함수로 만들어 안에서 await 로 데이터를 가져올 수 있습니다. 데이터를 가져오는 코드를 화면 가까이에 두고 서버에서 처리하므로 비밀값이 브라우저로 노출되지 않습니다. 비밀값은 NEXT_PUBLIC_ 접두사가 없는 환경 변수에 둡니다.",
+        "keywords": [
+          "데이터 가져오기",
+          "fetch",
+          "async",
+          "환경 변수",
+          "NEXT_PUBLIC"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_008_c4",
+        "text": "[slug] 처럼 대괄호로 폴더 이름을 지으면 주소의 일부가 값으로 들어오는 동적 경로가 됩니다. 화면 이동은 Link 컴포넌트를 쓰고, loading 파일은 로딩 중 화면을, error 파일은 오류 화면을 정의합니다. 이 특수 파일들이 화면 상태를 폴더 단위로 나눠 관리하게 해 줍니다.",
+        "keywords": [
+          "동적 경로",
+          "Link",
+          "loading",
+          "error",
+          "slug"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_008_c5",
+        "text": "route 파일(route.ts)에서 GET, POST 같은 이름의 함수를 내보내면 해당 경로가 API 엔드포인트(Route Handler)가 됩니다. 같은 폴더에 page 와 route 를 함께 둘 수는 없으므로 API 는 별도 경로에 둡니다.",
+        "keywords": [
+          "Route Handler",
+          "route.ts",
+          "API",
+          "GET",
+          "POST"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_009",
+    "chunks": [
+      {
+        "id": "doc_009_c1",
+        "text": "FastAPI 는 파이썬 타입 힌트를 바탕으로 웹 API 를 빠르게 만드는 프레임워크입니다. 요청 검증과 문서 생성을 자동으로 해 주며, 실행하면 /docs 에서 대화형 API 문서(Swagger UI)를, /redoc 에서 다른 형식의 문서를 볼 수 있습니다.",
+        "keywords": [
+          "FastAPI",
+          "타입 힌트",
+          "문서",
+          "Swagger",
+          "docs"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_009_c2",
+        "text": "@app.get(\"/\") 같은 데코레이터로 경로와 HTTP 메서드에 함수를 연결하는 것을 경로 연산이라 부릅니다. 경로의 {item_id} 는 경로 매개변수가 되어 선언한 타입으로 자동 검증되고, 함수에 선언만 해도 쿼리 매개변수로 받을 수 있습니다.",
+        "keywords": [
+          "경로 연산",
+          "데코레이터",
+          "경로 매개변수",
+          "쿼리 매개변수",
+          "get"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_009_c3",
+        "text": "요청 본문은 Pydantic 의 BaseModel 을 상속한 클래스로 선언하면 자동으로 검증됩니다. 형식이 맞지 않으면 FastAPI 가 422 오류를 응답합니다. response_model 로 응답의 형태를 지정하면 그 형태에 맞게 응답을 걸러 줍니다.",
+        "keywords": [
+          "Pydantic",
+          "BaseModel",
+          "요청 본문",
+          "response_model",
+          "422"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_009_c4",
+        "text": "Depends 로 의존성을 선언하면 공통 로직(인증, 데이터베이스 연결 등)을 여러 경로 함수에서 재사용할 수 있습니다. 의존성 함수가 오류를 일으키면 경로 함수는 실행되지 않으므로 인증 확인에 알맞습니다.",
+        "keywords": [
+          "Depends",
+          "의존성",
+          "인증",
+          "재사용",
+          "의존성 주입"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_009_c5",
+        "text": "개발 서버는 uvicorn main:app --reload 처럼 실행하며 --reload 는 코드를 저장하면 자동으로 다시 시작합니다. 경로 함수는 async def 또는 일반 def 로 만들 수 있고, 안에서 await 를 쓰는 비동기 라이브러리를 호출할 때 async def 를 씁니다.",
+        "keywords": [
+          "uvicorn",
+          "reload",
+          "async def",
+          "실행",
+          "서버"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_009_c6",
+        "text": "오류 응답은 HTTPException 에 상태 코드와 메시지를 담아 발생시킵니다. 브라우저에서 다른 주소의 프런트엔드가 API 를 호출하려면 CORSMiddleware 로 허용할 출처를 지정해야 합니다.",
+        "keywords": [
+          "HTTPException",
+          "상태 코드",
+          "CORS",
+          "미들웨어",
+          "오류"
+        ],
+        "verified": false
+      }
+    ]
+  },
+  {
+    "doc_id": "doc_010",
+    "chunks": [
+      {
+        "id": "doc_010_c1",
+        "text": "자바스크립트의 값은 숫자(number), bigint, 문자열(string), 불리언(boolean), null, undefined, symbol, 객체(object)의 여덟 가지 자료형으로 나뉩니다. typeof 연산자로 값의 자료형을 확인할 수 있습니다. 변수는 let 과 const 로 선언합니다.",
+        "keywords": [
+          "자료형",
+          "typeof",
+          "null",
+          "undefined",
+          "변수"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_010_c2",
+        "text": "함수는 function 선언이나 화살표 함수(=>) 로 만듭니다. 함수는 자신이 만들어진 곳의 변수에 접근할 수 있고, 이 성질을 클로저라고 합니다. 함수를 값처럼 다른 함수에 넘기거나 반환할 수 있어 콜백과 고차 함수의 바탕이 됩니다.",
+        "keywords": [
+          "함수",
+          "화살표 함수",
+          "클로저",
+          "콜백",
+          "고차 함수"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_010_c3",
+        "text": "객체는 키와 값의 모음이며 점 표기법이나 대괄호로 속성에 접근합니다. 객체는 프로토타입을 통해 다른 객체의 속성을 물려받습니다. class 문법은 이 프로토타입 기반 상속을 읽기 쉽게 쓰는 방법으로, 생성자와 메서드를 한곳에 모아 적습니다.",
+        "keywords": [
+          "객체",
+          "프로토타입",
+          "class",
+          "상속",
+          "속성"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_010_c4",
+        "text": "프로미스와 async/await 로 비동기 작업을 다룹니다. async 함수 안에서 await 를 쓰면 프로미스가 끝날 때까지 기다린 결과를 받으며, 오류는 try / catch 로 잡습니다. 여러 비동기 작업을 함께 기다릴 때는 Promise.all 을 사용합니다.",
+        "keywords": [
+          "프로미스",
+          "async",
+          "await",
+          "비동기",
+          "Promise.all"
+        ],
+        "verified": false
+      },
+      {
+        "id": "doc_010_c5",
+        "text": "모듈은 코드를 파일 단위로 나누는 방법으로 export 로 내보내고 import 로 가져옵니다. 이벤트는 사용자의 클릭 같은 동작이며 addEventListener 로 처리할 함수를 등록합니다. 기능별로 파일을 나누면 코드를 재사용하고 관리하기 쉽습니다.",
+        "keywords": [
+          "모듈",
+          "import",
+          "export",
+          "이벤트",
+          "addEventListener"
+        ],
+        "verified": false
+      }
+    ]
+  }
+]
