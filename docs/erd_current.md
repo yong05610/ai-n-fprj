@@ -45,6 +45,7 @@ erDiagram
         string target_level_name
         string target_level_description "스냅샷, 선택"
         int weekly_hours
+        string start_date "일정 시작일(확정 시 계획 주 시작 월요일). 일정 겹침 검사 기준 (결정 2026-10-22, 구현 전)"
         string target_date "오늘 이후만 허용"
         string status "active|completed|archived"
         string client_request_id "plan/confirm 멱등 재시도 키, 선택"
@@ -138,3 +139,8 @@ erDiagram
 | 5 | 과제별 누적 시간 제공 위치 | `GET /api/tasks` 응답에 `record_count`/`total_minutes` 추가(요청마다 계산, 별도 저장 안 함). 별도 집계 엔드포인트는 만들지 않음 |
 | 6 | 인사이트 충분/부족 기준 | 기록 3건 이상 **그리고** 회고 1건 이상이면 "충분"(Phase 6 안내), 아니면 "부족" 안내 |
 | 7 | 동일 과제·같은 날 기록 중복 | 허용(제한 없음) — 하루를 여러 세션으로 나눠 기록하는 사용을 막지 않기 위함 |
+
+## 복수 학습 규칙 (결정 2026-10-22, docs/multi_goal_design.md)
+- 사용자는 목표(goals)를 여러 개 가질 수 있다. 새 목표를 확정할 때 status=active 인 기존 목표와 [start_date, target_date] 구간이 하루라도 겹치면 거부한다(409 GOAL_PERIOD_OVERLAP). completed·archived 는 비교하지 않는다.
+- 기존 학습의 일정 변경으로 생기는 겹침은 검사하지 않는다.
+- `users.active_goal_id` 는 계획·실행 화면에서 보는 학습이며 학습 전환 드롭다운으로 바꾼다. 대시보드, 튜터, 자료함은 모든 active 목표를 대상으로 한다.
