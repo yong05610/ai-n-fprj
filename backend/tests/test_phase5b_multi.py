@@ -240,10 +240,66 @@ class TestLearningSwitch:
         active = client.get("/api/timer/active", headers=consented_headers).json()
         assert active["active"] is True and active["task_id"] == task_a["id"]
 
-    def test_deleting_current_goal_clears_active_goal_id(self, client: TestClient, consented_headers):
+    def test_deleting_current_goal_moves_active_goal_id_to_remaining(self, client: TestClient, consented_headers):
         a, b = self._two_goals(client, consented_headers)
         client.delete(f"/api/goals/{b['id']}", headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == a["id"]  # P5B-1 (was: null)
+
+    def _three_goals(self, client, headers):
+        a = _confirm(client, headers, course="A과정", week_start="2026-10-19", target="2026-10-31").json()["goal"]
+        b = _confirm(client, headers, course="B과정", week_start="2026-11-02", target="2026-11-30").json()["goal"]
+        c = _confirm(client, headers, course="C과정", week_start="2026-12-07", target="2026-12-31").json()["goal"]
+        return a, b, c
+
+    def test_deleting_current_goal_falls_back_to_most_recent_remaining_active(self, client: TestClient, consented_headers):
+        a, b, c = self._three_goals(client, consented_headers)
+        assert _active_goal_id(client, consented_headers) == c["id"]
+        assert client.delete(f"/api/goals/{c['id']}", headers=consented_headers).status_code == 200
+        assert _active_goal_id(client, consented_headers) == b["id"]  # most recent remaining, not A
+        body = client.get("/api/dashboard/summary", headers=consented_headers).json()
+        assert "B과정" in body["active_goal_title"]
+        assert [g["goal_id"] for g in body["goals_overview"]] == [a["id"], b["id"]]
+
+    def test_fallback_skips_completed_and_archived_goals(self, client: TestClient, consented_headers):
+        a, b, c = self._three_goals(client, consented_headers)
+        client.patch(f"/api/goals/{b['id']}", json={"status": "archived"}, headers=consented_headers)
+        client.delete(f"/api/goals/{c['id']}", headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == a["id"]
+
+    def test_deleting_the_only_active_goal_leaves_null(self, client: TestClient, consented_headers):
+        a, b = self._two_goals(client, consented_headers)
+        client.patch(f"/api/goals/{a['id']}", json={"status": "completed"}, headers=consented_headers)
+        client.delete(f"/api/goals/{b['id']}", headers=consented_headers)
         assert _active_goal_id(client, consented_headers) is None
+
+    def test_deleting_another_goal_keeps_current(self, client: TestClient, consented_headers):
+        a, b, c = self._three_goals(client, consented_headers)
+        client.patch("/api/user/profile", json={"active_goal_id": b["id"]}, headers=consented_headers)
+        client.delete(f"/api/goals/{a['id']}", headers=consented_headers)
+        client.delete(f"/api/goals/{c['id']}", headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == b["id"]
+
+    def test_current_goal_becoming_completed_or_archived_falls_back(self, client: TestClient, consented_headers):
+        a, b, c = self._three_goals(client, consented_headers)
+        client.patch(f"/api/goals/{c['id']}", json={"status": "completed"}, headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == b["id"]
+        client.patch(f"/api/goals/{b['id']}", json={"status": "archived"}, headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == a["id"]
+        client.patch(f"/api/goals/{a['id']}", json={"status": "completed"}, headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) is None
+
+    def test_non_current_goal_status_change_keeps_current(self, client: TestClient, consented_headers):
+        a, b, c = self._three_goals(client, consented_headers)
+        client.patch(f"/api/goals/{a['id']}", json={"status": "completed"}, headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == c["id"]
+
+    def test_fallback_does_not_touch_other_users(self, client: TestClient, consented_headers):
+        a, b = self._two_goals(client, consented_headers)
+        bob = _other_user(client)
+        bob_goal = _confirm(client, bob, course="밥 학습").json()["goal"]
+        client.delete(f"/api/goals/{b['id']}", headers=consented_headers)
+        assert _active_goal_id(client, consented_headers) == a["id"]
+        assert _active_goal_id(client, bob) == bob_goal["id"]
 
     def test_goal_list_is_newest_first_and_has_start_date(self, client: TestClient, consented_headers):
         a, b = self._two_goals(client, consented_headers)
@@ -323,10 +379,11 @@ class TestDashboardGoalsOverview:
 
     def test_stale_active_goal_id_still_returns_overview(self, client: TestClient, consented_headers):
         a, b = _two_goals_with_data(client, consented_headers)
-        client.delete(f"/api/goals/{b['id']}", headers=consented_headers)  # clears active_goal_id
+        # A stale id (goal removed behind the API's back) must still not break the dashboard.
+        get_store().update("users", "test-uid-alice", {"active_goal_id": "deleted-goal-id"})
         body = client.get("/api/dashboard/summary", headers=consented_headers).json()
         assert body["active_goal_title"] == ""
-        assert [g["goal_id"] for g in body["goals_overview"]] == [a["id"]]
+        assert [g["goal_id"] for g in body["goals_overview"]] == [a["id"], b["id"]]
 
 
 class TestAnalyticsOverview:

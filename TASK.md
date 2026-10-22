@@ -132,7 +132,7 @@
 - [ ] B.7 대시보드 최근 학습 / 종합 현황 2영역, 겹침 오류 안내 ← 구현됨, 브라우저 화면 미검증
 - [ ] B.8 종합 학습 분석 화면 ← 구현됨, 브라우저 화면 미검증
 
-**결과:** docs/phase5b_report.md (backend 225건 통과, 프론트 typecheck/test/build 통과. 화면 미검증. 재검증 대기)
+**결과:** docs/phase5b_report.md, 수정 docs/phase5b_fix_report.md (P5B-1 반영, backend 232건 통과, 프론트 typecheck/test/build 통과. 화면 미검증. 재검증 대기)
 
 ## Phase 6 — RAG·Long-term Memory 튜터·인사이트 (AI · P0)
 

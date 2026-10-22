@@ -263,6 +263,28 @@ def _check_goal_period_overlap(db, uid: str, start: date, target: date) -> None:
             )
 
 
+def _goal_recency_key(goal: dict[str, Any]) -> tuple[str, str]:
+    """Newest registration sorts highest. created_at has one-second resolution, so goals
+    registered in the same second fall back to the later schedule. Shared by GET /api/goals
+    and the active-goal fallback below so both agree on what "most recent" means."""
+    return goal["created_at"], goal["start_date"]
+
+
+def _fall_back_active_goal(db, uid: str, leaving_goal_id: str) -> None:
+    """P5B-1: if `leaving_goal_id` is the user's current learning (active_goal_id) and it is
+    being deleted or is no longer status="active", move active_goal_id to the most recently
+    registered remaining active goal - null only when none is left. Any other goal leaving
+    leaves active_goal_id untouched."""
+    user = db.get("users", uid)
+    if not user or user.get("active_goal_id") != leaving_goal_id:
+        return
+    remaining = [
+        _goal_out(g) for g in db.find("goals", user_id=uid, status="active") if g["id"] != leaving_goal_id
+    ]
+    fallback = max(remaining, key=_goal_recency_key)["id"] if remaining else None
+    db.update("users", uid, {"active_goal_id": fallback})
+
+
 def _register_new_goal_as_recent(db, uid: str, goal_id: str) -> None:
     """The most recent learning is users.active_goal_id; a newly registered goal becomes it."""
     if db.get("users", uid):
@@ -648,7 +670,7 @@ def list_goals(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
     # Newest registration first. created_at has one-second resolution, so goals registered in
     # the same second fall back to the later schedule first.
     goals = [_goal_out(g) for g in db.find("goals", user_id=uid)]
-    return sorted(goals, key=lambda g: (g["created_at"], g["start_date"]), reverse=True)
+    return sorted(goals, key=_goal_recency_key, reverse=True)
 
 
 @app.post("/api/goals", response_model=GoalResponse, status_code=status.HTTP_201_CREATED, tags=["goals"], summary="학습 목표 저장")
@@ -681,7 +703,10 @@ def update_goal(goal_id: str, payload: GoalUpdateRequest, uid: str = Depends(req
         _validate_target_date_not_past(changes["target_date"])
     # Phase 5B (user decision): changing an existing goal's schedule is deliberately NOT
     # checked for overlap with other active goals. Only goal creation is.
-    return _goal_out(db.update("goals", goal_id, {**changes, "updated_at": _now_iso()}))
+    updated = db.update("goals", goal_id, {**changes, "updated_at": _now_iso()})
+    if updated["status"] != "active":
+        _fall_back_active_goal(db, uid, goal_id)  # P5B-1: completed/archived goal can't stay "current"
+    return _goal_out(updated)
 
 
 @app.delete("/api/goals/{goal_id}", tags=["goals"], summary="목표 삭제 (하위 과제·기록·회고 포함)")
@@ -692,9 +717,7 @@ def delete_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depe
         _clear_active_timer_for_task(db, uid, task["id"])  # P5-2: a goal delete must not strand a timer
     db.delete_where("tasks", user_id=uid, goal_id=goal_id)
     db.delete("goals", goal_id)
-    user = db.get("users", uid)
-    if user and user.get("active_goal_id") == goal_id:
-        db.update("users", uid, {"active_goal_id": None})
+    _fall_back_active_goal(db, uid, goal_id)
     return {"status": "deleted", "id": goal_id}
 
 
