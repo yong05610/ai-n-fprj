@@ -19,18 +19,17 @@ def pinned_today(monkeypatch):
 
 
 class TestStartDateChosenByUser:
-    def test_reported_scenario_far_future_goal_only_blocks_when_inside_the_new_period(
+    def test_far_future_goals_only_block_when_two_of_them_are_inside_the_new_period(
         self, client: TestClient, consented_headers
     ):
-        # Existing goal 2027-01-25 ~ 2027-01-30. The old default start (this Monday) made a
-        # new goal ending 2027-03-31 swallow it; with a chosen start after it there is no overlap.
-        assert _confirm(client, consented_headers, course="먼 미래", start="2027-01-25", target="2027-01-30").status_code == 201
-        swallowed = _confirm(client, consented_headers, course="B", start="2026-10-21", target="2027-03-31")
+        assert _confirm(client, consented_headers, course="먼 미래1", start="2027-01-25", target="2027-01-30").status_code == 201
+        # One existing goal inside the new period is fine (R1).
+        assert _confirm(client, consented_headers, course="B", start="2026-10-21", target="2027-03-31").status_code == 201
+        # Now two goals cover 2027-01-25..30; a third swallowing them is refused.
+        swallowed = _confirm(client, consented_headers, course="C", start="2026-10-21", target="2027-03-31")
         assert swallowed.status_code == 409
-        later = _confirm(client, consented_headers, course="C", start="2027-01-31", target="2027-03-31")
+        later = _confirm(client, consented_headers, course="D", start="2027-04-01", target="2027-05-31")
         assert later.status_code == 201
-        earlier = _confirm(client, consented_headers, course="D", start="2026-10-21", target="2027-01-24")
-        assert earlier.status_code == 201
 
     def test_non_monday_start_derives_that_weeks_monday(self, client: TestClient, consented_headers):
         res = _confirm(client, consented_headers, start="2026-10-28").json()  # Wednesday
@@ -49,7 +48,7 @@ class TestStartDateChosenByUser:
 class TestAllOverlapsReported:
     def test_new_goal_crossing_two_goals_reports_both(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="첫째", start="2026-10-21", target="2026-11-10")
-        _confirm(client, consented_headers, course="둘째", start="2026-11-20", target="2026-12-10")
+        _confirm(client, consented_headers, course="둘째", start="2026-11-01", target="2026-12-10")
         res = _confirm(client, consented_headers, course="걸침", start="2026-11-05", target="2026-12-01")
         assert res.status_code == 409
         err = res.json()["detail"]
@@ -57,16 +56,18 @@ class TestAllOverlapsReported:
         overlaps = err["details"]["overlaps"]
         assert [o["course"] for o in overlaps] == ["첫째", "둘째"]
         assert overlaps[0]["start_date"] == "2026-10-21" and overlaps[0]["target_date"] == "2026-11-10"
-        assert "2개" in err["message"] and "첫째" in err["message"] and "둘째" in err["message"]
+        assert err["details"]["conflict_from"] == "2026-11-05" and err["details"]["conflict_to"] == "2026-11-10"
+        assert "첫째" in err["message"] and "둘째" in err["message"] and "두 학습" in err["message"]
         # Flat fields still mirror the first overlap for older clients.
         assert err["details"]["course"] == "첫째"
         assert len(client.get("/api/goals", headers=consented_headers).json()) == 2  # nothing saved
 
-    def test_only_overlapping_goals_are_listed(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, course="겹침", start="2026-10-21", target="2026-11-10")
+    def test_only_goals_in_the_crowded_stretch_are_listed(self, client: TestClient, consented_headers):
+        _confirm(client, consented_headers, course="겹침1", start="2026-10-21", target="2026-11-10")
+        _confirm(client, consented_headers, course="겹침2", start="2026-10-25", target="2026-11-10")
         _confirm(client, consented_headers, course="무관", start="2026-12-01", target="2026-12-10")
         err = _confirm(client, consented_headers, course="새", start="2026-11-01", target="2026-11-20").json()["detail"]
-        assert [o["course"] for o in err["details"]["overlaps"]] == ["겹침"]
+        assert [o["course"] for o in err["details"]["overlaps"]] == ["겹침1", "겹침2"]
 
 
 VALID_IDEAS = {"suggested_roles": ["백엔드 개발자", "데이터 분석가", "ML 엔지니어"]}

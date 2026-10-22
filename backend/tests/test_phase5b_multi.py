@@ -70,40 +70,64 @@ class TestOverlapOnPlanConfirm:
         assert res.status_code == 201
         assert res.json()["goal"]["start_date"] == "2026-10-21"  # not the week's Monday
 
-    def test_same_period_is_rejected_with_409_and_details(self, client: TestClient, consented_headers):
+    def test_second_goal_in_the_same_period_is_allowed(self, client: TestClient, consented_headers):
+        # R1: up to two goals may run on the same day.
+        assert _confirm(client, consented_headers, course="A과정").status_code == 201
+        assert _confirm(client, consented_headers, course="B과정").status_code == 201
+
+    def test_third_goal_in_the_same_period_is_rejected_with_409_and_details(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="A과정")
-        res = _confirm(client, consented_headers, course="B과정")
+        _confirm(client, consented_headers, course="B과정")
+        res = _confirm(client, consented_headers, course="C과정")
         assert res.status_code == 409
         err = res.json()["detail"]
         assert err["code"] == "GOAL_PERIOD_OVERLAP"
-        assert "A과정" in err["message"] and "2026-10-21" in err["message"] and "2026-11-30" in err["message"]
-        assert err["details"]["course"] == "A과정"
-        assert err["details"]["start_date"] == "2026-10-21"
-        assert err["details"]["target_date"] == "2026-11-30"
+        assert "최대 2개" in err["message"]
+        assert "A과정" in err["message"] and "B과정" in err["message"] and "2026-11-30" in err["message"]
+        assert err["details"]["max_concurrent"] == 2
+        assert err["details"]["conflict_from"] == "2026-10-21" and err["details"]["conflict_to"] == "2026-11-30"
+        assert [o["course"] for o in err["details"]["overlaps"]] == ["A과정", "B과정"]
+        assert err["details"]["course"] == "A과정"  # flat fields mirror the first overlap
 
     def test_rejection_saves_nothing(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="A과정")
-        before_goal = _active_goal_id(client, consented_headers)
         _confirm(client, consented_headers, course="B과정")
-        assert len(client.get("/api/goals", headers=consented_headers).json()) == 1
-        assert len(client.get("/api/tasks", headers=consented_headers).json()) == 1
+        before_goal = _active_goal_id(client, consented_headers)
+        assert _confirm(client, consented_headers, course="C과정").status_code == 409
+        assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
+        assert len(client.get("/api/tasks", headers=consented_headers).json()) == 2
         assert _active_goal_id(client, consented_headers) == before_goal
 
-    def test_overlap_by_a_single_day_is_rejected(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, start="2026-10-21", target="2026-11-30")
-        # New period starts on the first goal's last day (2026-11-30 is a Monday).
-        res = _confirm(client, consented_headers, course="B", start="2026-11-30", target="2026-12-31")
+    def test_overlap_by_a_single_day_is_rejected_when_two_goals_are_there(self, client: TestClient, consented_headers):
+        _confirm(client, consented_headers, course="A", start="2026-10-21", target="2026-11-30")
+        _confirm(client, consented_headers, course="B", start="2026-10-21", target="2026-11-30")
+        # New period starts on both goals' last day (2026-11-30).
+        res = _confirm(client, consented_headers, course="C", start="2026-11-30", target="2026-12-31")
         assert res.status_code == 409
+        assert res.json()["detail"]["details"]["conflict_from"] == "2026-11-30"
+        assert res.json()["detail"]["details"]["conflict_to"] == "2026-11-30"
 
     def test_adjacent_periods_are_allowed(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, start="2026-10-21", target="2026-11-29")
         res = _confirm(client, consented_headers, course="B", start="2026-11-30", target="2026-12-31")
         assert res.status_code == 201
 
-    def test_new_period_enclosing_existing_is_rejected(self, client: TestClient, consented_headers):
-        _confirm(client, consented_headers, start="2026-11-02", target="2026-11-15")
-        res = _confirm(client, consented_headers, course="B", start="2026-10-21", target="2026-12-31")
+    def test_new_period_enclosing_two_existing_goals_that_overlap_each_other_is_rejected(
+        self, client: TestClient, consented_headers
+    ):
+        _confirm(client, consented_headers, course="A", start="2026-11-02", target="2026-11-15")
+        _confirm(client, consented_headers, course="B", start="2026-11-05", target="2026-11-10")
+        res = _confirm(client, consented_headers, course="C", start="2026-10-21", target="2026-12-31")
         assert res.status_code == 409
+        assert res.json()["detail"]["details"]["conflict_from"] == "2026-11-05"
+        assert res.json()["detail"]["details"]["conflict_to"] == "2026-11-10"
+
+    def test_new_period_enclosing_two_goals_that_never_share_a_day_is_allowed(
+        self, client: TestClient, consented_headers
+    ):
+        _confirm(client, consented_headers, course="A", start="2026-11-02", target="2026-11-08")
+        _confirm(client, consented_headers, course="B", start="2026-11-09", target="2026-11-15")
+        assert _confirm(client, consented_headers, course="C", start="2026-10-21", target="2026-12-31").status_code == 201
 
     @pytest.mark.parametrize("status_value", ["completed", "archived"])
     def test_non_active_goals_are_not_compared(self, client: TestClient, consented_headers, status_value):
@@ -141,10 +165,11 @@ class TestOverlapOnGoalsPost:
 
     def test_goal_post_rejects_overlap_with_active_goal(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="A과정")
-        res = client.post("/api/goals", json=_goal_payload(), headers=consented_headers)
+        assert client.post("/api/goals", json=_goal_payload(), headers=consented_headers).status_code == 201  # 2nd: ok
+        res = client.post("/api/goals", json=_goal_payload(course="셋째"), headers=consented_headers)
         assert res.status_code == 409
         assert res.json()["detail"]["code"] == "GOAL_PERIOD_OVERLAP"
-        assert len(client.get("/api/goals", headers=consented_headers).json()) == 1
+        assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
 
     def test_goal_post_allowed_after_other_goal_period_ends(self, client: TestClient, consented_headers):
         # An active goal that ended last week (inserted directly: confirm refuses past start dates).
@@ -203,9 +228,11 @@ class TestLegacyGoalWithoutStartDate:
                 "updated_at": "2026-10-20T16:00:00Z",
             },
         )
-        res = _confirm(client, consented_headers, start="2026-11-23", target="2026-12-31")
+        _confirm(client, consented_headers, course="두번째", start="2026-10-21", target="2026-11-30")
+        res = _confirm(client, consented_headers, course="셋째", start="2026-11-23", target="2026-12-31")
         assert res.status_code == 409
-        assert res.json()["detail"]["details"]["start_date"] == "2026-10-21"
+        legacy_overlap = [o for o in res.json()["detail"]["details"]["overlaps"] if o["course"] == "옛 학습"]
+        assert legacy_overlap and legacy_overlap[0]["start_date"] == "2026-10-21"  # created_at fallback counted
 
 
 class TestLearningSwitch:

@@ -259,38 +259,79 @@ def _goal_out(goal: dict[str, Any]) -> dict[str, Any]:
     return {**goal, "start_date": _goal_start_date(goal).isoformat()}
 
 
+MAX_CONCURRENT_GOALS = 2
+
+
 def _check_goal_period_overlap(db, uid: str, start: date, target: date) -> None:
-    """Phase 5B: a new goal's [start, target] (both ends inclusive) may not share even one day
-    with another *active* goal of the same user. completed/archived goals are not compared.
+    """Phase 5B/R1: at most MAX_CONCURRENT_GOALS (2) active goals may run on any single day.
+
+    A new goal's [start, target] (both ends inclusive) is rejected when, on at least one day of
+    it, the user already has MAX_CONCURRENT_GOALS status="active" goals in progress; completed
+    and archived goals are not counted. One overlapping goal is fine, and two goals that only
+    touch the new period on different days are fine too.
 
     Called by both goal-creation paths (POST /api/plan/confirm, POST /api/goals) after all
-    other validation and right before the first write, so a rejection saves nothing. Every
-    overlapping goal is reported (F2), earliest schedule first.
+    other validation and right before the first write, so a rejection saves nothing.
+    Implementation: split the new period at every boundary of an overlapping goal (its start
+    and its end + 1 day, clipped to the new period) and count the goals covering each piece.
     """
-    overlaps = []
+    spans = []
     for other in db.find("goals", user_id=uid, status="active"):
         other_start = _goal_start_date(other)
         other_target = date.fromisoformat(other["target_date"])
         if start <= other_target and other_start <= target:
-            overlaps.append(
-                {
-                    "goal_id": other["id"],
-                    "course": other["course"],
-                    "start_date": other_start.isoformat(),
-                    "target_date": other_target.isoformat(),
-                }
-            )
-    if not overlaps:
+            spans.append((other_start, other_target, other))
+    if len(spans) < MAX_CONCURRENT_GOALS:
         return
+
+    one_day = timedelta(days=1)
+    cuts = {start, target + one_day}
+    for other_start, other_target, _ in spans:
+        cuts.add(max(other_start, start))
+        cuts.add(min(other_target, target) + one_day)
+    ordered = sorted(cuts)
+
+    conflict_from: Optional[date] = None
+    conflict_to: Optional[date] = None
+    for piece_start, next_cut in zip(ordered, ordered[1:]):
+        piece_end = next_cut - one_day
+        busy = sum(1 for s, t, _ in spans if s <= piece_start and piece_end <= t)
+        if busy >= MAX_CONCURRENT_GOALS:
+            if conflict_from is None:
+                conflict_from = piece_start
+            conflict_to = piece_end
+        elif conflict_from is not None:
+            break  # the first continuous crowded stretch is enough to report
+    if conflict_from is None or conflict_to is None:
+        return
+
+    overlaps = [
+        {
+            "goal_id": other["id"],
+            "course": other["course"],
+            "start_date": other_start.isoformat(),
+            "target_date": other_target.isoformat(),
+        }
+        for other_start, other_target, other in spans
+        if other_start <= conflict_to and conflict_from <= other_target
+    ]
     overlaps.sort(key=lambda o: (o["start_date"], o["target_date"]))
     listing = ", ".join(f"'{o['course']}'({o['start_date']} ~ {o['target_date']})" for o in overlaps)
-    first = overlaps[0]
+    count_label = "두" if len(overlaps) == 2 else str(len(overlaps))
     raise api_error(
         status.HTTP_409_CONFLICT,
         "GOAL_PERIOD_OVERLAP",
-        f"이 기간에 이미 {len(overlaps)}개의 학습이 있습니다: {listing}. 학습 시작일이나 목표 완료일을 조정해 주세요.",
+        f"한 날에 진행할 수 있는 학습은 최대 {MAX_CONCURRENT_GOALS}개예요. "
+        f"{conflict_from.isoformat()} ~ {conflict_to.isoformat()} 에 이미 {listing} {count_label} 학습이 있습니다. "
+        "학습 시작일이나 목표 완료일을 조정해 주세요.",
         # The flat fields mirror the first overlap for clients written before `overlaps` existed.
-        {**first, "overlaps": overlaps},
+        {
+            **overlaps[0],
+            "overlaps": overlaps,
+            "max_concurrent": MAX_CONCURRENT_GOALS,
+            "conflict_from": conflict_from.isoformat(),
+            "conflict_to": conflict_to.isoformat(),
+        },
     )
 
 

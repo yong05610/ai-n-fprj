@@ -693,7 +693,7 @@ export function LearningPathWizard({
                 />
               </div>
             </div>
-            <p className="small muted">진행 중인 학습과 일정이 겹치면 새 학습을 만들 수 없어요.</p>
+            <p className="small muted">같은 기간에 진행할 수 있는 학습은 최대 2개예요.</p>
             {dateError && (
               <p className="error" role="alert">
                 {dateError}
@@ -873,7 +873,7 @@ export function LearningPathWizard({
           {confirmStatus === "error" && (
             <p className="error" role="alert">
               {confirmErrorCode === "GOAL_PERIOD_OVERLAP"
-                ? "일정이 겹쳐 저장하지 못했어요. 위의 학습 시작일·목표 완료일을 바꾸면 다시 저장할 수 있어요. 입력한 내용은 그대로 남아 있어요."
+                ? "같은 기간에 이미 학습이 2개 있어 저장하지 못했어요. 위의 학습 시작일·목표 완료일을 바꾸면 다시 저장할 수 있어요. 입력한 내용은 그대로 남아 있어요."
                 : `${confirmError} 같은 저장 버튼으로 다시 시도해도 중복 저장되지 않습니다.`}
             </p>
           )}
