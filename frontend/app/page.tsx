@@ -10,6 +10,7 @@ import { ExecutionScreen } from "@/components/ExecutionScreen";
 import { LearningPathWizard } from "@/components/LearningPathWizard";
 import { SettingsScreen } from "@/components/SettingsScreen";
 import { TutorScreen } from "@/components/TutorScreen";
+import { WeeklyPlanScreen } from "@/components/WeeklyPlanScreen";
 import { type View, buildHash, parseHash } from "@/lib/viewHash";
 import { todayKSTLabel } from "@/lib/week";
 
@@ -24,7 +25,7 @@ type NavEntry = { view: View | null; icon: string; label: string };
 const USER_NAV: NavEntry[] = [
   { view: "dashboard", icon: "⌂", label: "대시보드" },
   { view: "path", icon: "✦", label: "학습 경로 설정" },
-  { view: null, icon: "▦", label: "학습 과제 계획" }, // Phase 5D
+  { view: "wbs", icon: "▦", label: "학습 과제 계획" },
   { view: "execution", icon: "◷", label: "학습 실행 기록" },
   { view: "analysis", icon: "▥", label: "종합 학습 분석" },
   { view: "tutor", icon: "◌", label: "AI 튜터" },
@@ -216,6 +217,7 @@ export default function Home() {
               {current === "path" && (
                 <LearningPathWizard onClose={() => go("dashboard")} registerLeaveGuard={registerLeaveGuard} />
               )}
+              {current === "wbs" && <WeeklyPlanScreen onOpenPath={() => go("path")} />}
               {current === "execution" && <ExecutionScreen />}
               {current === "analysis" && <AnalysisScreen onCreatePath={() => go("path")} />}
               {current === "tutor" && <TutorScreen />}

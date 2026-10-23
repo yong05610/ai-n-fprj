@@ -49,6 +49,8 @@ erDiagram
         string target_date "오늘 이후만 허용"
         string status "active|completed|archived"
         string client_request_id "plan/confirm 멱등 재시도 키, 선택"
+        string advice_title "확정 때 저장한 AI 학습 조언 제목, 선택 (Phase 5D, advice_content 와 둘 다 있거나 둘 다 없음)"
+        string advice_content "확정 때 저장한 AI 학습 조언 내용, 선택 (클라이언트가 보낸 텍스트, 서버가 AI 결과로 재검증하지 않음)"
         string created_at
         string updated_at
     }

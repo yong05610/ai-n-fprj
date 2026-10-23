@@ -78,3 +78,35 @@ export function dateTimeKSTLabel(iso: string): string {
   const p = kstParts(iso);
   return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
 }
+
+// --- calendar-date arithmetic on plain "YYYY-MM-DD" strings (Phase 5D) --------------------
+// The strings are anchored as UTC midnights purely for arithmetic, so no browser time zone
+// and no toISOString of a local date is involved.
+
+function anchorDate(value: string): Date {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d));
+}
+
+/** The Monday of the week that contains the given calendar date (weeks run Monday to Sunday). */
+export function mondayOfDateString(value: string): string {
+  const anchor = anchorDate(value);
+  anchor.setUTCDate(anchor.getUTCDate() - ((anchor.getUTCDay() + 6) % 7));
+  return anchor.toISOString().slice(0, 10);
+}
+
+export function addDaysToDateString(value: string, days: number): string {
+  const anchor = anchorDate(value);
+  anchor.setUTCDate(anchor.getUTCDate() + days);
+  return anchor.toISOString().slice(0, 10);
+}
+
+/** Whole days from `from` to `to` (positive when `to` is later). */
+export function daysBetweenDateStrings(from: string, to: string): number {
+  return Math.round((anchorDate(to).getTime() - anchorDate(from).getTime()) / 86_400_000);
+}
+
+/** "10/19" for "2026-10-19". */
+export function monthDayLabel(value: string): string {
+  return `${value.slice(5, 7)}/${value.slice(8, 10)}`;
+}

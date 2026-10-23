@@ -37,6 +37,7 @@ from schemas import (
     GoalCreateRequest,
     GoalUpdateRequest,
     GoalResponse,
+    GoalReferencesResponse,
     TaskCreateRequest,
     TaskUpdateRequest,
     TaskResponse,
@@ -660,7 +661,13 @@ def generate_plan(
 
     matches = match_references(payload.field, payload.course)
     references = [
-        ResourceReferenceItem(title=m["title"], category=m["category"], url=m["url"], is_verified=bool(m.get("verified")))
+        ResourceReferenceItem(
+            title=m["title"],
+            category=m["category"],
+            source_name=m.get("source_name"),
+            url=m["url"],
+            is_verified=bool(m.get("verified")),
+        )
         for m in matches
     ]
     references_notice = None if matches else no_match_notice(payload.field)
@@ -727,6 +734,11 @@ def confirm_plan(
         "target_date": payload.target_date,
         "client_request_id": payload.client_request_id,
     }
+    if payload.advice_title is not None:
+        # Client-supplied text (the server cannot re-verify it against an AI result); shown only
+        # to this user on their own screen and never logged.
+        goal_data["advice_title"] = payload.advice_title
+        goal_data["advice_content"] = payload.advice_content
     # Validate everything before writing anything, so a rejected request never leaves a
     # partial save (the store layer has no multi-document transaction to roll back).
     _validate_goal_levels(goal_data)
@@ -802,6 +814,31 @@ def create_goal(payload: GoalCreateRequest, uid: str = Depends(require_consented
 @app.get("/api/goals/{goal_id}", response_model=GoalResponse, tags=["goals"], summary="목표 상세 조회")
 def get_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
     return _goal_out(_get_owned(db, "goals", goal_id, uid))
+
+
+@app.get(
+    "/api/goals/{goal_id}/references",
+    response_model=GoalReferencesResponse,
+    tags=["goals"],
+    summary="학습에 연결된 검토 참고자료 (읽기 전용, plan/generate 와 같은 분야 일치 규칙)",
+)
+def get_goal_references(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    goal = _get_owned(db, "goals", goal_id, uid)
+    matches = match_references(goal["field"], goal["course"])
+    references = [
+        ResourceReferenceItem(
+            title=m["title"],
+            category=m["category"],
+            source_name=m.get("source_name"),
+            url=m["url"],
+            is_verified=bool(m.get("verified")),
+        )
+        for m in matches
+    ]
+    return GoalReferencesResponse(
+        references=references,
+        references_notice=None if matches else no_match_notice(goal["field"]),
+    )
 
 
 @app.patch("/api/goals/{goal_id}", response_model=GoalResponse, tags=["goals"], summary="목표 수정")

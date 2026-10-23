@@ -16,6 +16,7 @@ export function useGoalSwitch() {
   const [activeGoalId, setActiveGoalId] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -30,6 +31,8 @@ export function useGoalSwitch() {
     } catch {
       // The widget is a convenience; the screen it sits on keeps working without it.
       setGoals([]);
+    } finally {
+      setLoaded(true);
     }
   }, [session]);
 
@@ -52,5 +55,5 @@ export function useGoalSwitch() {
     }
   }
 
-  return { goals, activeGoalId, switching, error, switchGoal };
+  return { goals, activeGoalId, switching, error, loaded, switchGoal };
 }

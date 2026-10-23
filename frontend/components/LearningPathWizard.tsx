@@ -356,6 +356,9 @@ export function LearningPathWizard({
           target_date: targetDate,
           start_date: startDate,
           tasks,
+          // The advice shown in the draft is saved with the plan so the weekly plan screen can show it.
+          advice_title: draft.advice.title,
+          advice_content: draft.advice.content,
           client_request_id: clientRequestId,
         },
       });

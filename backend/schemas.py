@@ -90,6 +90,7 @@ class AdviceItem(BaseModel):
 class ResourceReferenceItem(BaseModel):
     title: str = Field(..., description="자료명")
     category: str = Field(..., description="연결 과정명")
+    source_name: Optional[str] = Field(None, description="출처 이름 (예: Python 공식 문서)")
     url: Optional[str] = Field(None, description="출처 URL")
     is_verified: bool = Field(True, description="팀 사전 검토 여부")
 
@@ -196,8 +197,15 @@ class GoalResponse(BaseModel):
     start_date: str = Field(..., description="일정 시작일(YYYY-MM-DD). 기존 목표는 created_at의 서비스 시간대 날짜로 보정")
     target_date: str
     status: str
+    advice_title: Optional[str] = Field(None, description="확정 때 저장한 AI 학습 조언 제목 (없는 기존 목표는 null)")
+    advice_content: Optional[str] = Field(None, description="확정 때 저장한 AI 학습 조언 내용 (없는 기존 목표는 null)")
     created_at: str
     updated_at: str
+
+
+class GoalReferencesResponse(BaseModel):
+    references: List["ResourceReferenceItem"] = Field(..., description="이 학습의 분야·과정에 연결된 검토 자료 (없으면 빈 목록)")
+    references_notice: Optional[str] = Field(None, description="검토 자료가 없을 때의 안내와 검색 키워드 제안")
 
 
 # --- 4. Tasks CRUD ---
@@ -288,6 +296,14 @@ class PlanConfirmRequest(BaseModel):
         description="선택. 주어지면 start_date가 속한 주의 월요일과 같아야 한다(다르면 400). 서버가 start_date에서 도출한다",
     )
     tasks: List[PlanConfirmTaskItem] = Field(..., min_length=1)
+    advice_title: Optional[str] = Field(
+        None, min_length=1, max_length=200,
+        description="확정 때 화면에 보이던 AI 학습 조언의 제목 (선택, advice_content 와 함께). 서버가 AI 결과로 검증할 수 없는 클라이언트 텍스트이며 본인 화면에만 쓰인다",
+    )
+    advice_content: Optional[str] = Field(
+        None, min_length=1, max_length=4000,
+        description="AI 학습 조언 내용 (선택, advice_title 과 함께). 길이 한도는 AI 초안 스키마와 같다",
+    )
     client_request_id: Optional[str] = Field(
         None,
         max_length=100,
@@ -300,6 +316,15 @@ class PlanConfirmRequest(BaseModel):
         if not value.strip():
             raise ValueError("공백만으로 구성될 수 없습니다.")
         return value
+
+    @model_validator(mode="after")
+    def _advice_is_all_or_nothing(self) -> "PlanConfirmRequest":
+        title, content = self.advice_title, self.advice_content
+        if (title is None) != (content is None):
+            raise ValueError("advice_title 과 advice_content 는 둘 다 보내거나 둘 다 생략해야 합니다.")
+        if title is not None and (not title.strip() or not (content or "").strip()):
+            raise ValueError("advice_title 과 advice_content 는 공백만으로 구성될 수 없습니다.")
+        return self
 
 
 class PlanConfirmResponse(BaseModel):
