@@ -151,7 +151,7 @@
 - [ ] D.1 page-wbs 구현: 내 계획 조회(주차별 과제), 추천 요일 변경, AI 학습 조언·연결 참고자료 표시, 학습 전환 위젯. 기존 API 재사용, 필요 시 최소 추가
 
 ## Phase 5E — 관리자: 사용자 관리·피드백 (ADMIN · P0, 5D 뒤, 사용자 테스트 전)
-설계: docs/phase5e_design.md (사용자 승인 2026-10-22, PRD FR-07·ERD 갱신 완료). 개발 지시서는 5C, 5D 뒤에 PM 이 쓴다.
+설계: docs/phase5e_design.md (사용자 승인 2026-10-22, PRD FR-07·ERD 갱신 완료). 개발 지시서: docs/phase5e_dev_prompt.md (2026-10-23). 관리자 등록 안내는 docs/firebase_setup_guide.md §9(사용자가 ADMIN_UIDS 를 .env 에 직접 입력).
 - [ ] E.1 [BE] 관리자 식별(ADMIN_UIDS 허용 목록, require_admin_uid), profile.is_admin
 - [ ] E.2 [BE][FE] 사용자 관리 화면과 GET /api/admin/users(마스킹 UID, 동의, 학습 수, 활동, 활성/휴면, 읽기 전용)
 - [ ] E.3 [BE][FE] 피드백 수집 POST /api/feedback(식별 정보 저장 안 함)과 [내 정보·설정] 피드백 카드
