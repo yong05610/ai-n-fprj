@@ -147,6 +147,7 @@
 **결과:** docs/phase5c_report.md (2db65f8, backend 258건, frontend 21건·typecheck·build 통과, 백엔드 변경 없음). 검증: docs/phase5c_verification.md — 코드·테스트 승인, C.1~C.6 은 **구현됨, 사용자 화면 확인 대기**(목업과 나란히 비교 후 체크).
 
 ## Phase 5D — 학습 과제 계획 화면 (WBS · P0, Phase 6 뒤)
+지시서: docs/phase5d_dev_prompt.md (2026-10-23). AI 조언은 plan/confirm 에서 goals 에 저장(계약 변경), 참고자료는 GET /api/goals/{id}/references 추가.
 - [ ] D.1 page-wbs 구현: 내 계획 조회(주차별 과제), 추천 요일 변경, AI 학습 조언·연결 참고자료 표시, 학습 전환 위젯. 기존 API 재사용, 필요 시 최소 추가
 
 ## Phase 5E — 관리자: 사용자 관리·피드백 (ADMIN · P0, 5D 뒤, 사용자 테스트 전)
