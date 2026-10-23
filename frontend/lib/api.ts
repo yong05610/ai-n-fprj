@@ -5,6 +5,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly details?: unknown,
   ) {
     super(message);
   }
@@ -56,7 +57,9 @@ async function performRequest(
       typeof detail === "object" && detail && "message" in detail
         ? String((detail as { message: unknown }).message)
         : "요청을 처리하지 못했습니다. 다시 시도해 주세요.";
-    throw new ApiError(response.status, code, message);
+    const details =
+      typeof detail === "object" && detail && "details" in detail ? (detail as { details: unknown }).details : undefined;
+    throw new ApiError(response.status, code, message, details);
   }
   return { data, headers: response.headers };
 }

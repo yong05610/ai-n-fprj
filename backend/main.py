@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, List
@@ -8,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import clock
 from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
-from ai_schemas import AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
+from ai_schemas import AIInsight, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import rag
@@ -18,6 +20,7 @@ from prompts import (
     PLAN_GENERATE_SYSTEM_PROMPT,
     ROLE_IDEAS_SYSTEM_PROMPT,
     TUTOR_SYSTEM_PROMPT,
+    INSIGHT_SYSTEM_PROMPT,
 )
 from resources_catalog import match_references, no_match_notice
 from schemas import (
@@ -38,6 +41,9 @@ from schemas import (
     GoalUpdateRequest,
     GoalResponse,
     GoalReferencesResponse,
+    InsightItem,
+    InsightRequest,
+    InsightResponse,
     TaskCreateRequest,
     TaskUpdateRequest,
     TaskResponse,
@@ -911,6 +917,7 @@ def delete_goal(goal_id: str, uid: str = Depends(require_consented_uid), db=Depe
         _delete_task_children(db, uid, task["id"])
         _clear_active_timer_for_task(db, uid, task["id"])  # P5-2: a goal delete must not strand a timer
     db.delete_where("tasks", user_id=uid, goal_id=goal_id)
+    db.delete("insights", goal_id)  # Phase 6B: one insight per learning, removed with it
     db.delete("goals", goal_id)
     _fall_back_active_goal(db, uid, goal_id)
     return {"status": "deleted", "id": goal_id}
@@ -1485,13 +1492,15 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
     ]
     all_tasks_completed_this_week = bool(this_week_tasks) and not incomplete
 
-    reflection_count = len(db.find("reflections", user_id=uid))
-    sufficient = len(logs) >= DASHBOARD_INSIGHT_MIN_RECORDS and reflection_count >= DASHBOARD_INSIGHT_MIN_REFLECTIONS
-    insight = (
-        AIInsightSummary(text="AI 인사이트는 Phase 6에서 제공됩니다.", notice="", is_insufficient=False)
-        if sufficient
-        else AIInsightSummary(text="기록과 회고를 더 남기면 인사이트를 볼 수 있어요.", notice="", is_insufficient=True)
-    )
+    # Phase 6B: the dashboard only *shows* the saved insight (or says what to do); it never calls the AI.
+    inputs = _insight_inputs(logs, tasks, db.find("reflections", user_id=uid), today)
+    saved = db.get("insights", goal_id)
+    if saved is not None and saved.get("user_id") == uid:
+        insight = AIInsightSummary(text=saved["summary"], notice=INSIGHT_NOTICE, is_insufficient=False)
+    elif inputs["sufficient"]:
+        insight = AIInsightSummary(text="실행 기록 화면에서 인사이트를 만들어 보세요.", notice="", is_insufficient=False)
+    else:
+        insight = AIInsightSummary(text="기록과 회고를 더 남기면 인사이트를 볼 수 있어요.", notice="", is_insufficient=True)
 
     weekly_hits = [
         DailyHitItem(
@@ -1736,6 +1745,233 @@ async def list_resources(
     category: Optional[str] = Query(None, description="과정 분류"),
 ):
     _not_implemented()
+
+
+# 9b. AI learning insight (Phase 6B): stored per learning, created only when the user asks
+INSIGHT_WINDOW_DAYS = 14
+INSIGHT_MIN_RECORDS = 3
+INSIGHT_MIN_REFLECTIONS = 1
+INSIGHT_REFLECTION_LIMIT = 5
+INSIGHT_RECORD_LIMIT = 40  # records sent to the model (newest first); the count shown stays the real one
+INSIGHT_COOLDOWN_SECONDS = 60
+INSIGHT_NOTICE = "내 실행 기록과 회고 기반 · AI 생성 안내"
+# Wording that would treat a suggested weekday as a deadline (the weekday is a hint, never a due date).
+INSIGHT_FORBIDDEN_TERMS = ("연체", "실패", "밀렸", "밀려", "놓쳤", "놓친", "지연", "늦었", "뒤처", "마감")
+
+
+def _insight_inputs(
+    goal_logs: list[dict[str, Any]],
+    goal_tasks: list[dict[str, Any]],
+    all_reflections: list[dict[str, Any]],
+    today: date,
+) -> dict[str, Any]:
+    """Everything an insight is built from (and judged stale against), for one learning.
+
+    - records: this learning's study logs of the last 14 calendar days (today included,
+      Asia/Seoul via clock.today), newest first.
+    - reflections: the newest 5 reflections of this learning's tasks (same newest-first rule as
+      the tutor's context, not limited to the window). Read from storage on every call, so an
+      edited reflection shows its latest text and a deleted one is gone.
+    - sufficient: at least 3 records in the window and at least 1 reflection.
+    - signature: a hash of (id, updated_at) of every input item, used by is_stale.
+    """
+    start = today - timedelta(days=INSIGHT_WINDOW_DAYS - 1)
+    records = sorted(
+        (log for log in goal_logs if start <= date.fromisoformat(log["study_date"]) <= today),
+        key=lambda log: (log["study_date"], log["created_at"]),
+        reverse=True,
+    )
+    task_by_id = {t["id"]: t for t in goal_tasks}
+    log_by_id = {log["id"]: log for log in goal_logs}
+    mine = [r for r in all_reflections if r["task_id"] in task_by_id]
+    mine.sort(
+        key=lambda r: ((log_by_id.get(r["study_log_id"]) or {}).get("study_date", r["created_at"][:10]), r["created_at"]),
+        reverse=True,
+    )
+    used = mine[:INSIGHT_REFLECTION_LIMIT]
+    parts = sorted([("l", log["id"], log["updated_at"]) for log in records] + [("r", r["id"], r["updated_at"]) for r in used])
+    return {
+        "records": records,
+        "reflections": used,
+        "task_by_id": task_by_id,
+        "log_by_id": log_by_id,
+        "record_count": len(records),
+        "reflection_total": len(mine),
+        "sufficient": len(records) >= INSIGHT_MIN_RECORDS and len(mine) >= INSIGHT_MIN_REFLECTIONS,
+        "signature": hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest(),
+        "window_start": start,
+    }
+
+
+def _goal_insight_inputs(db, uid: str, goal: dict[str, Any]) -> dict[str, Any]:
+    return _insight_inputs(
+        db.find("study_logs", user_id=uid, goal_id=goal["id"]),
+        db.find("tasks", user_id=uid, goal_id=goal["id"]),
+        db.find("reflections", user_id=uid),
+        clock.today(),
+    )
+
+
+def _insight_item(doc: dict[str, Any], inputs: dict[str, Any]) -> InsightItem:
+    return InsightItem(
+        summary=doc["summary"],
+        difficulty=doc.get("difficulty", ""),
+        next_action=doc["next_action"],
+        generated_at=doc["generated_at"],
+        record_count=doc["record_count"],
+        reflection_count=doc["reflection_count"],
+        is_stale=doc.get("source_signature") != inputs["signature"],
+    )
+
+
+def _own_insight(db, uid: str, goal_id: str) -> Optional[dict[str, Any]]:
+    doc = db.get("insights", goal_id)
+    return doc if doc is not None and doc.get("user_id") == uid else None
+
+
+def _validate_ai_insight(parsed: AIInsight) -> None:
+    summary, difficulty, next_action = parsed.summary.strip(), parsed.difficulty.strip(), parsed.next_action.strip()
+    problem = None
+    if not summary or not next_action:
+        problem = "summary 와 next_action 은 비어 있으면 안 됩니다."
+    else:
+        text = " ".join([summary, difficulty, next_action])
+        if any(term in text for term in INSIGHT_FORBIDDEN_TERMS):
+            problem = "추천 요일은 마감일이 아닙니다. 연체·실패·밀림·지연·마감처럼 평가하거나 마감으로 보는 표현을 쓰지 마세요."
+    if problem:
+        raise AIRetryFeedback(problem, feedback={"validation_error": problem})
+
+
+@app.get(
+    "/api/goals/{goal_id}/insight",
+    response_model=InsightResponse,
+    tags=["insight"],
+    summary="저장된 마지막 AI 학습 인사이트 조회 (AI 를 호출하지 않는다)",
+)
+def get_goal_insight(goal_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    goal = _get_owned(db, "goals", goal_id, uid)
+    saved = _own_insight(db, uid, goal_id)
+    if saved is None:
+        return InsightResponse(insight=None)
+    return InsightResponse(insight=_insight_item(saved, _goal_insight_inputs(db, uid, goal)))
+
+
+@app.post(
+    "/api/goals/{goal_id}/insight",
+    response_model=InsightResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["insight"],
+    summary="AI 학습 인사이트 만들기 (사용자가 누를 때만, 기록 부족이면 AI 미호출, 멱등, 60초 간격 제한)",
+)
+def create_goal_insight(
+    goal_id: str,
+    payload: InsightRequest,
+    response: Response,
+    uid: str = Depends(require_consented_uid),
+    db=Depends(get_db),
+    ai: AIClient = Depends(get_ai_client),
+):
+    goal = _get_owned(db, "goals", goal_id, uid)
+    inputs = _goal_insight_inputs(db, uid, goal)
+    saved = _own_insight(db, uid, goal_id)
+
+    # Idempotency first: a retry of an already stored request returns it, no AI call, no cooldown.
+    if saved is not None and saved.get("client_request_id") == payload.client_request_id:
+        response.status_code = status.HTTP_200_OK
+        return InsightResponse(insight=_insight_item(saved, inputs))
+
+    if not inputs["sufficient"]:
+        # Not enough material: do not call the AI, do not store anything.
+        response.status_code = status.HTTP_200_OK
+        return InsightResponse(
+            insight=None,
+            is_insufficient=True,
+            message=(
+                "기록과 회고를 더 남기면 인사이트를 볼 수 있어요. "
+                f"(기록 {inputs['record_count']}/{INSIGHT_MIN_RECORDS}, 회고 {inputs['reflection_total']}/{INSIGHT_MIN_REFLECTIONS})"
+            ),
+            record_count=inputs["record_count"],
+            reflection_count=inputs["reflection_total"],
+        )
+
+    if saved is not None:
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(saved["generated_at"].replace("Z", "+00:00"))).total_seconds()
+        except (KeyError, ValueError):
+            age = INSIGHT_COOLDOWN_SECONDS  # unreadable stored time: do not block
+        if age < INSIGHT_COOLDOWN_SECONDS:
+            wait = max(1, int(INSIGHT_COOLDOWN_SECONDS - age + 0.999))
+            raise api_error(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "INSIGHT_COOLDOWN",
+                f"인사이트는 {wait}초 뒤에 다시 만들 수 있어요.",
+                {"retry_after_seconds": wait},
+            )
+
+    tasks = list(inputs["task_by_id"].values())
+    done, total, _ = _goal_progress(tasks)
+    today = clock.today()
+    week_start = clock.week_monday(today)
+    all_goal_logs = db.find("study_logs", user_id=uid, goal_id=goal_id)
+    week_minutes = sum(
+        log["minutes"] for log in all_goal_logs if clock.is_within_week(date.fromisoformat(log["study_date"]), week_start)
+    )
+    user_payload = {
+        "learning": {
+            "field": goal["field"],
+            "course": goal["course"],
+            "current_level_name": goal["current_level_name"],
+            "target_level_name": goal["target_level_name"],
+            "weekly_hours": goal["weekly_hours"],
+        },
+        "window": {"from": inputs["window_start"].isoformat(), "to": today.isoformat(), "days": INSIGHT_WINDOW_DAYS},
+        "progress": {
+            "completed_tasks": done,
+            "total_tasks": total,
+            "this_week_minutes": week_minutes,
+            "weekly_target_minutes": goal["weekly_hours"] * 60,
+        },
+        "records": [
+            {
+                "study_date": log["study_date"],
+                "minutes": log["minutes"],
+                "activity": log["activity"],
+                "task_title": (inputs["task_by_id"].get(log["task_id"]) or {}).get("title", ""),
+            }
+            for log in inputs["records"][:INSIGHT_RECORD_LIMIT]
+        ],
+        "reflections": [
+            {
+                "study_date": (inputs["log_by_id"].get(r["study_log_id"]) or {}).get("study_date", r["created_at"][:10]),
+                "task_title": (inputs["task_by_id"].get(r["task_id"]) or {}).get("title", ""),
+                "content": r["content"],
+                "tags": r.get("tags", []),
+            }
+            for r in inputs["reflections"]
+        ],
+    }
+    try:
+        result = ai.generate(INSIGHT_SYSTEM_PROMPT, user_payload, AIInsight, validator=_validate_ai_insight)
+    except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
+        raise _ai_error_response(exc)  # nothing is stored; an earlier insight stays as it was
+
+    now = _now_iso()
+    doc = {
+        "user_id": uid,
+        "goal_id": goal_id,
+        "summary": result.summary.strip(),
+        "difficulty": result.difficulty.strip(),
+        "next_action": result.next_action.strip(),
+        "generated_at": now,
+        "record_count": inputs["record_count"],
+        "reflection_count": len(inputs["reflections"]),
+        "source_signature": inputs["signature"],
+        "client_request_id": payload.client_request_id,
+        "created_at": saved["created_at"] if saved else now,
+        "updated_at": now,
+    }
+    stored = db.set("insights", goal_id, doc)  # one document per learning: a new insight overwrites
+    return InsightResponse(insight=_insight_item(stored, inputs))
 
 
 # 10. Feedback (learners) and admin screens (Phase 5E)

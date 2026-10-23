@@ -109,6 +109,21 @@ erDiagram
         string created_at
         string updated_at
     }
+    insights {
+        string id PK "문서 ID = goal_id (학습당 1건, 새로 만들면 덮어씀, 이력 없음) (Phase 6B)"
+        string user_id FK
+        string goal_id FK
+        string summary "진행 요약 1~300자"
+        string difficulty "반복되는 어려움 0~300자, 근거가 없으면 빈 문자열"
+        string next_action "다음 행동 제안 1~300자"
+        string generated_at
+        int record_count "생성에 쓴 최근 14일 기록 수"
+        int reflection_count "생성에 쓴 회고 수 (최대 5)"
+        string source_signature "입력 항목 (id, updated_at) 의 해시. is_stale 판정용, API 로 내려가지 않음"
+        string client_request_id "생성 멱등 키"
+        string created_at
+        string updated_at
+    }
     learning_documents {
         string id PK
         string title
@@ -152,7 +167,7 @@ erDiagram
 | 3 | 기록 저장이 과제 자동 완료시키는지 | 아니오 — `status`는 `PATCH /api/tasks/{id}`로 사용자가 직접 토글 |
 | 4 | 회고 단독 삭제 | `StudyLogUpdateRequest.delete_reflection: bool` 전용 플래그 (reflection=null은 `_changes()`의 exclude_none 때문에 구분 불가) |
 | 5 | 과제별 누적 시간 제공 위치 | `GET /api/tasks` 응답에 `record_count`/`total_minutes` 추가(요청마다 계산, 별도 저장 안 함). 별도 집계 엔드포인트는 만들지 않음 |
-| 6 | 인사이트 충분/부족 기준 | 기록 3건 이상 **그리고** 회고 1건 이상이면 "충분"(Phase 6 안내), 아니면 "부족" 안내 |
+| 6 | 인사이트 충분/부족 기준 | 그 학습의 **최근 14일 기록 3건 이상 그리고 회고 1건 이상**이면 "충분", 아니면 "부족" 안내. Phase 6B 에서 실행 화면의 생성 규칙과 대시보드 안내가 같은 기준을 쓰도록 통일(기록 수는 전체 기간이 아니라 인사이트가 읽는 14일 창 기준). 부족하면 AI 를 호출하지 않고 저장하지 않는다 |
 | 7 | 동일 과제·같은 날 기록 중복 | 허용(제한 없음) — 하루를 여러 세션으로 나눠 기록하는 사용을 막지 않기 위함 |
 
 ## 복수 학습 규칙 (결정 2026-10-22, docs/multi_goal_design.md)

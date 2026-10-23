@@ -7,6 +7,8 @@ the in-memory store.
 import pytest
 from fastapi.testclient import TestClient
 
+from datetime import date
+
 import clock
 from tests.conftest import auth_headers
 
@@ -598,7 +600,9 @@ class TestDashboardSummary:
         matching = next(t for t in body["today_tasks"] if t["id"] == task["id"])
         assert matching["record_count"] == 1
 
-    def test_insight_insufficient_then_sufficient_after_enough_records(self, client: TestClient, consented_headers, goal_and_task):
+    def test_insight_insufficient_then_sufficient_after_enough_records(self, client: TestClient, consented_headers, goal_and_task, monkeypatch):
+        # The insight window is the last 14 days, so "today" is pinned next to the log dates (2026-10-19).
+        monkeypatch.setattr(clock, "today", lambda: date(2026, 10, 21))
         _, task = goal_and_task
         assert client.get("/api/dashboard/summary", headers=consented_headers).json()["insight"]["is_insufficient"] is True
 
@@ -610,7 +614,8 @@ class TestDashboardSummary:
             )
         body = client.get("/api/dashboard/summary", headers=consented_headers).json()
         assert body["insight"]["is_insufficient"] is False
-        assert "Phase 6" in body["insight"]["text"]
+        # Phase 6B: enough records and a reflection, nothing generated yet -> a hint to create it (no AI call)
+        assert body["insight"]["text"] == "실행 기록 화면에서 인사이트를 만들어 보세요."
 
     def test_requires_auth_and_consent(self, client: TestClient, mock_auth_headers):
         assert client.get("/api/dashboard/summary").status_code == 401

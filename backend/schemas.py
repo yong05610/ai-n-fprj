@@ -525,6 +525,31 @@ class AIInsightSummary(BaseModel):
     is_insufficient: bool = Field(False, description="기록이 부족하여 기본 안내인 경우 true")
 
 
+class InsightItem(BaseModel):
+    summary: str
+    difficulty: str = Field("", description="반복되는 어려움. 근거가 없으면 빈 문자열")
+    next_action: str
+    generated_at: str
+    record_count: int = Field(..., description="생성 때 쓴 최근 14일 학습 기록 수")
+    reflection_count: int = Field(..., description="생성 때 쓴 회고 수 (최대 5)")
+    is_stale: bool = Field(False, description="생성 뒤에 입력 범위의 기록·회고가 추가·수정·삭제됐으면 true")
+
+
+class InsightRequest(BaseModel):
+    client_request_id: str = Field(
+        ..., min_length=1, max_length=100,
+        description="멱등 키. 같은 값으로 재요청하면 AI 를 다시 부르지 않고 저장된 결과를 돌려준다",
+    )
+
+
+class InsightResponse(BaseModel):
+    insight: Optional[InsightItem] = None
+    is_insufficient: bool = Field(False, description="기록이 부족해 AI 를 호출하지 않은 경우 true")
+    message: Optional[str] = None
+    record_count: Optional[int] = Field(None, description="부족 안내일 때 최근 14일 기록 수")
+    reflection_count: Optional[int] = Field(None, description="부족 안내일 때 회고 수")
+
+
 class GoalOverviewItem(BaseModel):
     goal_id: str
     course: str

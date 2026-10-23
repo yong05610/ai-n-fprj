@@ -49,3 +49,15 @@ class AITutorAnswer(BaseModel):
     relevant: bool
     answer: str = ""
     used_source_ids: List[str] = Field(default_factory=list, max_length=10)
+
+
+class AIInsight(BaseModel):
+    """One learning insight (Phase 6B): progress summary, repeated difficulty, next action.
+
+    The server rejects empty required parts, over-long text and wording that treats a suggested
+    weekday as a deadline (see main._validate_ai_insight); nothing is patched silently.
+    """
+
+    summary: str = Field(..., min_length=1, max_length=300)
+    difficulty: str = Field("", max_length=300)
+    next_action: str = Field(..., min_length=1, max_length=300)

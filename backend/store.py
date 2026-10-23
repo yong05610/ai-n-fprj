@@ -22,6 +22,7 @@ USER_OWNED_COLLECTIONS = (
     "reflections",
     "conversations",
     "consent_records",
+    "insights",
 )
 
 

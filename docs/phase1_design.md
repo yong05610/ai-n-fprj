@@ -303,6 +303,8 @@ erDiagram
 | `GET` | `/api/goals` | 사용자의 목표 목록 조회 | `goals` |
 | `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 같은 날 진행 중인 활성 학습이 이미 2개면(동시 최대 2개 초과) 409 `GOAL_PERIOD_OVERLAP`, `details.overlaps` 에 해당 날에 걸린 학습 전부. `/api/plan/confirm` 은 사용자가 고른 `start_date` 로 동일 검사) | `goals` |
 | `GET` | `/api/goals/{goal_id}` | 목표 상세 조회 (확정 때 저장한 `advice_title`, `advice_content` 포함, 없는 기존 목표는 null) | `goals` |
+| `GET` | `/api/goals/{goal_id}/insight` | 저장된 마지막 AI 학습 인사이트 `{insight: {summary, difficulty, next_action, generated_at, record_count, reflection_count, is_stale} \| null}`. **AI 를 호출하지 않는다.** 타 UID 403, 없는 id 404 | `insights` |
+| `POST` | `/api/goals/{goal_id}/insight` | AI 학습 인사이트 만들기 `{client_request_id}`. 기록 부족이면 AI 미호출·미저장 200 `{insight: null, is_insufficient: true, message, record_count, reflection_count}`. 충분하면 AI 1회 호출·검증·저장 후 201, 같은 `client_request_id` 재요청은 200(AI 재호출 없음). 같은 학습의 마지막 생성 후 60초 이내 새 요청은 429 `INSIGHT_COOLDOWN`(`details.retry_after_seconds`). 검증 실패·AI 오류는 502/503/504 이며 기존 인사이트 유지 | `insights` |
 | `GET` | `/api/goals/{goal_id}/references` | 학습에 연결된 검토 참고자료(읽기 전용). 응답 `{references[{title, category, source_name, url, is_verified}], references_notice}`, plan/generate 와 같은 분야 일치 규칙(`source_name` 은 이번에 `ResourceReferenceItem` 에 추가한 선택 필드). 타 UID 403, 없는 id 404 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |
@@ -319,7 +321,7 @@ erDiagram
 | `POST` | `/api/timer/finish` | 타이머 종료, 학습 기록으로 저장 | `study-logs` |
 | `POST` | `/api/timer/cancel` | 활성 타이머 취소 (기록 생성 없음) | `users.active_timer` |
 | `GET` | `/api/data/summary` | **AI 튜터 컨텍스트용** 진행 중인 모든 학습의 요약(`learning_summary`, 줄바꿈으로 학습 구분) 및 최근 회고(최대 5건, `keywords` 일치 우선 후 최신순, 진행 중 학습의 과제 회고만) | `summary` |
-| `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트(최근 학습=active_goal_id 기준) + `goals_overview`(진행 중인 모든 학습의 일정·진행률) | `summary` |
+| `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트(최근 학습=active_goal_id 기준: 저장된 인사이트 요약, 없으면 안내 문구. **AI 를 호출하지 않는다**) + `goals_overview`(진행 중인 모든 학습의 일정·진행률) | `summary` |
 | `GET` | `/api/analytics/overview` | **종합 학습 분석 화면용** 진행 중 학습별 일정·진행률·이번 주 요일별 학습 분(읽기 전용, AI 호출 없음) | `summary` |
 | `POST` | `/api/conversations` | 새 튜터 대화 세션 생성(제목 "새 대화", `client_request_id` 로 멱등: 재요청 200) | `conversations` |
 | `GET` | `/api/conversations` | 최근 갱신순 튜터 대화 목록 조회 (최대 50건, 메시지 제외) | `conversations` |

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { type GoalOption, GoalSwitch } from "@/components/GoalSwitch";
+import { InsightCard } from "@/components/InsightCard";
 import { ApiError, apiRequest, apiRequestWithHeaders } from "@/lib/api";
 import { taskToSelectForTimer, timerLocation } from "@/lib/timerSelection";
 import { todayKSTDateString } from "@/lib/week";
@@ -465,23 +466,7 @@ export function ExecutionScreen() {
         </article>
       </div>
 
-      {/* Phase 6.9 builds the real insight; until then the slot is visible but inactive. */}
-      <section className="card insight-card">
-        <div className="insight-mark">✦</div>
-        <div className="insight-copy">
-          <div className="insight-heading">
-            <div>
-              <p className="kicker">AI LEARNING INSIGHT</p>
-              <h2>기록에서 찾은 이번 주 학습 인사이트</h2>
-            </div>
-            <button type="button" className="btn secondary small" disabled aria-disabled="true">
-              인사이트 갱신 (준비 중)
-            </button>
-          </div>
-          <p>기록과 회고를 바탕으로 한 학습 인사이트가 준비 중입니다.</p>
-          <small>내 실행 기록과 회고 기반 · AI 생성 안내</small>
-        </div>
-      </section>
+      <InsightCard goalId={activeGoalId} dataVersion={logs} />
 
       <div className="grid columns execution-layout">
         <section className="card">
