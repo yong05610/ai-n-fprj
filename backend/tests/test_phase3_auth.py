@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from tests.conftest import auth_headers
 
-CONSENT = {"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}
+CONSENT = {"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}
 GOAL = {
     "field": "Python 개발",
     "course": "기본문법",
@@ -59,12 +59,12 @@ class TestConsent:
         assert response.status_code == 201
         body = response.json()
         assert body["user_id"] == "test-uid-alice"
-        assert body["terms_version"] == "v1.0"
+        assert body["terms_version"] == "v1.1"
         assert body["consented_at"].endswith("Z")
 
         profile = client.get("/api/user/profile", headers=mock_auth_headers).json()
         assert profile["uid"] == "test-uid-alice"
-        assert profile["consent_version"] == "v1.0"
+        assert profile["consent_version"] == "v1.1"
 
     def test_consent_requires_all_agreements(self, client: TestClient, mock_auth_headers):
         payload = {**CONSENT, "ai_use_agreed": False}
@@ -93,11 +93,11 @@ class TestConsent:
 
         assert client.post("/api/consent", json=CONSENT, headers=mock_auth_headers).status_code == 201
 
-        monkeypatch.setattr(main, "CURRENT_TERMS_VERSION", "v1.1")
-        bumped = {**CONSENT, "terms_version": "v1.1"}
+        monkeypatch.setattr(main, "CURRENT_TERMS_VERSION", "v1.2")
+        bumped = {**CONSENT, "terms_version": "v1.2"}
         response = client.post("/api/consent", json=bumped, headers=mock_auth_headers)
         assert response.status_code == 201
-        assert response.json()["terms_version"] == "v1.1"
+        assert response.json()["terms_version"] == "v1.2"
 
 
 class TestGoalsAndTasks:

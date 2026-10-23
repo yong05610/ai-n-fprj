@@ -63,6 +63,13 @@ from schemas import (
     SendMessageResponse,
     ResourceListResponse,
     UserProfileResponse,
+    AdminUserItem,
+    AdminUserListResponse,
+    FeedbackCreateRequest,
+    FeedbackReceipt,
+    AdminFeedbackItem,
+    AdminFeedbackSummary,
+    FeedbackStatusUpdate,
     ProfileUpdateRequest,
     DataDeleteResponse,
     ConsentCreateRequest,
@@ -70,7 +77,7 @@ from schemas import (
 )
 from store import USER_OWNED_COLLECTIONS, assert_safe_store_config, get_store
 
-CURRENT_TERMS_VERSION = "v1.0"
+CURRENT_TERMS_VERSION = "v1.1"
 
 assert_safe_auth_config()
 assert_safe_store_config()
@@ -156,21 +163,62 @@ def get_current_user_doc(uid: str = Depends(get_current_uid), db=Depends(get_db)
     return db.get("users", uid)
 
 
-def require_consented_uid(uid: str = Depends(get_current_uid), user=Depends(get_current_user_doc)) -> str:
+LAST_ACTIVE_TOUCH_INTERVAL = timedelta(minutes=10)
+
+
+def _touch_last_active(db, user: dict[str, Any]) -> None:
+    """Phase 5E: keep users.last_active_at meaningful for the admin user list without a write on
+    every request - it is rewritten only when the stored value is 10 minutes old or missing.
+    Called only for consented requests (after the consent check), by both require_consented_*."""
+    now = datetime.now(timezone.utc)  # not _now_iso(): the check must not consume that helper's calls
+    last = user.get("last_active_at")
+    if last:
+        try:
+            if now - datetime.fromisoformat(last.replace("Z", "+00:00")) < LAST_ACTIVE_TOUCH_INTERVAL:
+                return
+        except ValueError:
+            pass  # an unreadable stored value is simply replaced
+    db.update("users", user["uid"], {"last_active_at": now.isoformat(timespec="seconds").replace("+00:00", "Z")})
+
+
+def require_consented_uid(
+    uid: str = Depends(get_current_uid), user=Depends(get_current_user_doc), db=Depends(get_db)
+) -> str:
     """Personal data endpoints are available only after the current terms are accepted."""
     if not user or user.get("consent_version") != CURRENT_TERMS_VERSION:
         raise _consent_required()
+    _touch_last_active(db, user)
     return uid
 
 
 def require_consented_user_doc(
-    uid: str = Depends(get_current_uid), user=Depends(get_current_user_doc)
+    uid: str = Depends(get_current_uid), user=Depends(get_current_user_doc), db=Depends(get_db)
 ) -> dict[str, Any]:
     """Like require_consented_uid, but for endpoints that need the user document itself
     (active_goal_id, active_timer) and would otherwise re-fetch it."""
     if not user or user.get("consent_version") != CURRENT_TERMS_VERSION:
         raise _consent_required()
+    _touch_last_active(db, user)
     return user
+
+
+def _admin_uids() -> frozenset[str]:
+    """ADMIN_UIDS: comma separated, whitespace trimmed, empty entries ignored. Read per call
+    so a change of the environment variable needs no code change. No UID lives in the code."""
+    return frozenset(p.strip() for p in os.getenv("ADMIN_UIDS", "").split(",") if p.strip())
+
+
+def _is_admin(uid: str) -> bool:
+    return uid in _admin_uids()
+
+
+def require_admin_uid(uid: str = Depends(require_consented_uid)) -> str:
+    """Admin-only endpoints: normal authentication and consent first, then the UID that comes
+    from the verified token must be listed in ADMIN_UIDS. Nothing in the request body, header
+    or query takes part in this decision."""
+    if not _is_admin(uid):
+        raise forbidden("관리자만 사용할 수 있습니다.")
+    return uid
 
 
 def _get_owned(db, collection: str, doc_id: str, uid: str) -> dict[str, Any]:
@@ -1690,6 +1738,177 @@ async def list_resources(
     _not_implemented()
 
 
+# 10. Feedback (learners) and admin screens (Phase 5E)
+FEEDBACK_LIMIT_PER_USER = 10
+ADMIN_USERS_PAGE_SIZE = 50
+ACTIVE_WINDOW_DAYS = 7
+FEEDBACK_DONE_WINDOW_DAYS = 30
+FEEDBACK_LIST_DEFAULT = 100
+FEEDBACK_LIST_MAX = 200
+
+
+@app.post(
+    "/api/feedback",
+    response_model=FeedbackReceipt,
+    status_code=status.HTTP_201_CREATED,
+    tags=["feedback"],
+    summary="테스트 피드백 제출 (사용자 정보 없이 저장, client_request_id 로 멱등)",
+)
+def create_feedback(
+    payload: FeedbackCreateRequest,
+    response: Response,
+    user: dict[str, Any] = Depends(require_consented_user_doc),
+    db=Depends(get_db),
+):
+    # The request is authenticated with the UID, but the stored document never carries it: the
+    # idempotency key is a random value unrelated to the user, and the per-user counter lives on
+    # the users document (it disappears with a data deletion request, the feedback stays).
+    existing = next(iter(db.find("feedback", client_request_id=payload.client_request_id)), None)
+    if existing is not None:
+        response.status_code = status.HTTP_200_OK
+        return {"id": existing["id"], "created_at": existing["created_at"]}
+
+    sent = int(user.get("feedback_submitted_count") or 0)
+    if sent >= FEEDBACK_LIMIT_PER_USER:
+        raise api_error(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "FEEDBACK_LIMIT_REACHED",
+            "이번 테스트에서 보낼 수 있는 피드백 수를 넘었어요.",
+        )
+    now = _now_iso()
+    doc = db.create(
+        "feedback",
+        {
+            "usability": payload.usability,
+            "ai_usefulness": payload.ai_usefulness,
+            "screen": payload.screen,
+            "comment": (payload.comment or "").strip(),
+            "status": "new",
+            "client_request_id": payload.client_request_id,
+            "created_at": now,
+            "updated_at": now,
+        },
+    )
+    db.update("users", user["uid"], {"feedback_submitted_count": sent + 1})
+    return {"id": doc["id"], "created_at": doc["created_at"]}
+
+
+def _mask_uid(uid: str) -> str:
+    return (uid[:4] if len(uid) > 4 else uid[:1]) + "•••"
+
+
+@app.get(
+    "/api/admin/users",
+    response_model=AdminUserListResponse,
+    tags=["admin"],
+    summary="[관리자] 사용자 목록 (마스킹된 ID, 동의, 진행 중 학습 수, 최근 활동, 상태). 읽기 전용",
+)
+def admin_list_users(
+    status_filter: str = Query("all", alias="status", pattern="^(all|active|dormant)$"),
+    page: int = Query(1, ge=1),
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+):
+    today = clock.today()
+    active_since = today - timedelta(days=ACTIVE_WINDOW_DAYS)
+    # One read of the users and one of the active goals (never one query per user).
+    goal_counts: dict[str, int] = {}
+    for goal in db.find("goals", status="active"):
+        goal_counts[goal["user_id"]] = goal_counts.get(goal["user_id"], 0) + 1
+
+    rows = []
+    for user in db.find("users"):
+        last = user.get("last_active_at")
+        try:
+            is_active = bool(last) and clock.date_from_utc_iso(last) >= active_since
+        except ValueError:
+            is_active = False
+        rows.append(
+            {
+                "sort": last or "",
+                "item": AdminUserItem(
+                    user_id_masked=_mask_uid(user["uid"]),
+                    consented=user.get("consent_version") == CURRENT_TERMS_VERSION,
+                    consent_version=user.get("consent_version"),
+                    active_goal_count=goal_counts.get(user["uid"], 0),
+                    last_active_at=last,
+                    status="active" if is_active else "dormant",
+                ),
+            }
+        )
+    if status_filter != "all":
+        rows = [r for r in rows if r["item"].status == status_filter]
+    rows.sort(key=lambda r: r["sort"], reverse=True)
+    start = (page - 1) * ADMIN_USERS_PAGE_SIZE
+    return AdminUserListResponse(
+        items=[r["item"] for r in rows[start : start + ADMIN_USERS_PAGE_SIZE]],
+        total=len(rows),
+        page=page,
+        page_size=ADMIN_USERS_PAGE_SIZE,
+    )
+
+
+@app.get(
+    "/api/admin/feedback/summary",
+    response_model=AdminFeedbackSummary,
+    tags=["admin"],
+    summary="[관리자] 피드백 요약 (미확인 건수, 평균, 개선 후보, 최근 30일 반영 완료)",
+)
+def admin_feedback_summary(admin_uid: str = Depends(require_admin_uid), db=Depends(get_db)):
+    docs = db.find("feedback")
+
+    def average(field: str) -> Optional[float]:
+        return round(sum(d[field] for d in docs) / len(docs), 1) if docs else None
+
+    done_since = clock.today() - timedelta(days=FEEDBACK_DONE_WINDOW_DAYS)
+    return AdminFeedbackSummary(
+        unseen_count=sum(1 for d in docs if d["status"] == "new"),
+        usability_avg=average("usability"),
+        usability_count=len(docs),
+        ai_usefulness_avg=average("ai_usefulness"),
+        ai_usefulness_count=len(docs),
+        candidate_count=sum(1 for d in docs if d["status"] == "candidate"),
+        done_last_30_days=sum(
+            1 for d in docs if d["status"] == "done" and clock.date_from_utc_iso(d["updated_at"]) >= done_since
+        ),
+    )
+
+
+@app.get(
+    "/api/admin/feedback",
+    response_model=List[AdminFeedbackItem],
+    tags=["admin"],
+    summary="[관리자] 피드백 목록 (최신순, 최대 200건). 식별 정보는 저장하지 않으므로 내려갈 것도 없다",
+)
+def admin_list_feedback(
+    status_filter: str = Query("all", alias="status", pattern="^(all|new|seen|candidate|done)$"),
+    limit: int = Query(FEEDBACK_LIST_DEFAULT, ge=1, le=FEEDBACK_LIST_MAX),
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+):
+    docs = db.find("feedback") if status_filter == "all" else db.find("feedback", status=status_filter)
+    docs.sort(key=lambda d: d["created_at"], reverse=True)
+    return docs[:limit]
+
+
+@app.patch(
+    "/api/admin/feedback/{feedback_id}",
+    response_model=AdminFeedbackItem,
+    tags=["admin"],
+    summary="[관리자] 피드백 상태만 변경 (seen | candidate | done). 의견 수정·삭제는 없다",
+)
+def admin_update_feedback(
+    feedback_id: str,
+    payload: FeedbackStatusUpdate,
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+):
+    doc = db.get("feedback", feedback_id)
+    if doc is None:
+        raise not_found()
+    return db.update("feedback", feedback_id, {"status": payload.status, "updated_at": _now_iso()})
+
+
 # 9. User Profile & Data Deletion
 def _profile(user: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -1697,6 +1916,7 @@ def _profile(user: dict[str, Any]) -> dict[str, Any]:
         "role": user.get("role", "learner"),
         "active_goal_id": user.get("active_goal_id"),
         "consent_version": user.get("consent_version"),
+        "is_admin": _is_admin(user["uid"]),  # derived from ADMIN_UIDS, never stored or settable
         "created_at": user["created_at"],
     }
 

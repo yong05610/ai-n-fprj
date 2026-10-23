@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AdminFeedbackScreen } from "@/components/AdminFeedbackScreen";
+import { AdminUsersScreen } from "@/components/AdminUsersScreen";
 import { AnalysisScreen } from "@/components/AnalysisScreen";
 import { useAuth } from "@/components/AuthProvider";
 import { ConsentModal } from "@/components/ConsentModal";
@@ -11,6 +13,7 @@ import { LearningPathWizard } from "@/components/LearningPathWizard";
 import { SettingsScreen } from "@/components/SettingsScreen";
 import { TutorScreen } from "@/components/TutorScreen";
 import { WeeklyPlanScreen } from "@/components/WeeklyPlanScreen";
+import { apiRequest } from "@/lib/api";
 import { type View, buildHash, parseHash } from "@/lib/viewHash";
 import { todayKSTLabel } from "@/lib/week";
 
@@ -33,13 +36,14 @@ const USER_NAV: NavEntry[] = [
   { view: "settings", icon: "⚙", label: "내 정보·설정" },
 ];
 
-// Phase 5E; shown disabled so they never look like working features.
+// Phase 5E: the whole group is shown only to admins. Two entries are live, the other four
+// stay disabled with "준비 중" so they never look like working features.
 const ADMIN_NAV: NavEntry[] = [
   { view: null, icon: "▣", label: "운영 현황" },
-  { view: null, icon: "♙", label: "사용자 관리" },
+  { view: "admin-users", icon: "♙", label: "사용자 관리" },
   { view: null, icon: "✧", label: "AI 생성 이력" },
   { view: null, icon: "▧", label: "참고자료 관리" },
-  { view: null, icon: "♡", label: "사용자 피드백" },
+  { view: "admin-feedback", icon: "♡", label: "사용자 피드백" },
   { view: null, icon: "⚙", label: "서비스 설정" },
 ];
 
@@ -68,8 +72,11 @@ function NavButton({ entry, current, onGo }: { entry: NavEntry; current: View; o
 }
 
 export default function Home() {
-  const { status, errorMessage, accept, decline, reopenConsent } = useAuth();
+  const { status, session, errorMessage, accept, decline, reopenConsent } = useAuth();
   const [view, setView] = useState<View | null>(null);
+  // null = not known yet. Only the server decides (profile.is_admin); the admin group stays
+  // hidden until it says true, and an admin hash for a non-admin is sent back to the dashboard.
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [today, setToday] = useState("");
   const [query, setQuery] = useState("");
   // The wizard registers a function that asks the user before leaving unsaved work.
@@ -79,6 +86,32 @@ export default function Home() {
     setView(parseHash(window.location.hash).view ?? "dashboard");
     setToday(todayKSTLabel());
   }, []);
+
+  useEffect(() => {
+    if (status !== "ready" || !session) {
+      setIsAdmin(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const profile = await apiRequest<{ is_admin?: boolean }>("/api/user/profile", { token: await session.getToken() });
+        if (!cancelled) setIsAdmin(profile.is_admin === true);
+      } catch {
+        if (!cancelled) setIsAdmin(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session]);
+
+  useEffect(() => {
+    if (isAdmin === false && view !== null && view.startsWith("admin-")) {
+      setView("dashboard");
+      window.history.replaceState(null, "", buildHash("dashboard"));
+    }
+  }, [isAdmin, view]);
 
   const go = useCallback(
     (next: View) => {
@@ -134,7 +167,7 @@ export default function Home() {
   }
 
   const current: View = view ?? "dashboard";
-  const currentLabel = USER_NAV.find((n) => n.view === current)?.label ?? "대시보드";
+  const currentLabel = [...USER_NAV, ...ADMIN_NAV].find((n) => n.view === current)?.label ?? "대시보드";
 
   function onSearch(value: string) {
     const needle = value.trim();
@@ -164,16 +197,20 @@ export default function Home() {
           </nav>
         </div>
 
-        <div className="nav-separator"></div>
+        {isAdmin === true && (
+          <>
+            <div className="nav-separator"></div>
 
-        <div className="nav-group">
-          <div className="nav-title">관리자 · 준비 중</div>
-          <nav>
-            {ADMIN_NAV.map((entry) => (
-              <NavButton key={entry.label} entry={entry} current={current} onGo={go} />
-            ))}
-          </nav>
-        </div>
+            <div className="nav-group">
+              <div className="nav-title">관리자</div>
+              <nav>
+                {ADMIN_NAV.map((entry) => (
+                  <NavButton key={entry.label} entry={entry} current={current} onGo={go} />
+                ))}
+              </nav>
+            </div>
+          </>
+        )}
 
         <div className="sidebar-bottom">
           <div className="user-mini">
@@ -222,6 +259,8 @@ export default function Home() {
               {current === "analysis" && <AnalysisScreen onCreatePath={() => go("path")} />}
               {current === "tutor" && <TutorScreen />}
               {current === "settings" && <SettingsScreen />}
+              {current === "admin-users" && isAdmin === true && <AdminUsersScreen />}
+              {current === "admin-feedback" && isAdmin === true && <AdminFeedbackScreen />}
             </div>
           )}
         </main>

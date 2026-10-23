@@ -308,3 +308,11 @@ ul { margin: 0; padding-left: 18px; color: #586277; line-height: 1.7; font-size:
 .weekday-select { display: block; width: 92px; margin-top: 4px; border: 1px solid var(--line); border-radius: 7px; background: #fff; padding: 5px; color: var(--ink); font-size: 9px; }
 .week-nav { display: flex; gap: 6px; margin: 0 0 4px; }
 .advice-title { margin: 8px 0 4px; font-size: 11px; font-weight: 800; }
+
+/* Admin screens (Phase 5E): ported from the mockup */
+.table-wrap { overflow: auto; }
+table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+th, td { text-align: left; border-bottom: 1px solid #eff0f4; padding: 10px 9px; font-size: 10px; }
+th { font-size: 9px; color: #969cad; font-weight: 800; }
+td { color: #586277; }
+.admin-banner { padding: 9px 12px; background: #fff8e9; color: #a97922; border: 1px solid #f4e4c2; border-radius: 9px; font-size: 10px; margin-bottom: 13px; }

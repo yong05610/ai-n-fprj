@@ -2,7 +2,7 @@
  * The current screen lives in the URL hash so a refresh keeps it: "#analysis", and for the
  * tutor "#tutor/<conversation_id>". Pure helpers, no window access.
  */
-export const VIEWS = ["dashboard", "path", "wbs", "execution", "analysis", "tutor", "settings"] as const;
+export const VIEWS = ["dashboard", "path", "wbs", "execution", "analysis", "tutor", "settings", "admin-users", "admin-feedback"] as const;
 export type View = (typeof VIEWS)[number];
 
 // Conversation ids are store-generated ids; anything else in the hash is ignored, never trusted.

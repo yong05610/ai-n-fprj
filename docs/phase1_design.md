@@ -326,9 +326,14 @@ erDiagram
 | `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 (assistant 메시지의 `sources`: doc_id, title, source_name, url) | `conversations` |
 | `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화).** 요청 `{content(1~1000자), client_request_id}`, 응답 `{user_message, assistant_message, conversation_title, refused}`. 같은 `client_request_id` 재요청은 중복 저장 없이 200. AI 1회 호출(학습 관련 판정 + 답변 + 사용 자료), 실패 시 저장 없음(502/503/504), 대화 200메시지 초과 409 `CONVERSATION_FULL` | `conversations` |
 | `GET` | `/api/resources` | 사전 검토된 읽기 전용 참고자료 목록 검색·조회 | `resources` |
-| `GET` | `/api/user/profile` | 익명 사용자 프로필 조회 | `user` |
+| `GET` | `/api/user/profile` | 익명 사용자 프로필 조회. `is_admin`(ADMIN_UIDS 에 포함되면 true, 읽기 전용) 포함 | `user` |
 | `PATCH` | `/api/user/profile` | 사용자 프로필 수정. `active_goal_id` 변경(학습 전환)은 본인 소유이고 status=active 인 목표만 허용 | `user` |
-| `POST` | `/api/user/delete-data` | 내 학습 데이터 전체 삭제 요청 | `user` |
+| `POST` | `/api/user/delete-data` | 내 학습 데이터 전체 삭제 요청 (익명 피드백 `feedback` 은 UID 와 연결이 없어 남는다) | `user` |
+| `POST` | `/api/feedback` | 테스트 피드백 제출 `{usability, ai_usefulness, screen, comment?, client_request_id}`. 사용자 정보 없이 저장, 같은 `client_request_id` 재요청은 200, 사용자당 10건 초과 429 `FEEDBACK_LIMIT_REACHED` | `feedback` |
+| `GET` | `/api/admin/users` | **[관리자]** 사용자 목록 `?status=all\|active\|dormant&page=`(50건, 최근 활동순). 마스킹된 ID, 유형, 동의, 진행 중 학습 수, 최근 활동, 상태. 비관리자 403 | `admin` |
+| `GET` | `/api/admin/feedback` | **[관리자]** 피드백 목록 `?status=all\|new\|seen\|candidate\|done&limit=`(최신순, 최대 200) | `admin` |
+| `GET` | `/api/admin/feedback/summary` | **[관리자]** 미확인 건수, 사용성·AI 유용성 평균과 응답 수, 개선 후보 수, 최근 30일 반영 완료 수 | `admin` |
+| `PATCH` | `/api/admin/feedback/{id}` | **[관리자]** 상태만 변경 `{status: seen\|candidate\|done}` (의견 수정·삭제 없음) | `admin` |
 
 ---
 

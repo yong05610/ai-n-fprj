@@ -1,4 +1,4 @@
-export const TERMS_VERSION = "v1.0";
+export const TERMS_VERSION = "v1.1";
 
 const CONSENT_STORAGE_KEY = "pacemate-consent";
 

@@ -196,7 +196,7 @@ class TestStudyLogOwnershipAndAuth:
     def test_cannot_log_against_another_uids_task(self, client: TestClient, consented_headers, goal_and_task):
         _, task = goal_and_task
         bob = auth_headers("test-uid-bob")
-        client.post("/api/consent", json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
+        client.post("/api/consent", json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
         response = client.post("/api/study-logs", json=_log_payload(task["id"]), headers=bob)
         assert response.status_code == 403
 
@@ -204,7 +204,7 @@ class TestStudyLogOwnershipAndAuth:
         _, task = goal_and_task
         log = client.post("/api/study-logs", json=_log_payload(task["id"]), headers=consented_headers).json()
         bob = auth_headers("test-uid-bob")
-        client.post("/api/consent", json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
+        client.post("/api/consent", json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
         assert client.patch(f"/api/study-logs/{log['id']}", json={"minutes": 10}, headers=bob).status_code == 403
         assert client.delete(f"/api/study-logs/{log['id']}", headers=bob).status_code == 403
 
@@ -490,13 +490,13 @@ class TestTimer:
         _, task = goal_and_task
         client.post("/api/timer/start", json={"task_id": task["id"]}, headers=consented_headers)
         client.post("/api/user/delete-data", headers=consented_headers)
-        client.post("/api/consent", json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}, headers=consented_headers)
+        client.post("/api/consent", json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}, headers=consented_headers)
         assert client.get("/api/timer/active", headers=consented_headers).json()["active"] is False
 
     def test_cannot_start_on_another_uids_task(self, client: TestClient, consented_headers, goal_and_task):
         _, task = goal_and_task
         bob = auth_headers("test-uid-bob")
-        client.post("/api/consent", json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
+        client.post("/api/consent", json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
         assert client.post("/api/timer/start", json={"task_id": task["id"]}, headers=bob).status_code == 403
 
     def test_requires_auth_and_consent(self, client: TestClient, mock_auth_headers):

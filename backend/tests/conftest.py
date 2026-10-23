@@ -45,7 +45,7 @@ def consented_headers(client: TestClient, mock_auth_headers: dict[str, str]) -> 
     """Headers for a user who has already accepted the current terms."""
     response = client.post(
         "/api/consent",
-        json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True},
+        json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True},
         headers=mock_auth_headers,
     )
     assert response.status_code == 201

@@ -60,7 +60,7 @@ def _active_goal_id(client, headers) -> str:
 
 def _other_user(client) -> dict:
     bob = auth_headers("test-uid-bob")
-    client.post("/api/consent", json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
+    client.post("/api/consent", json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
     return bob
 
 

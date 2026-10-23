@@ -42,6 +42,7 @@ export function ConsentModal({ busy, errorMessage, onAccept, onDecline }: Props)
           <li>[내 정보·설정] 메뉴에서 언제든지 모든 학습 데이터 삭제를 요청할 수 있습니다.</li>
           <li>삭제 요청 시 학습 목표·기록·회고·대화 이력이 모두 삭제됩니다.</li>
           <li>이 서비스는 베타 테스트 중이며, 테스트 종료 후 데이터 삭제 절차를 안내드립니다.</li>
+          <li>테스트 피드백을 제출하면 사용자 정보 없이 저장되어, 이후 삭제 요청으로 지울 수 없습니다. 피드백 제출은 선택입니다.</li>
         </ul>
 
         <label className="consent-check">

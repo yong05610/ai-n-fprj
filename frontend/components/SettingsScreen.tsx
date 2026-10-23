@@ -1,6 +1,8 @@
 "use client";
 
+import { AccountIdCard } from "@/components/AccountIdCard";
 import { DeleteDataSection } from "@/components/DeleteDataSection";
+import { FeedbackCard } from "@/components/FeedbackCard";
 
 /**
  * 내 정보·설정 (Phase 5C, minimal). Only what the consent notice promises is here: the data
@@ -18,7 +20,9 @@ export function SettingsScreen() {
       </div>
       <div className="grid columns">
         <DeleteDataSection />
+        <AccountIdCard />
       </div>
+      <FeedbackCard />
     </>
   );
 }

@@ -654,7 +654,7 @@ class ResourceListResponse(BaseModel):
 # --- 9. User Profile & Data Deletion ---
 
 class ConsentCreateRequest(BaseModel):
-    terms_version: str = Field(..., description="동의한 안내 문구 버전 (예: v1.0)")
+    terms_version: str = Field(..., description="동의한 안내 문구 버전 (예: v1.1)")
     privacy_agreed: bool = Field(..., description="개인정보·익명 UID 안내 동의")
     ai_use_agreed: bool = Field(..., description="AI 생성 결과 활용 및 기록 이용 동의")
 
@@ -673,11 +673,74 @@ class UserProfileResponse(BaseModel):
     role: str = "learner"
     active_goal_id: Optional[str] = None
     consent_version: Optional[str] = None
+    is_admin: bool = Field(False, description="ADMIN_UIDS 에 포함된 계정이면 true. 읽기 전용이며 어떤 요청으로도 바뀌지 않는다")
     created_at: str
 
 
 class ProfileUpdateRequest(BaseModel):
     active_goal_id: Optional[str] = None
+
+
+# --- 10. Admin (Phase 5E): users and feedback ---
+
+class AdminUserItem(BaseModel):
+    user_id_masked: str = Field(..., description="UID 앞 4자 + '•••' (4자 이하는 앞 1자 + '•••'). 전체 UID 는 내려 주지 않는다")
+    user_type: str = Field("익명", description="익명 고정 (이메일 사용자 유형은 만들지 않는다)")
+    consented: bool = Field(..., description="현재 약관 버전에 동의했는지")
+    consent_version: Optional[str] = None
+    active_goal_count: int = Field(..., description="status=active 인 학습 수 (과정명·목표 내용은 내려 주지 않는다)")
+    last_active_at: Optional[str] = None
+    status: Literal["active", "dormant"] = Field(..., description="최근 7일(Asia/Seoul) 안에 활동했으면 active")
+
+
+class AdminUserListResponse(BaseModel):
+    items: List[AdminUserItem]
+    total: int
+    page: int
+    page_size: int
+
+
+FeedbackScreen = Literal["dashboard", "path", "execution", "analysis", "settings", "other"]
+
+
+class FeedbackCreateRequest(BaseModel):
+    usability: int = Field(..., ge=1, le=5, description="사용 편의성 (1~5)")
+    ai_usefulness: int = Field(..., ge=1, le=5, description="AI 답변 유용성 (1~5)")
+    screen: FeedbackScreen = Field(..., description="어느 화면에 대한 의견인지")
+    comment: Optional[str] = Field(None, max_length=1000, description="의견 (선택, 1000자 이하)")
+    client_request_id: str = Field(
+        ..., min_length=1, max_length=100,
+        description="멱등 키 (UID 와 무관한 무작위 값). 같은 값으로 재요청하면 중복 저장 없이 기존 결과를 돌려준다",
+    )
+
+
+class FeedbackReceipt(BaseModel):
+    id: str
+    created_at: str
+
+
+class AdminFeedbackItem(BaseModel):
+    id: str
+    created_at: str
+    screen: str
+    usability: int
+    ai_usefulness: int
+    comment: str
+    status: Literal["new", "seen", "candidate", "done"]
+
+
+class AdminFeedbackSummary(BaseModel):
+    unseen_count: int = Field(..., description="status=new 건수")
+    usability_avg: Optional[float] = Field(None, description="소수점 한 자리, 응답이 없으면 null")
+    usability_count: int
+    ai_usefulness_avg: Optional[float] = Field(None, description="소수점 한 자리, 응답이 없으면 null")
+    ai_usefulness_count: int
+    candidate_count: int
+    done_last_30_days: int = Field(..., description="status=done 이고 updated_at 이 최근 30일(Asia/Seoul)인 건수")
+
+
+class FeedbackStatusUpdate(BaseModel):
+    status: Literal["seen", "candidate", "done"] = Field(..., description="new 로 되돌리는 값은 허용하지 않는다")
 
 
 class DataDeleteResponse(BaseModel):

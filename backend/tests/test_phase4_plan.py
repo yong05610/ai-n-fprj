@@ -403,7 +403,7 @@ class TestPlanConfirm:
 
         created = client.post("/api/plan/confirm", json=CONFIRM_REQUEST, headers=consented_headers).json()
         bob = auth_headers("test-uid-bob")
-        client.post("/api/consent", json={"terms_version": "v1.0", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
+        client.post("/api/consent", json={"terms_version": "v1.1", "privacy_agreed": True, "ai_use_agreed": True}, headers=bob)
         assert client.get(f"/api/goals/{created['goal']['id']}", headers=bob).status_code == 403
 
     def test_requires_auth_and_consent(self, client: TestClient, mock_auth_headers):

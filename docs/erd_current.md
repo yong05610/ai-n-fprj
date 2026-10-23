@@ -23,7 +23,8 @@ erDiagram
         string consent_version "구현에만 있음"
         object active_timer "Phase 5: {task_id, goal_id, started_at, client_request_id} 또는 없음 (열린 결정 1)"
         string created_at
-        string last_active_at
+        string last_active_at "동의·프로필 수정, 그리고 인증·동의된 요청 중 마지막 갱신 10분 뒤에만 갱신 (Phase 5E)"
+        int feedback_submitted_count "피드백 제출 횟수 상한(10)용 카운터, 피드백 문서와 연결되지 않음 (Phase 5E)"
     }
     consent_records {
         string id PK
@@ -97,6 +98,17 @@ erDiagram
         string created_at
         string updated_at
     }
+    feedback {
+        string id PK
+        int usability "1~5"
+        int ai_usefulness "1~5"
+        string screen "dashboard|path|execution|analysis|settings|other"
+        string comment "선택, 1000자 이하, 없으면 빈 문자열"
+        string status "new|seen|candidate|done"
+        string client_request_id "멱등용 무작위 값 (UID 와 무관)"
+        string created_at
+        string updated_at
+    }
     learning_documents {
         string id PK
         string title
@@ -152,4 +164,5 @@ erDiagram
 - 신설 컬렉션 `feedback`: id, usability(1~5), ai_usefulness(1~5), screen(enum), comment(선택, 1000자 이하), status(new/seen/candidate/done), client_request_id(제출 멱등용 무작위 값), created_at, updated_at. **user_id 를 두지 않는다.** 따라서 USER_OWNED_COLLECTIONS 에 넣지 않으며 delete-data 로 지워지지 않는다.
 - `users` 에 `feedback_submitted_count`(제출 횟수 상한용, 내용과 연결 없음)를 추가할 수 있다.
 - 관리자: `users.role` 은 "learner" 그대로 두고, 관리자 판별은 환경변수 `ADMIN_UIDS`(쉼표 구분 UID 목록)로만 한다. `GET /api/user/profile` 응답에 `is_admin`(읽기 전용)을 추가한다.
+- 약관 버전: `CURRENT_TERMS_VERSION` 을 `v1.1` 로 올렸다(동의 모달에 피드백 저장 안내 한 줄 추가). v1.0 으로 동의한 기존 사용자는 개인 데이터 API 에서 CONSENT_REQUIRED 를 받고 재동의하면 `users.consent_version` 이 v1.1 로 갱신되며 기존 데이터는 그대로 보인다(구현 확인: Phase 5E).
 - 관리자 API 는 `/api/admin/*` 이며 허용 목록 밖은 403 ErrorResponse 다.
