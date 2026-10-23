@@ -160,7 +160,7 @@
 - 운영 현황·AI 생성 이력·참고자료 관리·서비스 설정은 제목과 "준비 중"만 둔다.
 
 ## Phase 6 — RAG·Long-term Memory 튜터·인사이트 (AI · P0)
-**순서 변경(사용자 결정 2026-10-22):** AI 튜터는 핵심 기능이라 5D, 5E 보다 먼저 목업 `page-tutor` 형태로 구현한다. 지시서: docs/phase6_dev_prompt.md (선행: docs/phase5c_fix_instructions.md R1 검증). 이번 Phase 에는 6.1~6.8, 6.10 만 포함한다. **6.9(실행 화면 인사이트)는 Phase 6B 로 분리(지시서: docs/phase6b_dev_prompt.md, 2026-10-23)하고, 6.11(참고자료 보관함)은 사용자 보류.** 진행 순서: 5C 수정(R1) → Phase 6(튜터) → 5D → 5E → 6B → 7.
+**순서 변경(사용자 결정 2026-10-22):** AI 튜터는 핵심 기능이라 5D, 5E 보다 먼저 목업 `page-tutor` 형태로 구현한다. 지시서: docs/phase6_dev_prompt.md (선행: docs/phase5c_fix_instructions.md R1 검증). 이번 Phase 에는 6.1~6.8, 6.10 만 포함한다. **6.9(실행 화면 인사이트)는 Phase 6B 로 분리(지시서: docs/phase6b_dev_prompt.md, 2026-10-23) **검증 상태(docs/phase6b_verification.md):** 구조 승인, 인사이트 숫자 오류·근거 없는 반복 어려움 수정 필요(docs/phase6b_fix_instructions.md). 6.9 는 수정 검증 뒤 체크.하고, 6.11(참고자료 보관함)은 사용자 보류.** 진행 순서: 5C 수정(R1) → Phase 6(튜터) → 5D → 5E → 6B → 7.
 **검증 상태(2026-10-23, docs/phase6_verification.md):** 백엔드·API 승인(dev 모드), 조각 53개 승인·verified: true 전환 확인(pytest 319 passed). 6.1~6.6 은 PM 이 코드, 테스트, 실제 서버 호출로 직접 확인해 체크했다. 6.10 은 사용자가 보낸 실제 화면 캡처(2026-10-23, 말풍선 "AI 생성 · 참고용"과 채팅 카드 안내문)로 PM 이 확인해 체크했다. 6.7(새로고침 복원, 대화 전환, 재시도 동작)과 6.8(회고 수정·삭제 반영)은 캡처로 확인되지 않아 미검증으로 남긴다(사용자 확인 항목: phase6_verification.md §5).
 
 - [x] 6.1 사전 검토된 자료를 서버 배포물에 포함하고 읽기 전용 검색 인덱스를 만든다.
