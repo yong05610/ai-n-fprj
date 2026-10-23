@@ -1,7 +1,7 @@
 # Phase 6(AI 튜터) 검증 결과 (PM, 2026-10-23)
 
 **대상:** 커밋 897bfae, 지시서 docs/phase6_dev_prompt.md, 개발팀 보고 docs/phase6_report.md
-**판정:** 백엔드와 API는 승인(dev 모드). 자료 조각은 승인(docs/phase6_chunk_review.md). 승인 조건: 개발팀이 53개 조각을 verified: true 로 바꾸고 테스트를 다시 통과시킬 것. 브라우저 화면, Firebase 실연동은 미검증.
+**판정:** 백엔드와 API는 승인(dev 모드). 자료 조각은 승인(docs/phase6_chunk_review.md), 승인 조건이던 53개 verified: true 전환과 기본 파일 검색 테스트도 확인했다(커밋 63f1fe9, pytest 319 passed, 변경은 verified 값뿐). 브라우저 화면, Firebase 실연동은 미검증.
 
 ## 1. 직접 확인한 것
 - backend `pytest` **318 passed**, frontend typecheck 통과, `npm test` **34 passed**(보고와 일치). `npm run build` 는 이번에 직접 돌리지 않았다(개발팀 보고만).
