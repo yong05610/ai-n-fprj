@@ -141,18 +141,28 @@ class TestRetrieval:
         monkeypatch.setenv("RAG_CHUNKS_PATH", str(path))
         assert rag.search("리스트") == []
 
-    def test_shipped_chunk_file_is_well_formed_and_unreviewed(self, monkeypatch):
+    def test_shipped_chunk_file_is_well_formed_and_fully_approved(self, monkeypatch):
         monkeypatch.delenv("RAG_CHUNKS_PATH")
         data = json.load(open(rag._DEFAULT_CHUNKS_PATH, encoding="utf-8"))
         docs = {d["id"] for d in json.load(open(rag.os.path.join(rag.os.path.dirname(rag._DEFAULT_CHUNKS_PATH), "rag_documents.json"), encoding="utf-8"))}
         assert {e["doc_id"] for e in data} <= docs
+        total = 0
         for entry in data:
             assert 4 <= len(entry["chunks"]) <= 6
             for c in entry["chunks"]:
+                total += 1
                 assert c["id"].startswith(entry["doc_id"] + "_c") and c["text"].strip() and c["keywords"]
-                assert c["verified"] is False  # flipped only after docs/phase6_chunk_review.md
-        assert rag.search("파이썬 리스트 append") == []  # nothing is searchable before review
+                assert c["verified"] is True  # approved in docs/phase6_chunk_review.md (53 of 53)
+        assert total == 53
 
+    def test_default_chunk_file_makes_search_work(self, monkeypatch):
+        """With no RAG_CHUNKS_PATH override, the shipped (PM-approved) file is what is searched."""
+        monkeypatch.delenv("RAG_CHUNKS_PATH")
+        hits = rag.search("파이썬 리스트에 값을 추가하려면 append 를 어떻게 쓰나요?")
+        assert hits and hits[0].chunk_id == "doc_002_c1"
+        assert hits[0].doc_id == "doc_002" and hits[0].url == "https://docs.python.org/3/tutorial/datastructures.html"
+        assert len(hits) <= 3
+        assert rag.search("저녁에 먹을 파스타 레시피를 알려줘") == []  # unrelated: still no hit
 
 # ----------------------------------------------------------------------------- conversations
 class TestConversationApi:

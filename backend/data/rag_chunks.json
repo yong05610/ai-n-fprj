@@ -12,7 +12,7 @@
           "대입",
           "대화형"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_001_c2",
@@ -24,7 +24,7 @@
           "f-string",
           "연산자"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_001_c3",
@@ -37,7 +37,7 @@
           "들여쓰기",
           "range"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_001_c4",
@@ -49,7 +49,7 @@
           "str",
           "ValueError"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_001_c5",
@@ -61,7 +61,7 @@
           "오류",
           "finally"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -78,7 +78,7 @@
           "슬라이스",
           "list"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_002_c2",
@@ -90,7 +90,7 @@
           "자료구조",
           "알고리즘"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_002_c3",
@@ -102,7 +102,7 @@
           "조건",
           "range"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_002_c4",
@@ -114,7 +114,7 @@
           "언패킹",
           "중복"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_002_c5",
@@ -126,7 +126,7 @@
           "KeyError",
           "items"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_002_c6",
@@ -138,7 +138,7 @@
           "반복",
           "순회"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -155,7 +155,7 @@
           "독스트링",
           "호출"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_003_c2",
@@ -167,7 +167,7 @@
           "전역",
           "global"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_003_c3",
@@ -179,7 +179,7 @@
           "None",
           "인자"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_003_c4",
@@ -191,7 +191,7 @@
           "위치 인자",
           "인자"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_003_c5",
@@ -203,7 +203,7 @@
           "key",
           "함수"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -220,7 +220,7 @@
           "CSS",
           "브라우저"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_004_c2",
@@ -232,7 +232,7 @@
           "배열",
           "객체"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_004_c3",
@@ -244,7 +244,7 @@
           "배열",
           "비교"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_004_c4",
@@ -256,7 +256,7 @@
           "화살표",
           "클릭"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_004_c5",
@@ -268,7 +268,7 @@
           "오류",
           "개발자 도구"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -285,7 +285,7 @@
           "비동기 프로그래밍",
           "화면 멈춤"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_005_c2",
@@ -297,7 +297,7 @@
           "타이머",
           "콜백 지옥"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_005_c3",
@@ -309,7 +309,7 @@
           "catch",
           "fetch"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_005_c4",
@@ -321,7 +321,7 @@
           "프로미스",
           "비동기 함수"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_005_c5",
@@ -333,7 +333,7 @@
           "동시",
           "비동기"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -350,7 +350,7 @@
           "행",
           "열"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_006_c2",
@@ -362,7 +362,7 @@
           "조회",
           "쿼리"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_006_c3",
@@ -374,7 +374,7 @@
           "IN",
           "BETWEEN"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_006_c4",
@@ -386,7 +386,7 @@
           "ASC",
           "DESC"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_006_c5",
@@ -398,7 +398,7 @@
           "WHERE",
           "데이터 변경"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_006_c6",
@@ -410,7 +410,7 @@
           "COUNT",
           "SUM"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -427,7 +427,7 @@
           "스냅샷",
           "분산"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_007_c2",
@@ -439,7 +439,7 @@
           "작업 디렉터리",
           "상태"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_007_c3",
@@ -451,7 +451,7 @@
           "git log",
           "명령어"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_007_c4",
@@ -463,7 +463,7 @@
           "switch",
           "branch"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_007_c5",
@@ -475,7 +475,7 @@
           "fetch",
           "origin"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -492,7 +492,7 @@
           "layout",
           "app 디렉터리"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_008_c2",
@@ -504,7 +504,7 @@
           "useState",
           "렌더링"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_008_c3",
@@ -516,7 +516,7 @@
           "환경 변수",
           "NEXT_PUBLIC"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_008_c4",
@@ -528,7 +528,7 @@
           "error",
           "slug"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_008_c5",
@@ -540,7 +540,7 @@
           "GET",
           "POST"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -557,7 +557,7 @@
           "Swagger",
           "docs"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_009_c2",
@@ -569,7 +569,7 @@
           "쿼리 매개변수",
           "get"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_009_c3",
@@ -581,7 +581,7 @@
           "response_model",
           "422"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_009_c4",
@@ -593,7 +593,7 @@
           "재사용",
           "의존성 주입"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_009_c5",
@@ -605,7 +605,7 @@
           "실행",
           "서버"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_009_c6",
@@ -617,7 +617,7 @@
           "미들웨어",
           "오류"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   },
@@ -634,7 +634,7 @@
           "undefined",
           "변수"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_010_c2",
@@ -646,7 +646,7 @@
           "콜백",
           "고차 함수"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_010_c3",
@@ -658,7 +658,7 @@
           "상속",
           "속성"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_010_c4",
@@ -670,7 +670,7 @@
           "비동기",
           "Promise.all"
         ],
-        "verified": false
+        "verified": true
       },
       {
         "id": "doc_010_c5",
@@ -682,7 +682,7 @@
           "이벤트",
           "addEventListener"
         ],
-        "verified": false
+        "verified": true
       }
     ]
   }
