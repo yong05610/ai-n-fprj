@@ -160,12 +160,13 @@
 
 ## Phase 6 — RAG·Long-term Memory 튜터·인사이트 (AI · P0)
 **순서 변경(사용자 결정 2026-10-22):** AI 튜터는 핵심 기능이라 5D, 5E 보다 먼저 목업 `page-tutor` 형태로 구현한다. 지시서: docs/phase6_dev_prompt.md (선행: docs/phase5c_fix_instructions.md R1 검증). 이번 Phase 에는 6.1~6.8, 6.10 만 포함한다. **6.9(실행 화면 인사이트)는 Phase 6B 로 분리하고, 6.11(참고자료 보관함)은 사용자 보류.** 진행 순서: 5C 수정(R1) → Phase 6(튜터) → 5D → 5E → 6B → 7.
+**검증 상태(2026-10-23, docs/phase6_verification.md):** 백엔드·API 승인(dev 모드), 조각 53개 승인(docs/phase6_chunk_review.md). 6.5 만 PM 이 실제 서버로 직접 확인해 체크했다. 6.1~6.4, 6.6~6.8, 6.10 은 코드·테스트는 통과했으나 조각의 verified: true 전환과 브라우저 화면 확인이 끝나면 체크한다(미검증).
 
 - [ ] 6.1 사전 검토된 자료를 서버 배포물에 포함하고 읽기 전용 검색 인덱스를 만든다.
 - [ ] 6.2 질문 관련 청크를 검색해 답변에 자료명/출처를 표시한다.
 - [ ] 6.3 검색 결과가 없으면 자료 기반 답변이 아님을 밝히고 출처를 만들지 않는다.
 - [ ] 6.4 [BE] `GET /api/data/summary`를 구현한다. 별도 `data` 컬렉션을 만들지 않고 인증된 UID의 goals/tasks/study_logs/reflections를 집계해 `learning_summary`와 최근 회고 최대 5건을 반환한다. 질문 키워드는 안전한 길이의 `keywords` 파라미터로 전달하고, 일치 회고를 우선하되 나머지는 최신순으로 채운다.
-- [ ] 6.5 [BE] 대화 API와 저장을 구현한다: `POST /api/conversations` 새 세션, `GET /api/conversations` 최근 갱신순 목록(목록에는 ID·제목·생성/갱신 시각만 포함하고 messages는 제외), `GET /api/conversations/{conversation_id}` 전체 메시지 이력, `POST /api/conversations/{conversation_id}/messages` 메시지 요청. 모든 조회·수정은 토큰 UID로 소유권을 검사한다.
+- [x] 6.5 [BE] 대화 API와 저장을 구현한다: `POST /api/conversations` 새 세션, `GET /api/conversations` 최근 갱신순 목록(목록에는 ID·제목·생성/갱신 시각만 포함하고 messages는 제외), `GET /api/conversations/{conversation_id}` 전체 메시지 이력, `POST /api/conversations/{conversation_id}/messages` 메시지 요청. 모든 조회·수정은 토큰 UID로 소유권을 검사한다.
 - [ ] 6.6 [BE] 메시지 API에서 요약 조회 → 최근 회고/RAG 자료 검색 → 시스템 프롬프트 구성 → LLM 호출 → user/assistant 메시지 저장 순서를 구현한다. 첫 질문으로 세션 제목을 만들고 `updated_at`을 갱신한다. 실패 시 입력을 보존해 재시도 가능하게 하고 오류 메시지·토큰을 로그에 남기지 않는다.
 - [ ] 6.7 [FE] 튜터 화면에 새 대화 시작, 최근 대화 목록, 대화 선택 후 메시지 이력 불러오기, 메시지 입력/전송, 응답 대기·오류·재시도 상태를 구현한다. 새로고침 뒤에도 현재 대화와 목록이 복원된다.
 - [ ] 6.8 회고가 수정되면 최신 내용, 삭제되면 이후 요약 조회에서 제외한다. 최근 5건 범위와 키워드 매칭 규칙을 문서화한다.
