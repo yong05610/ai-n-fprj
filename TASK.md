@@ -178,7 +178,7 @@
 **완료 기준:** 출처가 있는 자료 질의, 자료 없는 질의, 회고가 연결된 질의, 회고가 없는 사용자 질의를 구분해 시연할 수 있다. 사용자별 새 대화 생성·자동 저장·목록·이력 불러오기와 타 UID 격리가 확인된다.
 
 ## Phase 5F — 전체 학습 과정 일괄 계획 (PLAN · P0, Phase 6C 뒤, Phase 7 앞, 2026-10-25 사용자 결정)
-설계: docs/phase5f_design.md, 지시서: docs/phase5f_dev_prompt.md. **검증 상태(2026-10-25, docs/phase5f_verification.md):** F.1~F.3 승인(pytest 724, 설계 예시 재현, 무작위 2000건 위반 0, 실제 AI 확인). 가용 시간 계산과 긴 기간의 얇은 계획은 수정 지시(docs/phase5f_fix_instructions.md). F.4 는 화면을 사용자가 확인한 뒤 체크. 개선 이력: docs/ai_improvement_log.md IMP-008. 계기: 첫 주 한 주치만 계획되고 이후 주는 비어 있음(사용자 질문). 결정: 전체 과제를 순서대로 한 번에 계획, 한 과제 시간 상한 없음, 주차 배치는 서버, 기존 학습은 새로 만든다.
+설계: docs/phase5f_design.md, 지시서: docs/phase5f_dev_prompt.md. **검증 상태(2026-10-25, docs/phase5f_verification.md):** F.1~F.3 승인(pytest 724, 설계 예시 재현, 무작위 2000건 위반 0, 실제 AI 확인). 가용 시간 계산(R1)은 수정 승인(2026-10-25, pytest 756, 기준값 재현), 긴 기간 분량(R2)은 하한 검증 미도입 결정(실험: 502 2/3)으로 5F 승인(dev 모드). F.4 는 화면을 사용자가 확인한 뒤 체크. 개선 이력: docs/ai_improvement_log.md IMP-008. 계기: 첫 주 한 주치만 계획되고 이후 주는 비어 있음(사용자 질문). 결정: 전체 과제를 순서대로 한 번에 계획, 한 과제 시간 상한 없음, 주차 배치는 서버, 기존 학습은 새로 만든다.
 - [x] F.1 [BE] 서버 배치 모듈(week_count, available_minutes, place_tasks, week_portions)과 공유 테스트 벡터(pytest·프론트 공용)
 - [x] F.2 [BE] plan/generate: 전체 과정 프롬프트·스키마(3~60개, AI 는 요일·주차·합계 미출력), 총합·제목 중복 검증, 응답에 week_count·available_minutes·과제별 배치
 - [x] F.3 [BE] plan/confirm: 서버 재배치 저장(plan_week_start, timeline_start_minutes), 목표 전체 가용 시간 검증, 기존 데이터 호환
