@@ -78,7 +78,7 @@ class TestBoundariesAndCounting:
         before = client.get("/api/user/profile", headers=consented_headers).json()["active_goal_id"]
         assert _confirm(client, consented_headers, course="C", start="2026-11-12", target="2026-11-15").status_code == 409
         assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
-        assert len(client.get("/api/tasks", headers=consented_headers).json()) == 2
+        assert len(client.get("/api/tasks", headers=consented_headers).json()) == 6  # two goals x 3 tasks
         assert client.get("/api/user/profile", headers=consented_headers).json()["active_goal_id"] == before
 
     def test_idempotent_retry_of_an_accepted_goal_is_200_even_when_now_crowded(self, client: TestClient, consented_headers):

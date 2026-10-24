@@ -7,18 +7,18 @@ import { GoalSwitch } from "@/components/GoalSwitch";
 import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
 import { LatestWinsSaver, type SaveState } from "@/lib/latestWins";
+import { continuedLabel, weeklyPlanHeaderText } from "@/lib/planText";
+import { lastScheduledWeekIndex, planWeekMondays, tasksInWeek, weekCount, weekIndexOf } from "@/lib/schedule";
 import { SEARCH_LINKS_HEADING, SEARCH_LINKS_WARNING, type SearchLink, sourceLine, visibleSearchLinks } from "@/lib/searchLinks";
-import { mondayOfThisWeekKST } from "@/lib/week";
+import { mondayOfDateString, mondayOfThisWeekKST } from "@/lib/week";
 import {
   type PlanTask,
   WEEKDAY_OPTIONS,
   type Weekday,
   completionCounts,
   formatHoursMinutes,
-  listWeekStarts,
   neighborWeek,
   pickInitialWeek,
-  tasksOfWeek,
   toWeekday,
   totalMinutes,
   weekOffset,
@@ -30,6 +30,8 @@ type GoalDetail = {
   id: string;
   course: string;
   weekly_hours: number;
+  start_date: string;
+  target_date: string;
   current_level_name: string;
   target_level_name: string;
   advice_title: string | null;
@@ -38,6 +40,19 @@ type GoalDetail = {
 type Reference = { title: string; category: string; source_name: string | null; url: string | null; is_verified: boolean };
 type ReferencesResult = { references: Reference[]; references_notice: string | null; search_links: SearchLink[] };
 type LoadStatus = "loading" | "ready" | "error";
+
+/**
+ * Every week of the plan, from the week of the start date through the week of the target date (and
+ * further if scheduled minutes reach beyond it). A week without tasks is still a week of the plan.
+ */
+function planWeeksOf(goal: Pick<GoalDetail, "start_date" | "target_date" | "weekly_hours">, tasks: PlanTask[]): string[] {
+  const weeklyMinutes = goal.weekly_hours * 60;
+  return planWeekMondays(
+    mondayOfDateString(goal.start_date),
+    weekCount(goal.start_date, goal.target_date),
+    lastScheduledWeekIndex(tasks, weeklyMinutes),
+  );
+}
 
 export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
   const { session } = useAuth();
@@ -108,7 +123,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
         setRefs(refResult);
         setRefsError(refFailed);
         setChosen({});
-        setWeek(pickInitialWeek(listWeekStarts(taskList), mondayOfThisWeekKST()));
+        setWeek(pickInitialWeek(planWeeksOf(goalDetail, taskList), mondayOfThisWeekKST()));
         setStatus("ready");
       } catch (e) {
         if (cancelled) return;
@@ -122,10 +137,25 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
   }, [session, loaded, goalId, reloadKey]);
 
   const thisWeek = mondayOfThisWeekKST();
-  const weeks = useMemo(() => listWeekStarts(tasks), [tasks]);
-  const weekTasks = useMemo(() => tasksOfWeek(tasks, week), [tasks, week]);
+  const weeks = useMemo(() => (goal ? planWeeksOf(goal, tasks) : []), [goal, tasks]);
+  const weeklyMinutes = (goal?.weekly_hours ?? 0) * 60;
+  // Tasks with scheduled minutes in the shown week: those starting here and those continuing from before.
+  const weekEntries = useMemo(
+    () => (goal && week && weeklyMinutes > 0 ? tasksInWeek(tasks, weeklyMinutes, weekIndexOf(mondayOfDateString(goal.start_date), week)) : []),
+    [goal, tasks, week, weeklyMinutes],
+  );
   const overall = completionCounts(tasks);
-  const weekMinutes = totalMinutes(weekTasks);
+  const weekMinutes = weekEntries.reduce((sum, e) => sum + e.weekMinutes, 0);
+  // The header line is about the real current week, whichever week is shown below it.
+  const thisWeekMinutes = useMemo(
+    () =>
+      goal && weeklyMinutes > 0
+        ? tasksInWeek(tasks, weeklyMinutes, weekIndexOf(mondayOfDateString(goal.start_date), thisWeek)).reduce((sum, e) => sum + e.weekMinutes, 0)
+        : 0,
+    [goal, tasks, weeklyMinutes, thisWeek],
+  );
+  const planTotalMinutes = totalMinutes(tasks);
+  const planAvailableMinutes = goal ? goal.weekly_hours * 60 * weekCount(goal.start_date, goal.target_date) : 0;
   const relation = week ? weekRelationLabel(weekOffset(week, thisWeek)) : "";
 
   function changeWeekday(taskId: string, raw: string) {
@@ -162,7 +192,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
       <div>
         <p className="kicker">WEEKLY LEARNING PLAN</p>
         <h1>주간 학습 계획</h1>
-        <p>이번 주 목표와 과제를 정하고, 편한 요일에 학습하세요.</p>
+        <p>전체 학습 계획을 주 단위로 보고, 편한 요일에 학습하세요.</p>
       </div>
       {status === "ready" && goal && tasks.length > 0 && saveButton}
     </div>
@@ -288,47 +318,56 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
               다음 주 →
             </button>
           </div>
+          <p className="small muted plan-header-line">{weeklyPlanHeaderText(planTotalMinutes, planAvailableMinutes, thisWeekMinutes)}</p>
           <div className="bar" role="progressbar" aria-valuenow={overall.percent} aria-valuemin={0} aria-valuemax={100}>
             <span style={{ width: `${overall.percent}%` }}></span>
           </div>
           <div className="bar-label">
             <span>
-              {relation} 예상 {formatHoursMinutes(weekMinutes)} · 목표 {goal.weekly_hours}시간
+              {relation} 예정 {formatHoursMinutes(weekMinutes)} · 주당 {goal.weekly_hours}시간
             </span>
             <b>
               {overall.done} / {overall.total} 전체 과업 완료
             </b>
           </div>
-          {weekTasks.map((t) => {
+          {weekEntries.length === 0 && <p className="small muted">이 주에는 예정된 과제가 없어요.</p>}
+          {weekEntries.map(({ task: t, weekMinutes: portion, startsHere, totalMinutes: total }) => {
             const value = chosen[t.id] ?? toWeekday(t.suggested_weekday);
             return (
               <div key={t.id} className="wbs-row">
                 <div>
-                  <span className="wbs-date">추천 요일</span>
-                  <select
-                    className="weekday-select"
-                    aria-label={`${t.title} 추천 요일`}
-                    value={value}
-                    onChange={(e) => changeWeekday(t.id, e.target.value)}
-                  >
-                    {WEEKDAY_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
+                  {startsHere ? (
+                    <>
+                      <span className="wbs-date">추천 요일</span>
+                      <select
+                        className="weekday-select"
+                        aria-label={`${t.title} 추천 요일`}
+                        value={value}
+                        onChange={(e) => changeWeekday(t.id, e.target.value)}
+                      >
+                        {WEEKDAY_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </>
+                  ) : (
+                    <span className="wbs-date">이어서</span>
+                  )}
                 </div>
                 <div>
                   <strong>{t.title}</strong>
                   <p>
-                    {t.description ? `${t.description} · ` : ""}예상 {t.estimated_minutes}분
+                    {t.description ? `${t.description} · ` : ""}
+                    {startsHere && portion === total ? `예상 ${t.estimated_minutes}분` : continuedLabel(portion, total)}
                   </p>
                 </div>
                 <span className={`pill ${t.status === "completed" ? "green" : "gray"}`}>{t.status === "completed" ? "완료" : "미완료"}</span>
               </div>
             );
           })}
-          <p className="small muted">추천 요일은 참고용입니다. 요일을 바꾸거나 지정하지 않아도 과제는 이번 주 계획에 남습니다.</p>
+          <p className="small muted">추천 요일은 참고용입니다. 요일을 바꾸거나 지정하지 않아도 과제는 계획에 남습니다. 한 주보다 긴 과제는 여러 주에 나누어 이어서 표시돼요.</p>
         </section>
 
         <aside>

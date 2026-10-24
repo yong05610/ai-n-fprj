@@ -36,6 +36,8 @@ export type PlanTask = {
   status: string;
   plan_week_start: string;
   order_index: number;
+  /** Phase 5F: minutes of the tasks before this one (server-placed; computed for older plans) */
+  timeline_start_minutes: number;
 };
 
 /** Distinct plan weeks (Monday dates), oldest first. */

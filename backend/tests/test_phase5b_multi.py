@@ -32,7 +32,12 @@ def _confirm_payload(course="기본문법", start="2026-10-21", target="2026-11-
         "weekly_hours": 7,
         "target_date": target,
         "start_date": start,
-        "tasks": [{"title": "변수", "estimated_minutes": 60, "suggested_weekday": "mon"}],
+        # Phase 5F: a plan has 3~60 distinct tasks
+        "tasks": [
+            {"title": "변수", "estimated_minutes": 60, "suggested_weekday": "mon"},
+            {"title": "조건문", "estimated_minutes": 60, "suggested_weekday": "none"},
+            {"title": "반복문", "estimated_minutes": 60, "suggested_weekday": "none"},
+        ],
         **overrides,
     }
 
@@ -95,7 +100,7 @@ class TestOverlapOnPlanConfirm:
         before_goal = _active_goal_id(client, consented_headers)
         assert _confirm(client, consented_headers, course="C과정").status_code == 409
         assert len(client.get("/api/goals", headers=consented_headers).json()) == 2
-        assert len(client.get("/api/tasks", headers=consented_headers).json()) == 2
+        assert len(client.get("/api/tasks", headers=consented_headers).json()) == 6  # two goals x 3 tasks
         assert _active_goal_id(client, consented_headers) == before_goal
 
     def test_overlap_by_a_single_day_is_rejected_when_two_goals_are_there(self, client: TestClient, consented_headers):
@@ -353,6 +358,7 @@ def _two_goals_with_data(client, headers):
         tasks=[
             {"title": "A1", "estimated_minutes": 60, "suggested_weekday": "mon"},
             {"title": "A2", "estimated_minutes": 60, "suggested_weekday": "tue"},
+            {"title": "A3", "estimated_minutes": 60, "suggested_weekday": "wed"},  # Phase 5F: 3 tasks minimum
         ],
     ).json()
     b = _confirm(client, headers, course="B과정", start="2026-11-02", target="2026-11-30").json()
@@ -379,8 +385,8 @@ class TestDashboardGoalsOverview:
         body = client.get("/api/dashboard/summary", headers=consented_headers).json()
         by_id = {g["goal_id"]: g for g in body["goals_overview"]}
         assert set(by_id) == {a["id"], b["id"]}
-        assert (by_id[a["id"]]["completed_task_count"], by_id[a["id"]]["total_task_count"], by_id[a["id"]]["progress_percentage"]) == (1, 2, 50)
-        assert (by_id[b["id"]]["completed_task_count"], by_id[b["id"]]["total_task_count"], by_id[b["id"]]["progress_percentage"]) == (0, 1, 0)
+        assert (by_id[a["id"]]["completed_task_count"], by_id[a["id"]]["total_task_count"], by_id[a["id"]]["progress_percentage"]) == (1, 3, 33)  # Phase 5F: 3 tasks per plan
+        assert (by_id[b["id"]]["completed_task_count"], by_id[b["id"]]["total_task_count"], by_id[b["id"]]["progress_percentage"]) == (0, 3, 0)
         assert by_id[a["id"]]["course"] == "A과정" and by_id[a["id"]]["start_date"] == "2026-10-21"
         assert [g["goal_id"] for g in body["goals_overview"]] == [a["id"], b["id"]]  # earliest schedule first
 
@@ -388,11 +394,11 @@ class TestDashboardGoalsOverview:
         a, b = _two_goals_with_data(client, consented_headers)
         body = client.get("/api/dashboard/summary", headers=consented_headers).json()
         assert "B과정" in body["active_goal_title"]  # B was registered last
-        assert body["total_task_count"] == 1 and body["weekly_study_minutes"] == 20
+        assert body["total_task_count"] == 3 and body["weekly_study_minutes"] == 20
         client.patch("/api/user/profile", json={"active_goal_id": a["id"]}, headers=consented_headers)
         body = client.get("/api/dashboard/summary", headers=consented_headers).json()
         assert "A과정" in body["active_goal_title"]
-        assert body["total_task_count"] == 2 and body["weekly_study_minutes"] == 75
+        assert body["total_task_count"] == 3 and body["weekly_study_minutes"] == 75
 
     def test_completed_and_archived_goals_are_excluded(self, client: TestClient, consented_headers):
         a, b = _two_goals_with_data(client, consented_headers)
@@ -438,7 +444,7 @@ class TestAnalyticsOverview:
         goals = {g["goal_id"]: g for g in client.get("/api/analytics/overview", headers=consented_headers).json()["goals"]}
         assert goals[a["id"]]["weekly_minutes_by_day"] == [30, 0, 45, 0, 0, 0, 0]  # prior Sunday's 99 excluded
         assert goals[b["id"]]["weekly_minutes_by_day"] == [0, 0, 20, 0, 0, 0, 0]
-        assert goals[a["id"]]["progress_percentage"] == 50 and goals[a["id"]]["total_task_count"] == 2
+        assert goals[a["id"]]["progress_percentage"] == 33 and goals[a["id"]]["total_task_count"] == 3
 
     def test_numbers_match_dashboard_overview_and_weekly_records(self, client: TestClient, consented_headers):
         a, b = _two_goals_with_data(client, consented_headers)

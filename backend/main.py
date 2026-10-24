@@ -10,12 +10,23 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 import clock
-from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
+from ai_client import (
+    AIClient,
+    AIRetryFeedback,
+    AISchemaError,
+    AITimeoutError,
+    AIUnavailableError,
+    call_limits,
+    get_ai_client,
+    plan_max_output_tokens,
+    plan_timeout_seconds,
+)
 from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import insight_rules
 import rag
+import schedule
 import tutor
 from prompts import (
     PATH_RECOMMEND_SYSTEM_PROMPT,
@@ -266,15 +277,17 @@ def _validate_week_start(value: str) -> None:
 
 
 def _validate_week_within_target(week_start: date, target_date: date) -> None:
+    """A week the plan names must not begin after the target date (the plan covers every week up to it)."""
     if week_start > target_date:
         raise bad_request("계획 주간이 목표 완료 희망일을 넘습니다.", {"field": "plan_week_start"})
 
 
 def _resolve_plan_period(start_date_str: str, plan_week_start: Optional[str], target_date: date) -> tuple[date, date]:
-    """F1: the user picks any start date (today or later, KST); the plan week is the Monday
-    week that contains it, derived here via clock.py. A caller-supplied plan_week_start is
-    only accepted when it agrees with that derived Monday. target_date may equal start_date.
-    Returns (start_date, week_start)."""
+    """F1: the user picks any start date (today or later, KST); the FIRST plan week is the Monday
+    week that contains it, derived here via clock.py (Phase 5F: the plan then runs through the week
+    of target_date, see schedule.week_count). A caller-supplied plan_week_start is only accepted
+    when it agrees with that derived Monday. target_date may equal start_date.
+    Returns (start_date, first_week_start)."""
     start = _parse_date(start_date_str, "start_date")
     if start < clock.today():
         raise bad_request("학습 시작일은 오늘 이후여야 합니다.", {"field": "start_date"})
@@ -289,24 +302,46 @@ def _resolve_plan_period(start_date_str: str, plan_week_start: Optional[str], ta
     return start, week_start
 
 
+PLAN_TASKS_MIN = 3
+PLAN_TASKS_MAX = 60
+
+
+def _goal_available_minutes(goal: dict[str, Any]) -> int:
+    """Phase 5F: the time budget of a whole learning = weekly minutes x the weeks from the week of
+    its start date to the week of its target date (both included)."""
+    weeks = schedule.week_count(_goal_start_date(goal), date.fromisoformat(goal["target_date"]))
+    return schedule.available_minutes(goal["weekly_hours"], weeks)
+
+
 def _validate_task_time_budget(
     db,
     uid: str,
     goal: dict[str, Any],
-    plan_week_start: str,
     estimated_minutes: int,
     exclude_task_id: Optional[str] = None,
 ) -> None:
-    """Shared by POST /api/tasks and PATCH /api/tasks/{id}: the same weekly time-budget
-    rule AI-generated plans follow must also apply to tasks created/edited by hand,
-    so the manual path can't bypass it (docs/phase4_dev_prompt.md 4.5)."""
-    existing = db.find("tasks", user_id=uid, goal_id=goal["id"], plan_week_start=plan_week_start)
+    """Shared by POST /api/tasks and PATCH /api/tasks/{id}: the budget AI-generated plans follow
+    (all tasks of the learning <= available minutes, Phase 5F) must also apply to tasks created or
+    edited by hand, so the manual path can't bypass it. After confirmation the schedule is frozen:
+    editing minutes never re-places the following tasks (docs/phase5f_design.md section 3)."""
+    existing = db.find("tasks", user_id=uid, goal_id=goal["id"])
     total = sum(t["estimated_minutes"] for t in existing if t["id"] != exclude_task_id) + estimated_minutes
-    if total > goal["weekly_hours"] * 60:
+    available = _goal_available_minutes(goal)
+    if total > available:
         raise bad_request(
-            "이번 주 과업 총 예상 시간이 주당 가능 시간을 초과합니다.",
+            f"이 학습의 과업 총 예상 시간({insight_rules.format_minutes(total)})이 가용 시간"
+            f"({insight_rules.format_minutes(available)})을 초과합니다.",
             {"field": "estimated_minutes"},
         )
+
+
+def _normalized_title(title: str) -> str:
+    return " ".join(title.split()).casefold()
+
+
+def _duplicate_title_count(titles: list[str]) -> int:
+    """How many titles repeat an earlier one (whitespace folded, case ignored)."""
+    return len(titles) - len({_normalized_title(t) for t in titles})
 
 
 def _goal_start_date(goal: dict[str, Any]) -> date:
@@ -439,8 +474,20 @@ def _study_log_stats(db, uid: str, task_id: str) -> tuple[int, int]:
     return len(logs), sum(log["minutes"] for log in logs)
 
 
-def _with_task_stats(task: dict[str, Any], record_count: int, total_minutes: int) -> dict[str, Any]:
-    return {**task, "record_count": record_count, "total_minutes": total_minutes}
+def _with_task_stats(
+    task: dict[str, Any], record_count: int, total_minutes: int, timeline_start: Optional[int] = None
+) -> dict[str, Any]:
+    start = timeline_start if timeline_start is not None else task.get("timeline_start_minutes") or 0
+    return {**task, "record_count": record_count, "total_minutes": total_minutes, "timeline_start_minutes": start}
+
+
+def _timeline_starts_of(db, uid: str, tasks: list[dict[str, Any]]) -> dict[str, int]:
+    """timeline_start_minutes for the given tasks. A learning saved before Phase 5F has tasks without
+    the field; its starts are accumulated from all of its tasks in order_index order (no error)."""
+    starts = {t["id"]: t["timeline_start_minutes"] for t in tasks if t.get("timeline_start_minutes") is not None}
+    for goal_id in {t["goal_id"] for t in tasks if t.get("timeline_start_minutes") is None}:
+        starts.update(schedule.timeline_starts(db.find("tasks", user_id=uid, goal_id=goal_id)))
+    return starts
 
 
 def _find_by_client_request_id(db, collection: str, uid: str, client_request_id: Optional[str]) -> Optional[dict[str, Any]]:
@@ -613,14 +660,23 @@ def _validate_ai_role_ideas(parsed: AIRoleIdeas) -> None:
 
 
 def _validate_ai_plan(parsed: AIPlanDraft, max_total_minutes: int) -> None:
+    """Server rules for the whole-course plan (Phase 5F). A violation is rejected and retried,
+    never patched; the feedback carries counts only, never task text."""
+    if not (PLAN_TASKS_MIN <= len(parsed.tasks) <= PLAN_TASKS_MAX):
+        problem = f"과제는 {PLAN_TASKS_MIN}개 이상 {PLAN_TASKS_MAX}개 이하여야 합니다. (이번 시도 {len(parsed.tasks)}개)"
+        raise AIRetryFeedback(problem, feedback={"validation_error": problem})
     total = sum(t.estimated_minutes for t in parsed.tasks)
     if total > max_total_minutes:
         # P4-9: tell the next retry attempt how far over budget this one was, instead
         # of just repeating the same instruction the model already failed to follow.
         raise AIRetryFeedback(
-            "총 예상 시간이 주당 가능 시간을 초과합니다.",
+            "총 예상 시간이 가용 시간을 초과합니다.",
             feedback={"previous_total_minutes": total, "max_total_minutes": max_total_minutes},
         )
+    duplicates = _duplicate_title_count([t.title for t in parsed.tasks])
+    if duplicates:
+        problem = f"과제 제목이 서로 달라야 합니다. 중복된 제목이 {duplicates}개 있습니다."
+        raise AIRetryFeedback(problem, feedback={"validation_error": problem})
     for t in parsed.tasks:
         if not t.title.strip() or not t.description.strip():
             raise ValueError("과업 제목/설명이 비어 있습니다.")
@@ -679,7 +735,7 @@ def recommend_path(
     "/api/plan/generate",
     response_model=PlanGenerateResponse,
     tags=["plan"],
-    summary="2단계: 주간 학습 과업·조언·참고자료 생성 (초안, 미저장)",
+    summary="2단계: 전체 학습 과정 과업·조언·참고자료 생성 (초안, 미저장). 주차 배치는 서버가 계산",
 )
 def generate_plan(
     payload: PlanGenerateRequest,
@@ -692,10 +748,10 @@ def generate_plan(
     if target_date < clock.today():
         raise bad_request("목표 완료 희망일은 오늘 이후여야 합니다.", {"field": "target_date"})
 
-    _, week_start = _resolve_plan_period(payload.start_date, payload.plan_week_start, target_date)
-    week_end = week_start + timedelta(days=6)
-
-    max_total_minutes = payload.weekly_hours * 60
+    start_date, week_start = _resolve_plan_period(payload.start_date, payload.plan_week_start, target_date)
+    weeks = schedule.week_count(start_date, target_date)
+    weekly_minutes = payload.weekly_hours * 60
+    max_total_minutes = schedule.available_minutes(payload.weekly_hours, weeks)
     user_payload = {
         "field": payload.field,
         "course": payload.course,
@@ -705,15 +761,19 @@ def generate_plan(
         "target_level_name": payload.target_level_name,
         "target_level_description": payload.target_level_description,
         "weekly_hours": payload.weekly_hours,
+        "weekly_minutes": weekly_minutes,
+        "week_count": weeks,
         "max_total_minutes": max_total_minutes,
     }
     try:
-        draft = ai.generate(
-            PLAN_GENERATE_SYSTEM_PROMPT,
-            user_payload,
-            AIPlanDraft,
-            validator=lambda parsed: _validate_ai_plan(parsed, max_total_minutes),
-        )
+        # A whole-course answer is long: this call alone gets a longer timeout and output budget.
+        with call_limits(plan_timeout_seconds(), plan_max_output_tokens()):
+            draft = ai.generate(
+                PLAN_GENERATE_SYSTEM_PROMPT,
+                user_payload,
+                AIPlanDraft,
+                validator=lambda parsed: _validate_ai_plan(parsed, max_total_minutes),
+            )
     except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
         raise _ai_error_response(exc)
 
@@ -730,18 +790,23 @@ def generate_plan(
     ]
     references_notice = None if matches else no_match_notice(payload.field)
 
+    placements = schedule.place_tasks([t.estimated_minutes for t in draft.tasks], weekly_minutes)
     tasks = [
         WeeklyTaskPlanItem(
-            title=t.title,
+            title=t.title.strip(),
             description=t.description,
             estimated_minutes=t.estimated_minutes,
-            suggested_weekday=t.suggested_weekday or "none",
+            suggested_weekday=p["suggested_weekday"],
+            plan_week_start=schedule.week_start_date(week_start, p["start_week_index"]).isoformat(),
+            timeline_start_minutes=p["timeline_start_minutes"],
         )
-        for t in draft.tasks
+        for t, p in zip(draft.tasks, placements)
     ]
     return PlanGenerateResponse(
         plan_week_start=week_start.isoformat(),
-        plan_week_end=week_end.isoformat(),
+        plan_week_end=clock.week_sunday(target_date).isoformat(),
+        week_count=weeks,
+        available_minutes=max_total_minutes,
         total_estimated_minutes=sum(t.estimated_minutes for t in tasks),
         tasks=tasks,
         advice=AdviceItem(title=draft.advice_title, content=draft.advice_content),
@@ -803,10 +868,23 @@ def confirm_plan(
     _validate_target_date_not_past(goal_data["target_date"])
     target_date = _parse_date(payload.target_date, "target_date")
     start_date, week_start = _resolve_plan_period(payload.start_date, payload.plan_week_start, target_date)
+    # Phase 5F: the client's task list is the ordered, edited plan. Its weeks and timeline are never
+    # trusted - the server places the tasks again below.
+    if not (PLAN_TASKS_MIN <= len(payload.tasks) <= PLAN_TASKS_MAX):
+        raise bad_request(f"과제는 {PLAN_TASKS_MIN}개 이상 {PLAN_TASKS_MAX}개 이하여야 합니다.", {"field": "tasks"})
+    if _duplicate_title_count([t.title for t in payload.tasks]):
+        raise bad_request("과제 제목은 서로 달라야 합니다. 같은 제목의 과제가 있습니다.", {"field": "tasks"})
     total_minutes = sum(t.estimated_minutes for t in payload.tasks)
-    if total_minutes > payload.weekly_hours * 60:
-        raise bad_request("과업 총 예상 시간이 주당 가능 시간을 초과합니다.", {"field": "tasks"})
+    weekly_minutes = payload.weekly_hours * 60
+    available = schedule.available_minutes(payload.weekly_hours, schedule.week_count(start_date, target_date))
+    if total_minutes > available:
+        raise bad_request(
+            f"과업 총 예상 시간({insight_rules.format_minutes(total_minutes)})이 가용 시간"
+            f"({insight_rules.format_minutes(available)})을 초과합니다.",
+            {"field": "tasks"},
+        )
     _check_goal_period_overlap(db, uid, start_date, target_date)
+    placements = schedule.place_tasks([t.estimated_minutes for t in payload.tasks], weekly_minutes)
 
     now = _now_iso()
     goal = db.create(
@@ -823,17 +901,21 @@ def confirm_plan(
     _register_new_goal_as_recent(db, uid, goal["id"])
 
     tasks = []
-    for idx, t in enumerate(payload.tasks):
+    for idx, (t, placed) in enumerate(zip(payload.tasks, placements)):
         task_data = t.model_dump()
         task_data["description"] = task_data["description"] or ""
-        task_data["suggested_weekday"] = task_data["suggested_weekday"] or "none"
+        # a weekday the user picked is kept; none/absent gets the server's start-position default
+        task_data["suggested_weekday"] = (
+            task_data["suggested_weekday"] if task_data["suggested_weekday"] not in (None, "none") else placed["suggested_weekday"]
+        )
         task = db.create(
             "tasks",
             {
                 **task_data,
                 "goal_id": goal["id"],
                 "user_id": uid,
-                "plan_week_start": week_start.isoformat(),
+                "plan_week_start": schedule.week_start_date(week_start, placed["start_week_index"]).isoformat(),
+                "timeline_start_minutes": placed["timeline_start_minutes"],
                 "status": "pending",
                 "order_index": idx,
                 "created_at": now,
@@ -943,13 +1025,14 @@ def list_tasks(
         filters["plan_week_start"] = plan_week_start
     tasks = db.find("tasks", **filters)
     sorted_tasks = sorted(tasks, key=lambda t: (t["plan_week_start"], t["order_index"], t["created_at"]))
+    starts = _timeline_starts_of(db, uid, sorted_tasks)
 
     # One query for all of this user's logs (not one per task) - 5.9's "쿼리 수를 줄인다".
     stats: dict[str, tuple[int, int]] = {}
     for log in db.find("study_logs", user_id=uid):
         count, minutes = stats.get(log["task_id"], (0, 0))
         stats[log["task_id"]] = (count + 1, minutes + log["minutes"])
-    return [_with_task_stats(t, *stats.get(t["id"], (0, 0))) for t in sorted_tasks]
+    return [_with_task_stats(t, *stats.get(t["id"], (0, 0)), starts.get(t["id"])) for t in sorted_tasks]
 
 
 @app.post("/api/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED, tags=["tasks"], summary="학습 과제 생성")
@@ -957,12 +1040,19 @@ def create_task(payload: TaskCreateRequest, uid: str = Depends(require_consented
     goal = _get_owned(db, "goals", payload.goal_id, uid)
     _validate_week_start(payload.plan_week_start)
     _validate_week_within_target(_parse_date(payload.plan_week_start, "plan_week_start"), _parse_date(goal["target_date"], "target_date"))
-    _validate_task_time_budget(db, uid, goal, payload.plan_week_start, payload.estimated_minutes)
+    _validate_task_time_budget(db, uid, goal, payload.estimated_minutes)
     now = _now_iso()
     data = payload.model_dump()
     data["description"] = data["description"] or ""
     data["suggested_weekday"] = data["suggested_weekday"] or "none"
     data["order_index"] = data["order_index"] or 0
+    # A hand-made task goes to the end of the learning's timeline (or to the start of the plan week
+    # it names, if that is later); the other tasks are never moved.
+    existing = db.find("tasks", user_id=uid, goal_id=goal["id"])
+    existing_starts = schedule.timeline_starts(existing)
+    end = max((existing_starts[t["id"]] + t["estimated_minutes"] for t in existing), default=0)
+    week_index = max(0, (_parse_date(payload.plan_week_start, "plan_week_start") - clock.week_monday(_goal_start_date(goal))).days // 7)
+    data["timeline_start_minutes"] = max(end, week_index * goal["weekly_hours"] * 60)
     task = db.create("tasks", {**data, "user_id": uid, "status": "pending", "created_at": now, "updated_at": now})
     return _with_task_stats(task, 0, 0)
 
@@ -973,11 +1063,9 @@ def update_task(task_id: str, payload: TaskUpdateRequest, uid: str = Depends(req
     changes = _changes(payload)
     if "estimated_minutes" in changes:
         goal = _get_owned(db, "goals", task["goal_id"], uid)
-        _validate_task_time_budget(
-            db, uid, goal, task["plan_week_start"], changes["estimated_minutes"], exclude_task_id=task_id
-        )
+        _validate_task_time_budget(db, uid, goal, changes["estimated_minutes"], exclude_task_id=task_id)
     updated = db.update("tasks", task_id, {**changes, "updated_at": _now_iso()})
-    return _with_task_stats(updated, *_study_log_stats(db, uid, task_id))
+    return _with_task_stats(updated, *_study_log_stats(db, uid, task_id), _timeline_starts_of(db, uid, [updated]).get(task_id))
 
 
 @app.delete("/api/tasks/{task_id}", tags=["tasks"], summary="과제 삭제 (하위 기록·회고 포함)")
@@ -1472,9 +1560,13 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
     for log in logs:
         log_counts_by_task[log["task_id"]] = log_counts_by_task.get(log["task_id"], 0) + 1
 
-    this_week_tasks = sorted(
-        (t for t in tasks if t["plan_week_start"] == week_start.isoformat()), key=lambda t: t["order_index"]
-    )
+    # Phase 5F: "this week's tasks" are those with scheduled minutes this week - tasks that start
+    # this week and tasks continuing from an earlier week (their share of this week).
+    weekly_minutes = goal["weekly_hours"] * 60
+    in_week = schedule.tasks_in_week(tasks, clock.week_monday(_goal_start_date(goal)), weekly_minutes, week_start)
+    this_week_tasks = [r["task"] for r in in_week]
+    week_minutes_by_task = {r["task"]["id"]: r["week_minutes"] for r in in_week}
+    continued_ids = {r["task"]["id"] for r in in_week if not r["starts_here"]}
     incomplete = [t for t in this_week_tasks if t["status"] != "completed"]
     completed_this_week = [t for t in this_week_tasks if t["status"] == "completed"]
     today_weekday = clock.WEEKDAY_BY_INDEX[today.weekday()]
@@ -1492,9 +1584,13 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
             suggested_weekday=t["suggested_weekday"],
             is_completed=t["status"] == "completed",
             record_count=log_counts_by_task.get(t["id"], 0),
+            week_minutes=week_minutes_by_task[t["id"]],
+            continued=t["id"] in continued_ids,
         )
         for t in ordered[:TODAY_TASKS_LIMIT]
     ]
+    week_scheduled_minutes = sum(week_minutes_by_task.values())
+    today_scheduled_minutes = sum(week_minutes_by_task[t["id"]] for t in this_week_tasks if t["suggested_weekday"] == today_weekday)
     all_tasks_completed_this_week = bool(this_week_tasks) and not incomplete
 
     # Phase 6B: the dashboard only *shows* the saved insight (or says what to do); it never calls the AI.
@@ -1528,6 +1624,10 @@ def get_dashboard_summary(user: dict[str, Any] = Depends(require_consented_user_
         total_study_log_count=len(logs),
         today_tasks=today_tasks,
         all_tasks_completed_this_week=all_tasks_completed_this_week,
+        week_scheduled_minutes=week_scheduled_minutes,
+        today_scheduled_minutes=today_scheduled_minutes,
+        plan_total_minutes=sum(t["estimated_minutes"] for t in tasks),
+        plan_available_minutes=_goal_available_minutes(goal),
         weekly_hits=weekly_hits,
         insight=insight,
         goals_overview=_goals_overview(db, uid, all_tasks),

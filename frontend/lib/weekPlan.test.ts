@@ -84,7 +84,7 @@ test("date string arithmetic does not depend on the time zone", () => {
 
 test("tasksOfWeek orders by order_index and filters the week", () => {
   const t = (id: string, week: string, order: number) => ({
-    id, title: id, description: "", estimated_minutes: 30, suggested_weekday: "none", status: "pending", plan_week_start: week, order_index: order,
+    id, title: id, description: "", estimated_minutes: 30, suggested_weekday: "none", status: "pending", plan_week_start: week, order_index: order, timeline_start_minutes: 0,
   });
   const tasks = [t("b", "2026-10-19", 1), t("x", "2026-10-26", 0), t("a", "2026-10-19", 0)];
   assert.deepEqual(tasksOfWeek(tasks, "2026-10-19").map((x) => x.id), ["a", "b"]);

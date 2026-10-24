@@ -6,8 +6,21 @@ import { useAuth } from "@/components/AuthProvider";
 import { GoalSwitch } from "@/components/GoalSwitch";
 import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
+import {
+  TASK_COUNT_MAX,
+  TASK_COUNT_MIN,
+  budgetBar,
+  continuedLabel,
+  overBudgetMessage,
+  planSummaryText,
+  spanNote,
+  taskCountHint,
+  taskCountOk,
+  weekGroupHeading,
+} from "@/lib/planText";
+import { availableMinutes, duplicateTitleIndexes, groupByWeek, placeTasks, weekCount } from "@/lib/schedule";
 import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from "@/lib/wizardStorage";
-import { todayKSTDateString } from "@/lib/week";
+import { mondayOfDateString, todayKSTDateString } from "@/lib/week";
 import { startDateError } from "@/lib/wizardDates";
 
 type LevelItem = { order: number; name: string; description: string };
@@ -26,12 +39,16 @@ const WEEKDAY_LABEL: Record<Weekday, string> = {
   sun: "일요일",
 };
 
+// "none" = automatic: the server picks the weekday from the task's position on the timeline. Only a
+// weekday the user chose in the select is sent as a value (Phase 5F).
 type WeeklyTask = { title: string; description: string; estimated_minutes: number; suggested_weekday: Weekday };
 type PlanGenerateResponse = {
   plan_week_start: string;
   plan_week_end: string;
+  week_count?: number;
+  available_minutes?: number;
   total_estimated_minutes: number;
-  tasks: WeeklyTask[];
+  tasks: (WeeklyTask & { plan_week_start?: string; timeline_start_minutes?: number })[];
   advice: { title: string; content: string };
   references: { title: string; category: string; url: string | null; is_verified: boolean }[];
   references_notice: string | null;
@@ -43,6 +60,8 @@ type PlanStatus = "idle" | "loading" | "ready" | "error";
 type ConfirmStatus = "idle" | "saving" | "done" | "error";
 
 const AI_TIMEOUT_MS = 70_000; // server retries up to 3x a ~20s provider timeout; stay above that ceiling
+// A whole-course plan is a long answer: the server allows 60s per attempt (3 attempts), so wait longer.
+const PLAN_TIMEOUT_MS = 200_000;
 
 type WizardSnapshot = {
   field: string;
@@ -280,7 +299,7 @@ export function LearningPathWizard({
       const result = await apiRequest<PlanGenerateResponse>("/api/plan/generate", {
         method: "POST",
         token,
-        timeoutMs: AI_TIMEOUT_MS,
+        timeoutMs: PLAN_TIMEOUT_MS,
         body: {
           field: recommendation.field,
           course: courseTitle,
@@ -298,7 +317,16 @@ export function LearningPathWizard({
       });
       setDraft(result);
       setDraftRecipeKey(currentRecipeKey);
-      setTasks(result.tasks);
+      // The server's weekday is only a default that moves when minutes change, so every task starts
+      // as "automatic"; the server places the tasks again when the plan is confirmed.
+      setTasks(
+        result.tasks.map((t) => ({
+          title: t.title,
+          description: t.description,
+          estimated_minutes: t.estimated_minutes,
+          suggested_weekday: "none" as Weekday,
+        })),
+      );
       setClientRequestId(newRequestId());
       setActiveTab("tasks");
       setPlanStatus("ready");
@@ -308,8 +336,21 @@ export function LearningPathWizard({
     }
   }
 
-  const totalMinutes = tasks.reduce((sum, t) => sum + (t.estimated_minutes || 0), 0);
-  const overBudget = totalMinutes > weeklyHours * 60;
+  // Phase 5F: the preview is placed on the client (lib/schedule.ts, same test vectors as the server)
+  // and re-placed on every edit. Only the server's placement at confirm time is stored.
+  const weeklyMinutes = weeklyHours * 60;
+  const planWeeks = startDate && targetDate ? weekCount(startDate, targetDate) : 1;
+  const available = availableMinutes(weeklyHours, planWeeks);
+  const totalMinutes = tasks.reduce((sum, t) => sum + (Number.isFinite(t.estimated_minutes) ? t.estimated_minutes : 0), 0);
+  const overBudget = totalMinutes > available;
+  const bar = budgetBar(totalMinutes, available);
+  const minutesList = tasks.map((t) => t.estimated_minutes);
+  const placements = useMemo(() => placeTasks(minutesList, weeklyMinutes), [minutesList.join(","), weeklyMinutes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const weekGroups = useMemo(
+    () => (startDate ? groupByWeek(minutesList, weeklyMinutes, mondayOfDateString(startDate)) : []),
+    [minutesList.join(","), weeklyMinutes, startDate], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const duplicateIndexes = new Set(duplicateTitleIndexes(tasks.map((t) => t.title)));
 
   function updateTask(index: number, patch: Partial<WeeklyTask>) {
     setTasks((prev) => prev.map((t, i) => (i === index ? { ...t, ...patch } : t)));
@@ -318,7 +359,9 @@ export function LearningPathWizard({
     setTasks((prev) => prev.filter((_, i) => i !== index));
   }
   function addTask() {
-    setTasks((prev) => [...prev, { title: "", description: "", estimated_minutes: 30, suggested_weekday: "none" }]);
+    setTasks((prev) =>
+      prev.length >= TASK_COUNT_MAX ? prev : [...prev, { title: "", description: "", estimated_minutes: 30, suggested_weekday: "none" }],
+    );
   }
 
   // --- Step 3: confirm (목표+과제 저장) ---
@@ -328,7 +371,10 @@ export function LearningPathWizard({
   const [savedTasks, setSavedTasks] = useState<SavedTask[] | null>(null);
   const [savedGoalField, setSavedGoalField] = useState<string>("");
 
-  const tasksAreValid = tasks.length > 0 && tasks.every((t) => t.title.trim() && t.estimated_minutes > 0);
+  const tasksAreValid =
+    taskCountOk(tasks.length) &&
+    duplicateIndexes.size === 0 &&
+    tasks.every((t) => t.title.trim() && Number.isInteger(t.estimated_minutes) && t.estimated_minutes >= 1 && t.estimated_minutes <= 6000);
   const canConfirm = Boolean(draft) && !isDraftStale && !overBudget && tasksAreValid;
 
   async function confirmPlan() {
@@ -355,7 +401,13 @@ export function LearningPathWizard({
           weekly_hours: weeklyHours,
           target_date: targetDate,
           start_date: startDate,
-          tasks,
+          // Only the content and the weekday the user chose; weeks and timeline are computed by the server.
+          tasks: tasks.map((t) => ({
+            title: t.title.trim(),
+            description: t.description,
+            estimated_minutes: t.estimated_minutes,
+            suggested_weekday: t.suggested_weekday,
+          })),
           // The advice shown in the draft is saved with the plan so the weekly plan screen can show it.
           advice_title: draft.advice.title,
           advice_content: draft.advice.content,
@@ -364,10 +416,7 @@ export function LearningPathWizard({
       });
       setSavedGoalField(recommendation.field);
       try {
-        const reloaded = await apiRequest<SavedTask[]>(
-          `/api/tasks?goal_id=${encodeURIComponent(result.goal.id)}&plan_week_start=${encodeURIComponent(draft.plan_week_start)}`,
-          { token },
-        );
+        const reloaded = await apiRequest<SavedTask[]>(`/api/tasks?goal_id=${encodeURIComponent(result.goal.id)}`, { token });
         setSavedTasks(reloaded);
       } catch {
         setSavedTasks(null); // save itself already succeeded; the confirmation screen just won't list tasks
@@ -463,7 +512,7 @@ export function LearningPathWizard({
         <p className="kicker">PACEMATE · PLAN SAVED</p>
         <h2>학습 계획이 저장되었습니다.</h2>
         <p className="description">
-          {savedGoalField} 목표와 이번 주 과제가 저장되어 언제든 다시 확인할 수 있습니다.
+          {savedGoalField} 목표와 전체 학습 과제가 저장되어 언제든 다시 확인할 수 있습니다.
         </p>
         {savedTasks && savedTasks.length > 0 && (
           <ul>
@@ -724,9 +773,14 @@ export function LearningPathWizard({
             >
               {planStatus === "loading" ? "계획 만드는 중…" : draft ? "✦ 계획 다시 만들기" : "✦ 과제·조언·참고자료 만들기"}
             </button>
+            {planStatus === "loading" && (
+              <p className="small muted" role="status">
+                전체 학습 과정을 설계하고 있어요. 길어질 수 있어 최대 1~2분 걸려요. 입력한 내용은 그대로 남아 있어요.
+              </p>
+            )}
             {planStatus === "error" && (
               <p className="error" role="alert">
-                {planError}
+                {planError} 입력한 내용은 그대로 남아 있으니 같은 버튼으로 다시 시도해 주세요.
               </p>
             )}
             <p className="small muted">생성 결과는 검토·수정 후 저장할 수 있습니다. AI가 생성한 내용이며 정확성을 확인해 주세요.</p>
@@ -783,51 +837,86 @@ export function LearningPathWizard({
           {activeTab === "tasks" && (
             <div>
               <p className={overBudget ? "error" : "small muted"} role={overBudget ? "alert" : undefined}>
-                총 예상 시간 {totalMinutes}분 / 주당 가능 시간 {weeklyHours * 60}분
-                {overBudget && " · 시간이 초과되어 확정할 수 없습니다. 과업을 줄이거나 시간을 조정하세요."}
+                {planSummaryText(totalMinutes, available, planWeeks, weeklyHours)}
+                {overBudget && ` · ${overBudgetMessage(totalMinutes, available)}`}
               </p>
-              <p className="small muted">추천 요일은 마감일이 아닙니다. 하루를 놓쳐도 과제가 실패 처리되거나 이월되지 않습니다.</p>
-              {tasks.map((t, i) => (
-                <div key={i} className="task-edit-row">
-                  <input
-                    value={t.title}
-                    onChange={(e) => updateTask(i, { title: e.target.value })}
-                    placeholder="과업 제목"
-                    autoComplete="off"
-                  />
-                  <textarea
-                    value={t.description}
-                    onChange={(e) => updateTask(i, { description: e.target.value })}
-                    placeholder="과업 설명"
-                  />
-                  <div className="field-grid">
-                    <input
-                      type="number"
-                      min={1}
-                      value={t.estimated_minutes}
-                      onChange={(e) => updateTask(i, { estimated_minutes: Number(e.target.value) })}
-                      aria-label="예상 학습 시간(분)"
-                    />
-                    <select
-                      value={t.suggested_weekday}
-                      onChange={(e) => updateTask(i, { suggested_weekday: e.target.value as Weekday })}
-                      aria-label="추천 요일"
-                    >
-                      {(Object.keys(WEEKDAY_LABEL) as Weekday[]).map((w) => (
-                        <option key={w} value={w}>
-                          {WEEKDAY_LABEL[w]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button type="button" className="btn secondary small" onClick={() => removeTask(i)}>
-                    과업 삭제
-                  </button>
+              <div className="bar" role="progressbar" aria-label="가용 시간 중 계획한 시간" aria-valuenow={bar.percent} aria-valuemin={0} aria-valuemax={100}>
+                <span style={{ width: `${bar.percent}%` }} />
+              </div>
+              <p className={taskCountOk(tasks.length) ? "small muted" : "error"} role={taskCountOk(tasks.length) ? undefined : "alert"}>
+                {taskCountHint(tasks.length)}
+              </p>
+              <p className="small muted">
+                과제를 순서대로 이어 붙여 주차에 배치한 미리보기예요. 시간을 바꾸거나 과제를 삭제·추가하면 바로 다시 배치돼요. 저장할 때 서버가
+                다시 계산한 값이 실제 일정이에요. 추천 요일은 마감일이 아닙니다. 하루를 놓쳐도 과제가 실패 처리되거나 이월되지 않습니다.
+              </p>
+              {weekGroups.map((g) => (
+                <div key={g.index} className="plan-week-group">
+                  <h3 className="plan-week-heading">{weekGroupHeading(g.weekStart, g.index, g.scheduledMinutes)}</h3>
+                  {g.items.map((item) => {
+                    const i = item.taskIndex;
+                    const t = tasks[i];
+                    if (!item.startsHere) {
+                      return (
+                        <p key={`${g.index}-${i}`} className="small muted plan-continued">
+                          {t.title.trim() || "(제목 없음)"} · {continuedLabel(item.weekMinutes, item.totalMinutes)}
+                        </p>
+                      );
+                    }
+                    const note = spanNote(item.weeksSpanned);
+                    return (
+                      <div key={`${g.index}-${i}`} className="task-edit-row">
+                        <input
+                          value={t.title}
+                          onChange={(e) => updateTask(i, { title: e.target.value })}
+                          placeholder="과업 제목"
+                          autoComplete="off"
+                          aria-invalid={duplicateIndexes.has(i)}
+                        />
+                        {duplicateIndexes.has(i) && (
+                          <p className="error" role="alert">
+                            같은 제목의 과제가 이미 있어요. 제목을 서로 다르게 바꿔 주세요.
+                          </p>
+                        )}
+                        <textarea
+                          value={t.description}
+                          onChange={(e) => updateTask(i, { description: e.target.value })}
+                          placeholder="과업 설명"
+                        />
+                        <div className="field-grid">
+                          <input
+                            type="number"
+                            min={1}
+                            max={6000}
+                            value={Number.isFinite(t.estimated_minutes) ? t.estimated_minutes : ""}
+                            onChange={(e) => updateTask(i, { estimated_minutes: e.target.value === "" ? Number.NaN : Number(e.target.value) })}
+                            aria-label="예상 학습 시간(분)"
+                          />
+                          <select
+                            value={t.suggested_weekday}
+                            onChange={(e) => updateTask(i, { suggested_weekday: e.target.value as Weekday })}
+                            aria-label="추천 요일"
+                          >
+                            {(Object.keys(WEEKDAY_LABEL) as Weekday[]).map((w) => (
+                              <option key={w} value={w}>
+                                {w === "none" ? `자동 (${WEEKDAY_LABEL[placements[i].suggested_weekday]})` : WEEKDAY_LABEL[w]}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {note && <p className="small muted">{note}</p>}
+                        <button type="button" className="btn secondary small" onClick={() => removeTask(i)}>
+                          과업 삭제
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
-              <button type="button" className="btn secondary" onClick={addTask}>
+              <button type="button" className="btn secondary" onClick={addTask} disabled={tasks.length >= TASK_COUNT_MAX}>
                 + 과업 추가
               </button>
+              {tasks.length < TASK_COUNT_MIN && <p className="small muted">확정하려면 과제가 {TASK_COUNT_MIN}개 이상 필요해요.</p>}
             </div>
           )}
 

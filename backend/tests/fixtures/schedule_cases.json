@@ -1,0 +1,1959 @@
+{
+ "schedule": [
+  {
+   "name": "design_example_300",
+   "weekly_minutes": 300,
+   "minutes": [
+    120,
+    90,
+    150,
+    240
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 120,
+     "start_week_index": 0,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 210,
+     "start_week_index": 0,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 360,
+     "start_week_index": 1,
+     "suggested_weekday": "tue"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      120
+     ]
+    ],
+    [
+     [
+      0,
+      90
+     ]
+    ],
+    [
+     [
+      0,
+      90
+     ],
+     [
+      1,
+      60
+     ]
+    ],
+    [
+     [
+      1,
+      240
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "exactly_fills_one_week",
+   "weekly_minutes": 300,
+   "minutes": [
+    100,
+    100,
+    100
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 100,
+     "start_week_index": 0,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 200,
+     "start_week_index": 0,
+     "suggested_weekday": "fri"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "one_task_spans_three_weeks",
+   "weekly_minutes": 300,
+   "minutes": [
+    100,
+    800,
+    100
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 100,
+     "start_week_index": 0,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 900,
+     "start_week_index": 3,
+     "suggested_weekday": "mon"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      200
+     ],
+     [
+      1,
+      300
+     ],
+     [
+      2,
+      300
+     ]
+    ],
+    [
+     [
+      3,
+      100
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "tiny_weekly_minutes_long_task",
+   "weekly_minutes": 60,
+   "minutes": [
+    300,
+    30
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 300,
+     "start_week_index": 5,
+     "suggested_weekday": "mon"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      60
+     ],
+     [
+      1,
+      60
+     ],
+     [
+      2,
+      60
+     ],
+     [
+      3,
+      60
+     ],
+     [
+      4,
+      60
+     ]
+    ],
+    [
+     [
+      5,
+      30
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "last_task_ends_at_end_of_last_week",
+   "weekly_minutes": 120,
+   "minutes": [
+    120,
+    120,
+    120
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 120,
+     "start_week_index": 1,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 240,
+     "start_week_index": 2,
+     "suggested_weekday": "mon"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      120
+     ]
+    ],
+    [
+     [
+      1,
+      120
+     ]
+    ],
+    [
+     [
+      2,
+      120
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "single_task",
+   "weekly_minutes": 300,
+   "minutes": [
+    10
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      10
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "sixty_tasks",
+   "weekly_minutes": 420,
+   "minutes": [
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35,
+    35
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 35,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 70,
+     "start_week_index": 0,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 105,
+     "start_week_index": 0,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 140,
+     "start_week_index": 0,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 175,
+     "start_week_index": 0,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 210,
+     "start_week_index": 0,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 245,
+     "start_week_index": 0,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 280,
+     "start_week_index": 0,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 315,
+     "start_week_index": 0,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 350,
+     "start_week_index": 0,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 385,
+     "start_week_index": 0,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 420,
+     "start_week_index": 1,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 455,
+     "start_week_index": 1,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 490,
+     "start_week_index": 1,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 525,
+     "start_week_index": 1,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 560,
+     "start_week_index": 1,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 595,
+     "start_week_index": 1,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 630,
+     "start_week_index": 1,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 665,
+     "start_week_index": 1,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 700,
+     "start_week_index": 1,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 735,
+     "start_week_index": 1,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 770,
+     "start_week_index": 1,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 805,
+     "start_week_index": 1,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 840,
+     "start_week_index": 2,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 875,
+     "start_week_index": 2,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 910,
+     "start_week_index": 2,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 945,
+     "start_week_index": 2,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 980,
+     "start_week_index": 2,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1015,
+     "start_week_index": 2,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1050,
+     "start_week_index": 2,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 1085,
+     "start_week_index": 2,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 1120,
+     "start_week_index": 2,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 1155,
+     "start_week_index": 2,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 1190,
+     "start_week_index": 2,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 1225,
+     "start_week_index": 2,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 1260,
+     "start_week_index": 3,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 1295,
+     "start_week_index": 3,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 1330,
+     "start_week_index": 3,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 1365,
+     "start_week_index": 3,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 1400,
+     "start_week_index": 3,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1435,
+     "start_week_index": 3,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1470,
+     "start_week_index": 3,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 1505,
+     "start_week_index": 3,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 1540,
+     "start_week_index": 3,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 1575,
+     "start_week_index": 3,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 1610,
+     "start_week_index": 3,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 1645,
+     "start_week_index": 3,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 1680,
+     "start_week_index": 4,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 1715,
+     "start_week_index": 4,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 1750,
+     "start_week_index": 4,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 1785,
+     "start_week_index": 4,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 1820,
+     "start_week_index": 4,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1855,
+     "start_week_index": 4,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1890,
+     "start_week_index": 4,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 1925,
+     "start_week_index": 4,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 1960,
+     "start_week_index": 4,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 1995,
+     "start_week_index": 4,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 2030,
+     "start_week_index": 4,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 2065,
+     "start_week_index": 4,
+     "suggested_weekday": "sun"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      0,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      1,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      2,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      3,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ],
+    [
+     [
+      4,
+      35
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "uneven_sixty_tasks",
+   "weekly_minutes": 300,
+   "minutes": [
+    10,
+    47,
+    84,
+    121,
+    158,
+    25,
+    62,
+    99,
+    136,
+    173,
+    40,
+    77,
+    114,
+    151,
+    18,
+    55,
+    92,
+    129,
+    166,
+    33,
+    70,
+    107,
+    144,
+    11,
+    48,
+    85,
+    122,
+    159,
+    26,
+    63,
+    100,
+    137,
+    174,
+    41,
+    78,
+    115,
+    152,
+    19,
+    56,
+    93,
+    130,
+    167,
+    34,
+    71,
+    108,
+    145,
+    12,
+    49,
+    86,
+    123,
+    160,
+    27,
+    64,
+    101,
+    138,
+    175,
+    42,
+    79,
+    116,
+    153
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 10,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 57,
+     "start_week_index": 0,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 141,
+     "start_week_index": 0,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 262,
+     "start_week_index": 0,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 420,
+     "start_week_index": 1,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 445,
+     "start_week_index": 1,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 507,
+     "start_week_index": 1,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 606,
+     "start_week_index": 2,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 742,
+     "start_week_index": 2,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 915,
+     "start_week_index": 3,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 955,
+     "start_week_index": 3,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 1032,
+     "start_week_index": 3,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 1146,
+     "start_week_index": 3,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 1297,
+     "start_week_index": 4,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1315,
+     "start_week_index": 4,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1370,
+     "start_week_index": 4,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 1462,
+     "start_week_index": 4,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 1591,
+     "start_week_index": 5,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 1757,
+     "start_week_index": 5,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 1790,
+     "start_week_index": 5,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 1860,
+     "start_week_index": 6,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 1967,
+     "start_week_index": 6,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 2111,
+     "start_week_index": 7,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 2122,
+     "start_week_index": 7,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 2170,
+     "start_week_index": 7,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 2255,
+     "start_week_index": 7,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 2377,
+     "start_week_index": 7,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 2536,
+     "start_week_index": 8,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 2562,
+     "start_week_index": 8,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 2625,
+     "start_week_index": 8,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 2725,
+     "start_week_index": 9,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 2862,
+     "start_week_index": 9,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 3036,
+     "start_week_index": 10,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 3077,
+     "start_week_index": 10,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 3155,
+     "start_week_index": 10,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 3270,
+     "start_week_index": 10,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 3422,
+     "start_week_index": 11,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 3441,
+     "start_week_index": 11,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 3497,
+     "start_week_index": 11,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 3590,
+     "start_week_index": 11,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 3720,
+     "start_week_index": 12,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 3887,
+     "start_week_index": 12,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 3921,
+     "start_week_index": 13,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 3992,
+     "start_week_index": 13,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 4100,
+     "start_week_index": 13,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 4245,
+     "start_week_index": 14,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 4257,
+     "start_week_index": 14,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 4306,
+     "start_week_index": 14,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 4392,
+     "start_week_index": 14,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 4515,
+     "start_week_index": 15,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 4675,
+     "start_week_index": 15,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 4702,
+     "start_week_index": 15,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 4766,
+     "start_week_index": 15,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 4867,
+     "start_week_index": 16,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 5005,
+     "start_week_index": 16,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 5180,
+     "start_week_index": 17,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 5222,
+     "start_week_index": 17,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 5301,
+     "start_week_index": 17,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 5417,
+     "start_week_index": 18,
+     "suggested_weekday": "mon"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      10
+     ]
+    ],
+    [
+     [
+      0,
+      47
+     ]
+    ],
+    [
+     [
+      0,
+      84
+     ]
+    ],
+    [
+     [
+      0,
+      121
+     ]
+    ],
+    [
+     [
+      0,
+      38
+     ],
+     [
+      1,
+      120
+     ]
+    ],
+    [
+     [
+      1,
+      25
+     ]
+    ],
+    [
+     [
+      1,
+      62
+     ]
+    ],
+    [
+     [
+      1,
+      93
+     ],
+     [
+      2,
+      6
+     ]
+    ],
+    [
+     [
+      2,
+      136
+     ]
+    ],
+    [
+     [
+      2,
+      158
+     ],
+     [
+      3,
+      15
+     ]
+    ],
+    [
+     [
+      3,
+      40
+     ]
+    ],
+    [
+     [
+      3,
+      77
+     ]
+    ],
+    [
+     [
+      3,
+      114
+     ]
+    ],
+    [
+     [
+      3,
+      54
+     ],
+     [
+      4,
+      97
+     ]
+    ],
+    [
+     [
+      4,
+      18
+     ]
+    ],
+    [
+     [
+      4,
+      55
+     ]
+    ],
+    [
+     [
+      4,
+      92
+     ]
+    ],
+    [
+     [
+      4,
+      38
+     ],
+     [
+      5,
+      91
+     ]
+    ],
+    [
+     [
+      5,
+      166
+     ]
+    ],
+    [
+     [
+      5,
+      33
+     ]
+    ],
+    [
+     [
+      5,
+      10
+     ],
+     [
+      6,
+      60
+     ]
+    ],
+    [
+     [
+      6,
+      107
+     ]
+    ],
+    [
+     [
+      6,
+      133
+     ],
+     [
+      7,
+      11
+     ]
+    ],
+    [
+     [
+      7,
+      11
+     ]
+    ],
+    [
+     [
+      7,
+      48
+     ]
+    ],
+    [
+     [
+      7,
+      85
+     ]
+    ],
+    [
+     [
+      7,
+      122
+     ]
+    ],
+    [
+     [
+      7,
+      23
+     ],
+     [
+      8,
+      136
+     ]
+    ],
+    [
+     [
+      8,
+      26
+     ]
+    ],
+    [
+     [
+      8,
+      63
+     ]
+    ],
+    [
+     [
+      8,
+      75
+     ],
+     [
+      9,
+      25
+     ]
+    ],
+    [
+     [
+      9,
+      137
+     ]
+    ],
+    [
+     [
+      9,
+      138
+     ],
+     [
+      10,
+      36
+     ]
+    ],
+    [
+     [
+      10,
+      41
+     ]
+    ],
+    [
+     [
+      10,
+      78
+     ]
+    ],
+    [
+     [
+      10,
+      115
+     ]
+    ],
+    [
+     [
+      10,
+      30
+     ],
+     [
+      11,
+      122
+     ]
+    ],
+    [
+     [
+      11,
+      19
+     ]
+    ],
+    [
+     [
+      11,
+      56
+     ]
+    ],
+    [
+     [
+      11,
+      93
+     ]
+    ],
+    [
+     [
+      11,
+      10
+     ],
+     [
+      12,
+      120
+     ]
+    ],
+    [
+     [
+      12,
+      167
+     ]
+    ],
+    [
+     [
+      12,
+      13
+     ],
+     [
+      13,
+      21
+     ]
+    ],
+    [
+     [
+      13,
+      71
+     ]
+    ],
+    [
+     [
+      13,
+      108
+     ]
+    ],
+    [
+     [
+      13,
+      100
+     ],
+     [
+      14,
+      45
+     ]
+    ],
+    [
+     [
+      14,
+      12
+     ]
+    ],
+    [
+     [
+      14,
+      49
+     ]
+    ],
+    [
+     [
+      14,
+      86
+     ]
+    ],
+    [
+     [
+      14,
+      108
+     ],
+     [
+      15,
+      15
+     ]
+    ],
+    [
+     [
+      15,
+      160
+     ]
+    ],
+    [
+     [
+      15,
+      27
+     ]
+    ],
+    [
+     [
+      15,
+      64
+     ]
+    ],
+    [
+     [
+      15,
+      34
+     ],
+     [
+      16,
+      67
+     ]
+    ],
+    [
+     [
+      16,
+      138
+     ]
+    ],
+    [
+     [
+      16,
+      95
+     ],
+     [
+      17,
+      80
+     ]
+    ],
+    [
+     [
+      17,
+      42
+     ]
+    ],
+    [
+     [
+      17,
+      79
+     ]
+    ],
+    [
+     [
+      17,
+      99
+     ],
+     [
+      18,
+      17
+     ]
+    ],
+    [
+     [
+      18,
+      153
+     ]
+    ]
+   ]
+  },
+  {
+   "name": "weekday_boundaries",
+   "weekly_minutes": 700,
+   "minutes": [
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    100,
+    700
+   ],
+   "placements": [
+    {
+     "timeline_start_minutes": 0,
+     "start_week_index": 0,
+     "suggested_weekday": "mon"
+    },
+    {
+     "timeline_start_minutes": 100,
+     "start_week_index": 0,
+     "suggested_weekday": "tue"
+    },
+    {
+     "timeline_start_minutes": 200,
+     "start_week_index": 0,
+     "suggested_weekday": "wed"
+    },
+    {
+     "timeline_start_minutes": 300,
+     "start_week_index": 0,
+     "suggested_weekday": "thu"
+    },
+    {
+     "timeline_start_minutes": 400,
+     "start_week_index": 0,
+     "suggested_weekday": "fri"
+    },
+    {
+     "timeline_start_minutes": 500,
+     "start_week_index": 0,
+     "suggested_weekday": "sat"
+    },
+    {
+     "timeline_start_minutes": 600,
+     "start_week_index": 0,
+     "suggested_weekday": "sun"
+    },
+    {
+     "timeline_start_minutes": 700,
+     "start_week_index": 1,
+     "suggested_weekday": "mon"
+    }
+   ],
+   "portions": [
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      0,
+      100
+     ]
+    ],
+    [
+     [
+      1,
+      700
+     ]
+    ]
+   ]
+  }
+ ],
+ "week_count": [
+  {
+   "start_date": "2026-10-21",
+   "target_date": "2026-10-21",
+   "week_count": 1
+  },
+  {
+   "start_date": "2026-10-19",
+   "target_date": "2026-10-25",
+   "week_count": 1
+  },
+  {
+   "start_date": "2026-10-25",
+   "target_date": "2026-10-26",
+   "week_count": 2
+  },
+  {
+   "start_date": "2026-10-21",
+   "target_date": "2026-11-30",
+   "week_count": 7
+  },
+  {
+   "start_date": "2026-10-26",
+   "target_date": "2027-01-17",
+   "week_count": 12
+  },
+  {
+   "start_date": "2026-12-28",
+   "target_date": "2027-01-03",
+   "week_count": 1
+  },
+  {
+   "start_date": "2026-12-31",
+   "target_date": "2027-01-04",
+   "week_count": 2
+  }
+ ]
+}

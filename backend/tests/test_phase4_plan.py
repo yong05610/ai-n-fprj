@@ -38,10 +38,12 @@ VALID_PATH_RESPONSE = {
     "suggested_roles": ["백엔드 개발자", "데이터 엔지니어"],
 }
 
+# Phase 5F: a whole-course plan (3~60 distinct tasks); the AI no longer sends a weekday.
 VALID_PLAN_RESPONSE = {
     "tasks": [
-        {"title": "변수와 자료형", "description": "기본 문법 실습", "estimated_minutes": 60, "suggested_weekday": "mon"},
-        {"title": "조건문 연습", "description": "if문 실습", "estimated_minutes": 60, "suggested_weekday": "none"},
+        {"title": "변수와 자료형", "description": "기본 문법 실습", "estimated_minutes": 60},
+        {"title": "조건문 연습", "description": "if문 실습", "estimated_minutes": 60},
+        {"title": "반복문 연습", "description": "for/while 실습", "estimated_minutes": 60},
     ],
     "advice_title": "짧게 나누어 꾸준히",
     "advice_content": "주 7시간을 짧은 세션으로 나누어 진행해 보세요.",
@@ -202,8 +204,8 @@ class TestPlanGenerate:
         assert response.status_code == 200
         body = response.json()
         assert body["plan_week_start"] == "2026-10-19"
-        assert body["total_estimated_minutes"] == 120
-        assert len(body["tasks"]) == 2
+        assert body["total_estimated_minutes"] == 180
+        assert len(body["tasks"]) == 3
         assert body["references"]  # Python 개발/기본문법 matches the catalog
         assert body["references_notice"] is None
 
@@ -231,7 +233,8 @@ class TestPlanGenerate:
         override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
         payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-25"}  # Sunday
         body = client.post("/api/plan/generate", json=payload, headers=consented_headers).json()
-        assert body["plan_week_start"] == "2026-10-19" and body["plan_week_end"] == "2026-10-25"
+        # Phase 5F: the plan covers every week up to the target date (Thu 2026-12-31 -> week ends Sun 2027-01-03)
+        assert body["plan_week_start"] == "2026-10-19" and body["plan_week_end"] == "2027-01-03"
 
     def test_start_date_is_required(self, client: TestClient, consented_headers):
         payload = {k: v for k, v in PLAN_REQUEST_BASE.items() if k != "start_date"}
@@ -267,10 +270,10 @@ class TestPlanGenerate:
         payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-26", "target_date": "2026-10-26"}
         assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 200
 
-    def test_ai_exceeding_weekly_budget_is_retried_then_fails_without_silent_truncation(
+    def test_ai_exceeding_the_available_budget_is_retried_then_fails_without_silent_truncation(
         self, client: TestClient, consented_headers, override_ai
     ):
-        over_budget = {**VALID_PLAN_RESPONSE, "tasks": [{"title": "과로", "description": "너무 많음", "estimated_minutes": 10_000, "suggested_weekday": "none"}]}
+        over_budget = {**VALID_PLAN_RESPONSE, "tasks": [{"title": f"과로 {i}", "description": "너무 많음", "estimated_minutes": 3000} for i in range(3)]}
         fake = override_ai(FakeAIClient(raws=[_raw(over_budget)] * (MAX_RETRIES + 1)))
         response = client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
         assert response.status_code == 502
@@ -280,10 +283,13 @@ class TestPlanGenerate:
     def test_initial_payload_includes_precomputed_max_total_minutes(
         self, client: TestClient, consented_headers, override_ai
     ):
-        # P4-9: the model must not have to compute weekly_hours*60 itself.
+        # P4-9: the model must not have to compute the budget itself. Phase 5F: it is the available
+        # minutes of the whole period (2026-10-19 .. 2026-12-31 = 11 weeks x 420 minutes).
         fake = override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
         client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
-        assert fake.payloads_seen[0]["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60
+        sent = fake.payloads_seen[0]
+        assert sent["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60 * 11
+        assert sent["weekly_minutes"] == 420 and sent["week_count"] == 11
 
     def test_over_budget_retry_gets_previous_total_as_feedback_then_succeeds(
         self, client: TestClient, consented_headers, override_ai
@@ -293,21 +299,24 @@ class TestPlanGenerate:
         # far over it was instead of just repeating the same unmet instruction.
         over_budget = {
             **VALID_PLAN_RESPONSE,
-            "tasks": [{"title": "과로", "description": "너무 많음", "estimated_minutes": 660, "suggested_weekday": "none"}],
+            "tasks": [{"title": f"과로 {i}", "description": "너무 많음", "estimated_minutes": 2000} for i in range(3)],
         }
         fake = override_ai(FakeAIClient(raws=[_raw(over_budget), _raw(VALID_PLAN_RESPONSE)]))
         response = client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
         assert response.status_code == 200
         assert fake.calls == 2
         second_attempt_payload = fake.payloads_seen[1]
-        assert second_attempt_payload["previous_total_minutes"] == 660
-        assert second_attempt_payload["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60
+        assert second_attempt_payload["previous_total_minutes"] == 6000
+        assert second_attempt_payload["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60 * 11
 
-    def test_invalid_suggested_weekday_treated_as_schema_error(self, client: TestClient, consented_headers, override_ai):
-        bad_raw = '{"tasks":[{"title":"t","description":"d","estimated_minutes":30,"suggested_weekday":"monday"}],"advice_title":"a","advice_content":"b"}'
-        override_ai(FakeAIClient(raws=[bad_raw] * (MAX_RETRIES + 1)))
+    def test_a_weekday_in_the_ai_output_is_ignored_the_server_places_the_tasks(self, client: TestClient, consented_headers, override_ai):
+        # Phase 5F: the weekday is never the AI's; whatever it sends is dropped (even an invalid one)
+        tasks = [{**t, "suggested_weekday": "monday"} for t in VALID_PLAN_RESPONSE["tasks"]]
+        override_ai(FakeAIClient(raws=[_raw({**VALID_PLAN_RESPONSE, "tasks": tasks})]))
         response = client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
-        assert response.status_code == 502
+        assert response.status_code == 200
+        assert [t["suggested_weekday"] for t in response.json()["tasks"]] == ["mon", "tue", "wed"]  # 0, 60, 120 of 420
+        assert [t["timeline_start_minutes"] for t in response.json()["tasks"]] == [0, 60, 120]
 
     def test_requires_auth_and_consent(self, client: TestClient, mock_auth_headers):
         assert client.post("/api/plan/generate", json=PLAN_REQUEST_BASE).status_code == 401
@@ -329,6 +338,7 @@ CONFIRM_REQUEST = {
     "tasks": [
         {"title": "변수와 자료형", "description": "기본 문법 실습", "estimated_minutes": 60, "suggested_weekday": "mon"},
         {"title": "조건문 연습", "description": "if문 실습", "estimated_minutes": 60, "suggested_weekday": "none"},
+        {"title": "반복문 연습", "description": "for/while 실습", "estimated_minutes": 60, "suggested_weekday": "none"},
     ],
 }
 
@@ -342,13 +352,13 @@ class TestPlanConfirm:
         assert response.status_code == 201
         body = response.json()
         assert body["goal"]["current_level_description"] == "문법을 처음 접함"
-        assert len(body["tasks"]) == 2
+        assert len(body["tasks"]) == 3
         goal_id = body["goal"]["id"]
 
         tasks = client.get(
             "/api/tasks", params={"goal_id": goal_id, "plan_week_start": "2026-10-19"}, headers=consented_headers
         ).json()
-        assert len(tasks) == 2
+        assert len(tasks) == 3
         assert {t["status"] for t in tasks} == {"pending"}
 
         active_goal = client.get("/api/user/profile", headers=consented_headers).json()["active_goal_id"]
@@ -380,11 +390,11 @@ class TestPlanConfirm:
         payload = {**CONFIRM_REQUEST, "start_date": "2026-10-26", "target_date": "2026-10-25"}
         assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
 
-    def test_rejects_total_minutes_exceeding_weekly_hours(self, client: TestClient, consented_headers):
-        # weekly_hours=7 -> 420 min cap; two 300-minute tasks (each within the per-task
-        # le=6000 schema bound) together breach the weekly budget.
-        over_budget_task = {**CONFIRM_REQUEST["tasks"][0], "estimated_minutes": 300}
-        payload = {**CONFIRM_REQUEST, "tasks": [over_budget_task, {**over_budget_task, "title": "다른 과업"}]}
+    def test_rejects_total_minutes_exceeding_the_available_time(self, client: TestClient, consented_headers):
+        # Phase 5F: weekly_hours=7 over 11 weeks -> 4620 min available; three 2000-minute tasks
+        # (each within the per-task le=6000 schema bound) together breach it.
+        big = {**CONFIRM_REQUEST["tasks"][0], "estimated_minutes": 2000}
+        payload = {**CONFIRM_REQUEST, "tasks": [big, {**big, "title": "다른 과업"}, {**big, "title": "또 다른 과업"}]}
         assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
 
     def test_rejects_invalid_weekday(self, client: TestClient, consented_headers):

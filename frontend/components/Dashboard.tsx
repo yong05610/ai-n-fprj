@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiRequest } from "@/lib/api";
 import { formatPeriod, formatTargetMinutes, levelSummary } from "@/lib/format";
+import { continuedLabel, dashboardScheduleText } from "@/lib/planText";
 import { todayKSTDateString } from "@/lib/week";
 
 type TodayTask = {
@@ -14,6 +15,9 @@ type TodayTask = {
   suggested_weekday: string;
   is_completed: boolean;
   record_count: number;
+  /** Phase 5F: this task's scheduled minutes this week, and whether it continues from an earlier week */
+  week_minutes: number;
+  continued: boolean;
 };
 type DailyHit = { day: string; date: string; has_activity: boolean; is_today: boolean };
 type Insight = { text: string; notice: string; is_insufficient: boolean };
@@ -37,6 +41,10 @@ type DashboardSummary = {
   total_study_log_count: number;
   today_tasks: TodayTask[];
   all_tasks_completed_this_week: boolean;
+  week_scheduled_minutes: number;
+  today_scheduled_minutes: number;
+  plan_total_minutes: number;
+  plan_available_minutes: number;
   weekly_hits: DailyHit[];
   insight: Insight;
   goals_overview: GoalOverview[];
@@ -299,6 +307,7 @@ export function Dashboard({
                 <b>{summary.progress_percentage}%</b>
               </div>
             </div>
+            <p className="small muted schedule-line">{dashboardScheduleText(summary.week_scheduled_minutes, summary.today_scheduled_minutes)}</p>
             {summary.all_tasks_completed_this_week && <p className="description">이번 주 과제를 모두 완료했어요 🎉</p>}
             {summary.today_tasks.length === 0 && <p className="description">이번 주 추천 과제가 없습니다.</p>}
             <div className="task-list">
@@ -318,7 +327,12 @@ export function Dashboard({
                     <div className="task-info">
                       <strong>{t.title}</strong>
                       <small>
-                        {checked ? "과제 완료" : `예상 ${t.estimated_minutes}분`} · 학습 기록 {t.record_count}건
+                        {checked
+                          ? "과제 완료"
+                          : t.continued || t.week_minutes < t.estimated_minutes
+                            ? continuedLabel(t.week_minutes, t.estimated_minutes)
+                            : `예상 ${t.estimated_minutes}분`}{" "}
+                        · 학습 기록 {t.record_count}건
                       </small>
                     </div>
                     {toggling[t.id] === "error" && (

@@ -79,7 +79,9 @@ class WeeklyTaskPlanItem(BaseModel):
     title: str = Field(..., max_length=200, description="학습 과업명")
     description: str = Field(..., max_length=2000, description="과업 세부 내용")
     estimated_minutes: int = Field(..., ge=1, le=6000, description="예상 학습 시간 (분)")
-    suggested_weekday: Optional[Weekday] = Field("none", description="선택적 추천 요일 (마감일 아님)")
+    suggested_weekday: Optional[Weekday] = Field("none", description="선택적 추천 요일 (마감일 아님). 초안에서는 서버가 시작 위치로 계산한 기본값")
+    plan_week_start: Optional[str] = Field(None, description="(Phase 5F, 초안 응답) 이 과제가 시작하는 주의 월요일. 서버가 계산한 값")
+    timeline_start_minutes: Optional[int] = Field(None, ge=0, description="(Phase 5F, 초안 응답) 앞선 과제들의 예상 분 누적. 서버가 계산한 값")
 
 
 class AdviceItem(BaseModel):
@@ -126,10 +128,12 @@ class PlanGenerateRequest(BaseModel):
 
 
 class PlanGenerateResponse(BaseModel):
-    plan_week_start: str = Field(..., description="계획 주간 시작일 (YYYY-MM-DD)")
-    plan_week_end: str = Field(..., description="계획 주간 종료일 (YYYY-MM-DD)")
+    plan_week_start: str = Field(..., description="계획 첫 주의 월요일 (YYYY-MM-DD)")
+    plan_week_end: str = Field(..., description="계획 마지막 주(목표일이 속한 주)의 일요일 (YYYY-MM-DD)")
+    week_count: int = Field(1, ge=1, description="(Phase 5F) 시작일이 속한 주부터 목표일이 속한 주까지의 주 수(양 끝 포함)")
+    available_minutes: int = Field(0, ge=0, description="(Phase 5F) 가용 분 = 주당 가능 분 × 주 수")
     total_estimated_minutes: int = Field(..., description="과업 총 예상 시간 (분)")
-    tasks: List[WeeklyTaskPlanItem] = Field(..., description="주간 학습 과제 목록 (초안, 미저장)")
+    tasks: List[WeeklyTaskPlanItem] = Field(..., description="전체 학습 과제 목록(순서대로, 초안, 미저장). 주차·타임라인·추천 요일 기본값은 서버가 계산")
     advice: AdviceItem = Field(..., description="AI 학습 조언")
     references: List[ResourceReferenceItem] = Field(..., description="관련 참고자료 목록 (검토된 카탈로그에서만 선택)")
     references_notice: Optional[str] = Field(None, description="검토 자료를 찾지 못했을 때의 안내 및 검색 키워드 제안")
@@ -258,6 +262,7 @@ class TaskResponse(BaseModel):
     suggested_weekday: str
     status: str
     order_index: int
+    timeline_start_minutes: int = Field(0, ge=0, description="(Phase 5F) 앞선 과제들의 예상 분 누적. 저장값이 없는 기존 과제는 같은 목표의 과제를 order_index 순으로 누적해 계산")
     created_at: str
     updated_at: str
     # Derived from study_logs at request time (Phase 5 결정 5) - never stored, so these
@@ -301,7 +306,9 @@ class PlanConfirmRequest(BaseModel):
         pattern=DATE_PATTERN,
         description="선택. 주어지면 start_date가 속한 주의 월요일과 같아야 한다(다르면 400). 서버가 start_date에서 도출한다",
     )
-    tasks: List[PlanConfirmTaskItem] = Field(..., min_length=1)
+    tasks: List[PlanConfirmTaskItem] = Field(
+        ..., min_length=1, description="순서가 있는 편집된 과제 목록(3~60개, 서버가 400 으로 검증). 클라이언트의 주차·타임라인 값은 받지 않고 서버가 다시 계산한다"
+    )
     advice_title: Optional[str] = Field(
         None, min_length=1, max_length=200,
         description="확정 때 화면에 보이던 AI 학습 조언의 제목 (선택, advice_content 와 함께). 서버가 AI 결과로 검증할 수 없는 클라이언트 텍스트이며 본인 화면에만 쓰인다",
@@ -516,6 +523,8 @@ class TodayTaskItem(BaseModel):
     suggested_weekday: str
     is_completed: bool
     record_count: int
+    week_minutes: int = Field(0, description="(Phase 5F) 이 과제의 이번 주 예정 분(앞 주에서 이어지는 과제는 일부)")
+    continued: bool = Field(False, description="(Phase 5F) 앞 주에서 이어지는 과제이면 true")
 
 
 class DailyHitItem(BaseModel):
@@ -577,8 +586,12 @@ class DashboardSummaryResponse(BaseModel):
     total_study_log_count: int
     today_tasks: List[TodayTaskItem]
     all_tasks_completed_this_week: bool = Field(
-        False, description="이번 주 계획 과제가 1개 이상이고 전부 완료된 경우 true (P5-4)"
+        False, description="이번 주 예정 분이 있는 과제가 1개 이상이고 전부 완료된 경우 true (P5-4)"
     )
+    week_scheduled_minutes: int = Field(0, description="(Phase 5F) 이번 주 예정 분 합(그 주에 시작하는 과제 + 앞 주에서 이어지는 과제의 이번 주 몫)")
+    today_scheduled_minutes: int = Field(0, description="(Phase 5F) 오늘이 추천 요일인 과제의 이번 주 예정 분 합")
+    plan_total_minutes: int = Field(0, description="(Phase 5F) 이 학습의 전체 과제 예상 분 합")
+    plan_available_minutes: int = Field(0, description="(Phase 5F) 가용 분 = 주당 가능 분 × 주 수")
     weekly_hits: List[DailyHitItem]
     insight: AIInsightSummary
     goals_overview: List[GoalOverviewItem] = Field(

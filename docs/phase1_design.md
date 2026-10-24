@@ -299,8 +299,9 @@ erDiagram
 |---|---|---|---|
 | `POST` | `/api/path/ideas` | 1단계 보조: 분야 입력 기반 대표 직무·목표 예시 3~5개(`suggested_roles`, 참고용). 버튼을 눌렀을 때만 호출 | `path` |
 | `POST` | `/api/path/recommend` | 1단계: 분야 입력 기반 세부 과정 및 수준 제안 (`suggested_roles` 는 호환용 선택 필드, 화면은 `/api/path/ideas` 를 쓴다) | `path` |
-| `POST` | `/api/plan/generate` | 2단계: 과정·수준·시간 선택 기반 주간 과업·조언·자료 생성. `start_date`(필수, 오늘 이후 아무 요일) 가 속한 주의 월요일이 계획 주간. `plan_week_start` 는 선택이며 주어지면 그 월요일과 같아야 한다 | `plan` |
+| `POST` | `/api/plan/generate` | 2단계(Phase 5F): 과정·수준·시간 선택 기반 **전체 학습 과정** 과업·조언·자료 생성(초안, 미저장). `start_date`(필수, 오늘 이후 아무 요일)가 속한 주의 월요일이 첫 주, 목표일이 속한 주까지 `week_count` 주, 가용 분 = 주당 분 × `week_count`. `plan_week_start` 는 선택이며 주어지면 첫 주 월요일과 같아야 한다. AI 는 과제 3~60개(제목·설명·예상 10~6000분)와 조언만 정하고, 주차 배치·추천 요일 기본값·합계 검증은 서버가 한다(제목 중복 금지, 총합 ≤ 가용 분). 응답 `{plan_week_start, plan_week_end(마지막 주 일요일), week_count, available_minutes, total_estimated_minutes, tasks[{title, description, estimated_minutes, plan_week_start, timeline_start_minutes, suggested_weekday}], advice, references, references_notice}` | `plan` |
 | `GET` | `/api/goals` | 사용자의 목표 목록 조회 | `goals` |
+| `POST` | `/api/plan/confirm` | 편집한 계획을 목표와 과제로 함께 저장. Phase 5F: `tasks` 는 순서가 있는 과제 목록(3~60개, 아니면 400), 제목 중복 400, 총합 > 가용 분이면 400(메시지에 총합과 가용 시간). 클라이언트의 주차·타임라인 값은 받지 않고 서버가 다시 계산해 과제마다 `plan_week_start`(시작 주), `timeline_start_minutes`, `order_index`, `suggested_weekday` 를 저장한다. 사용자가 고른 요일은 유지하고 none/생략이면 서버 기본값. `client_request_id` 멱등 | `goals`, `tasks` |
 | `POST` | `/api/goals` | 학습 목표 생성 및 확정 (start_date=이번 주 월요일, 같은 날 진행 중인 활성 학습이 이미 2개면(동시 최대 2개 초과) 409 `GOAL_PERIOD_OVERLAP`, `details.overlaps` 에 해당 날에 걸린 학습 전부. `/api/plan/confirm` 은 사용자가 고른 `start_date` 로 동일 검사) | `goals` |
 | `GET` | `/api/goals/{goal_id}` | 목표 상세 조회 (확정 때 저장한 `advice_title`, `advice_content` 포함, 없는 기존 목표는 null) | `goals` |
 | `GET` | `/api/goals/{goal_id}/insight` | 저장된 마지막 AI 학습 인사이트 `{insight: {summary, difficulty, next_action, generated_at, record_count, reflection_count, is_stale} \| null}`. **AI 를 호출하지 않는다.** 타 UID 403, 없는 id 404 | `insights` |
@@ -308,8 +309,8 @@ erDiagram
 | `GET` | `/api/goals/{goal_id}/references` | 학습에 연결된 검토 참고자료(읽기 전용). 응답 `{references[{title, category, source_name, url, is_verified}], references_notice, search_links[{label, url}]}`. 매칭은 plan/generate 와 같은 규칙(Phase 6C: 분야 토큰이 자료 tags·category 에 하나 이상 일치해야 후보, 점수 = tags 일치 + category 일치, 일반어 제외, 최대 5건; 분야가 하나도 안 맞으면 과정 토큰만으로 다시 점수를 내되 tags 의 도메인 단어가 정확히 일치해야 함). `search_links` 는 서버가 고정 템플릿(구글·공식 문서·유튜브 검색, 퍼센트 인코딩, 최대 3개)으로 만든 검토 전 외부 링크이며 항상 존재(`source_name` 은 `ResourceReferenceItem` 의 선택 필드). 타 UID 403, 없는 id 404 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |
-| `GET` | `/api/tasks` | 과제 목록 조회 (`goal_id`, `plan_week_start` 필터) | `tasks` |
-| `POST` | `/api/tasks` | 과제 생성 (단건 또는 다건) | `tasks` |
+| `GET` | `/api/tasks` | 과제 목록 조회 (`goal_id`, `plan_week_start`(과제가 시작하는 주) 필터). 응답에 `timeline_start_minutes`(Phase 5F, 저장값이 없는 기존 과제는 같은 목표의 과제를 order_index 순으로 누적해 계산) | `tasks` |
+| `POST` | `/api/tasks` | 과제 생성 (단건 또는 다건). Phase 5F: 그 목표의 전체 과제 합계 ≤ 가용 분을 검증하고 타임라인 끝(또는 지정 주의 시작 중 늦은 쪽)에 둔다. `PATCH` 로 분을 바꿔도 다른 과제를 다시 배치하지 않는다(일정 고정) | `tasks` |
 | `PATCH` | `/api/tasks/{task_id}` | 과제 상태(완료 토글) 또는 추천 요일 수정 | `tasks` |
 | `DELETE` | `/api/tasks/{task_id}` | 과제 삭제 | `tasks` |
 | `GET` | `/api/study-logs` | 과제별/목표별(`goal_id`)/기간별 학습 실행 기록 조회 | `study-logs` |
@@ -321,7 +322,7 @@ erDiagram
 | `POST` | `/api/timer/finish` | 타이머 종료, 학습 기록으로 저장 | `study-logs` |
 | `POST` | `/api/timer/cancel` | 활성 타이머 취소 (기록 생성 없음) | `users.active_timer` |
 | `GET` | `/api/data/summary` | **AI 튜터 컨텍스트용** 진행 중인 모든 학습의 요약(`learning_summary`, 줄바꿈으로 학습 구분) 및 최근 회고(최대 5건, `keywords` 일치 우선 후 최신순, 진행 중 학습의 과제 회고만) | `summary` |
-| `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트(최근 학습=active_goal_id 기준: 저장된 인사이트 요약, 없으면 안내 문구. **AI 를 호출하지 않는다**) + `goals_overview`(진행 중인 모든 학습의 일정·진행률) | `summary` |
+| `GET` | `/api/dashboard/summary` | **대시보드 화면용** 4대 지표, 오늘 추천 과제, 주간 활동, 인사이트(최근 학습=active_goal_id 기준: 저장된 인사이트 요약, 없으면 안내 문구. **AI 를 호출하지 않는다**) + `goals_overview`(진행 중인 모든 학습의 일정·진행률). Phase 5F: 이번 주 과제 = 이번 주에 예정 분이 있는 과제(그 주에 시작 + 앞 주에서 이어지는 과제), `today_tasks[].week_minutes/continued`, `week_scheduled_minutes`, `today_scheduled_minutes`, `plan_total_minutes`, `plan_available_minutes` 추가 | `summary` |
 | `GET` | `/api/analytics/overview` | **종합 학습 분석 화면용** 진행 중 학습별 일정·진행률·이번 주 요일별 학습 분(읽기 전용, AI 호출 없음) | `summary` |
 | `POST` | `/api/conversations` | 새 튜터 대화 세션 생성(제목 "새 대화", `client_request_id` 로 멱등: 재요청 200) | `conversations` |
 | `GET` | `/api/conversations` | 최근 갱신순 튜터 대화 목록 조회 (최대 50건, 메시지 제외) | `conversations` |

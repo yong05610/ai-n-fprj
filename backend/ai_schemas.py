@@ -27,14 +27,17 @@ class AIRoleIdeas(BaseModel):
 
 
 class AIWeeklyTask(BaseModel):
+    """One task of the whole-course plan. The weekday and the week are never the AI's: the server
+    places the tasks on the timeline (schedule.py)."""
+
     title: str = Field(..., min_length=1, max_length=200, description="학습 과업명")
     description: str = Field(..., min_length=1, max_length=2000, description="과업 세부 내용")
-    estimated_minutes: int = Field(..., ge=1, le=6000, description="예상 학습 시간 (분)")
-    suggested_weekday: Optional[Weekday] = Field("none", description="선택적 추천 요일")
+    estimated_minutes: int = Field(..., ge=10, le=6000, description="예상 학습 시간 (분)")
 
 
 class AIPlanDraft(BaseModel):
-    tasks: List[AIWeeklyTask] = Field(..., min_length=1)
+    # The 3~60 count is checked by main._validate_ai_plan so a violation reaches the model as feedback.
+    tasks: List[AIWeeklyTask] = Field(..., min_length=1, max_length=200)
     advice_title: str = Field(..., min_length=1, max_length=200)
     advice_content: str = Field(..., min_length=1, max_length=4000)
 

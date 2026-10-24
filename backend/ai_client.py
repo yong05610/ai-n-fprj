@@ -16,6 +16,8 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 from typing import Callable, Optional, Type, TypeVar
 
@@ -73,6 +75,29 @@ def ai_timeout_seconds() -> float:
 
 def ai_max_output_tokens() -> int:
     return int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1500"))
+
+
+# Per-call overrides (Phase 5F: a whole-course plan is a much longer answer than the other calls).
+# A context variable keeps `_raw_complete(system_prompt, user_payload)` unchanged for every client
+# and fake; only OpenAIClient reads it.
+_call_limits: ContextVar[Optional[tuple[Optional[float], Optional[int]]]] = ContextVar("ai_call_limits", default=None)
+
+
+@contextmanager
+def call_limits(timeout_seconds: Optional[float] = None, max_output_tokens: Optional[int] = None):
+    token = _call_limits.set((timeout_seconds, max_output_tokens))
+    try:
+        yield
+    finally:
+        _call_limits.reset(token)
+
+
+def plan_timeout_seconds() -> float:
+    return float(os.getenv("OPENAI_PLAN_TIMEOUT_SECONDS", "60"))
+
+
+def plan_max_output_tokens() -> int:
+    return int(os.getenv("OPENAI_PLAN_MAX_OUTPUT_TOKENS", "8000"))
 
 
 class AIClient(ABC):
@@ -141,8 +166,10 @@ class OpenAIClient(AIClient):
         self._connection_error = APIConnectionError
 
     def _raw_complete(self, system_prompt: str, user_payload: dict) -> str:
+        timeout, max_tokens = _call_limits.get() or (None, None)
+        client = self._client.with_options(timeout=timeout) if timeout else self._client
         try:
-            completion = self._client.chat.completions.create(
+            completion = client.chat.completions.create(
                 model=ai_model(),
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -151,7 +178,7 @@ class OpenAIClient(AIClient):
                 response_format={"type": "json_object"},
                 # max_completion_tokens (not the deprecated max_tokens) is required by
                 # newer models (e.g. reasoning models) and still accepted by older ones.
-                max_completion_tokens=ai_max_output_tokens(),
+                max_completion_tokens=max_tokens or ai_max_output_tokens(),
             )
         except self._timeout_error as exc:
             raise AIRetryableError("provider call timed out") from exc

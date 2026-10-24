@@ -141,7 +141,7 @@ class TestCreate:
         # The server does the arithmetic (Phase 6B fix): totals and their display labels are sent ready-made.
         assert sent["progress"] == {
             "completed_tasks": 0,
-            "total_tasks": 1,
+            "total_tasks": 3,
             "window_record_count": 4,
             "window_total_minutes": 120,
             "window_total_label": "2시간",
