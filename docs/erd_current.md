@@ -59,7 +59,8 @@ erDiagram
         string id PK
         string user_id FK
         string goal_id FK
-        string plan_week_start "월요일"
+        string plan_week_start "월요일. 과제가 시작되는 주(Phase 5F: 전체 과정 일괄 계획, 한 과제가 여러 주에 걸칠 수 있음)"
+        int timeline_start_minutes "목표 전체 타임라인에서 이 과제가 시작되는 누적 분(0부터, 서버가 확정 때 계산. 주 배치 = floor(값 / 주당 분)). 없으면 order_index 순 누적으로 계산(Phase 5F 이전 데이터)"
         string title
         string description
         int estimated_minutes
