@@ -228,7 +228,7 @@
 ## Phase 10 — 문서·발표·제출 (DOC · P1, 14일차)
 
 - [ ] 10.1 README에 서비스 개요, 역할, 기술 스택과 선정 이유, 실행·배포 방법, 결과를 정리한다.
-- [ ] 10.2 ERD·아키텍처·RAG 자료 출처와 회고 Memory 동작 사례를 정리한다. AI 개선 이력(docs/ai_improvement_log.md)을 발표 자료에 사용한다.
+- [ ] 10.2 ERD·아키텍처·RAG 자료 출처와 회고 Memory 동작 사례를 정리한다. AI 개선 이력(docs/ai_improvement_log.md)과 협업 운영 요령(docs/project_operating_playbook.md)을 발표 자료에 사용한다.
 - [ ] 10.3 5인 이상 사용자 테스트, 설문 요약, 개선 내역을 기록한다.
 - [ ] 10.4 MVP 범위에서 제외한 Agent/Function Calling·Make·멀티모달과 이유를 발표 자료에 명시한다.
 - [ ] 10.5 배포 URL과 핵심 시연 흐름을 준비한다.
