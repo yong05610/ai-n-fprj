@@ -13,6 +13,7 @@ from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, 
 from ai_schemas import AIInsight, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
+import insight_rules
 import rag
 import tutor
 from prompts import (
@@ -1829,7 +1830,16 @@ def _own_insight(db, uid: str, goal_id: str) -> Optional[dict[str, Any]]:
     return doc if doc is not None and doc.get("user_id") == uid else None
 
 
-def _validate_ai_insight(parsed: AIInsight) -> None:
+INSIGHT_MIN_REFLECTIONS_FOR_DIFFICULTY = 2
+
+
+def _validate_ai_insight(
+    parsed: AIInsight, facts: insight_rules.QuantityFacts, reflection_count: int
+) -> None:
+    """Server rules for an insight (nothing is patched silently; a violation is retried):
+    required parts, no deadline-style wording, `difficulty` only with at least two reflections,
+    and every time/count expression in the text must be a value the server itself provided
+    (the model must not add up or convert numbers; see insight_rules)."""
     summary, difficulty, next_action = parsed.summary.strip(), parsed.difficulty.strip(), parsed.next_action.strip()
     problem = None
     if not summary or not next_action:
@@ -1838,6 +1848,16 @@ def _validate_ai_insight(parsed: AIInsight) -> None:
         text = " ".join([summary, difficulty, next_action])
         if any(term in text for term in INSIGHT_FORBIDDEN_TERMS):
             problem = "추천 요일은 마감일이 아닙니다. 연체·실패·밀림·지연·마감처럼 평가하거나 마감으로 보는 표현을 쓰지 마세요."
+        elif difficulty and reflection_count < INSIGHT_MIN_REFLECTIONS_FOR_DIFFICULTY:
+            problem = "회고가 2건 미만이면 difficulty 를 비워야 합니다."
+        else:
+            wrong = insight_rules.find_unsupported_quantities([summary, difficulty, next_action], facts)
+            if wrong:
+                problem = (
+                    "다음 시간·건수 표현은 제공된 값(*_label, *_minutes, *_count)에 없습니다: "
+                    + ", ".join(dict.fromkeys(wrong))
+                    + ". 제공된 값만 그대로 쓰고 스스로 더하거나 환산하지 마세요."
+                )
     if problem:
         raise AIRetryFeedback(problem, feedback={"validation_error": problem})
 
@@ -1916,6 +1936,24 @@ def create_goal_insight(
     week_minutes = sum(
         log["minutes"] for log in all_goal_logs if clock.is_within_week(date.fromisoformat(log["study_date"]), week_start)
     )
+    # The server does all the arithmetic; the model only repeats these values.
+    window_minutes = sum(log["minutes"] for log in inputs["records"])
+    target_minutes = goal["weekly_hours"] * 60
+    reflection_used = len(inputs["reflections"])
+    per_task: dict[str, int] = {}
+    for log in inputs["records"]:
+        per_task[log["task_id"]] = per_task.get(log["task_id"], 0) + 1
+    facts = insight_rules.build_facts(
+        record_minutes=[log["minutes"] for log in inputs["records"]],
+        record_count_by_task=list(per_task.values()),
+        window_total_minutes=window_minutes,
+        this_week_minutes=week_minutes,
+        weekly_target_minutes=target_minutes,
+        window_record_count=inputs["record_count"],
+        reflection_count=reflection_used,
+        completed_tasks=done,
+        total_tasks=total,
+    )
     user_payload = {
         "learning": {
             "field": goal["field"],
@@ -1928,8 +1966,14 @@ def create_goal_insight(
         "progress": {
             "completed_tasks": done,
             "total_tasks": total,
+            "window_record_count": inputs["record_count"],
+            "window_total_minutes": window_minutes,
+            "window_total_label": insight_rules.format_minutes(window_minutes),
             "this_week_minutes": week_minutes,
-            "weekly_target_minutes": goal["weekly_hours"] * 60,
+            "this_week_label": insight_rules.format_minutes(week_minutes),
+            "weekly_target_minutes": target_minutes,
+            "weekly_target_label": insight_rules.format_minutes(target_minutes),
+            "reflection_count": reflection_used,
         },
         "records": [
             {
@@ -1951,7 +1995,12 @@ def create_goal_insight(
         ],
     }
     try:
-        result = ai.generate(INSIGHT_SYSTEM_PROMPT, user_payload, AIInsight, validator=_validate_ai_insight)
+        result = ai.generate(
+            INSIGHT_SYSTEM_PROMPT,
+            user_payload,
+            AIInsight,
+            validator=lambda parsed: _validate_ai_insight(parsed, facts, reflection_used),
+        )
     except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
         raise _ai_error_response(exc)  # nothing is stored; an earlier insight stays as it was
 

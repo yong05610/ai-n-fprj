@@ -30,7 +30,7 @@ def _day(offset: int) -> str:
     return (TODAY - timedelta(days=offset)).isoformat()
 
 
-def _ai(summary="이번 기간에 4번 학습했어요.", difficulty="", next_action="다음에는 짧은 복습부터 시작해 보세요.") -> str:
+def _ai(summary="최근 14일 동안의 학습 기록을 바탕으로 한 요약이에요.", difficulty="", next_action="다음에는 짧은 복습부터 시작해 보세요.") -> str:
     return _raw({"summary": summary, "difficulty": difficulty, "next_action": next_action})
 
 
@@ -117,7 +117,7 @@ class TestCreate:
         res = _make(client, consented_headers, goal_id)
         assert res.status_code == 201
         item = res.json()["insight"]
-        assert item["summary"] == "이번 기간에 4번 학습했어요." and item["difficulty"] == "딕셔너리가 반복해서 어려웠어요."
+        assert item["summary"] == "최근 14일 동안의 학습 기록을 바탕으로 한 요약이에요." and item["difficulty"] == "딕셔너리가 반복해서 어려웠어요."
         assert item["next_action"] and item["generated_at"].endswith("Z")
         assert (item["record_count"], item["reflection_count"], item["is_stale"]) == (4, 2, False)
         assert res.json()["is_insufficient"] is False
@@ -138,7 +138,19 @@ class TestCreate:
         assert set(sent["records"][0]) == {"study_date", "minutes", "activity", "task_title"}
         assert [r["content"] for r in sent["reflections"]] == ["회고 0", "회고 1"]
         assert set(sent["reflections"][0]) == {"study_date", "task_title", "content", "tags"}
-        assert sent["progress"] == {"completed_tasks": 0, "total_tasks": 1, "this_week_minutes": 120, "weekly_target_minutes": 420}
+        # The server does the arithmetic (Phase 6B fix): totals and their display labels are sent ready-made.
+        assert sent["progress"] == {
+            "completed_tasks": 0,
+            "total_tasks": 1,
+            "window_record_count": 4,
+            "window_total_minutes": 120,
+            "window_total_label": "2시간",
+            "this_week_minutes": 120,
+            "this_week_label": "2시간",
+            "weekly_target_minutes": 420,
+            "weekly_target_label": "7시간",
+            "reflection_count": 2,
+        }
         blob = str(sent)
         assert UID not in blob and goal_id not in blob and task_id not in blob  # no identifiers go to the model
 
