@@ -1,4 +1,9 @@
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8001";
+import { API_CONFIG_MESSAGES, apiConfigProblem, resolveApiBase } from "@/lib/deployConfig";
+
+const PRODUCTION = process.env.NODE_ENV === "production";
+export const API_BASE_URL = resolveApiBase(process.env.NEXT_PUBLIC_API_BASE_URL, PRODUCTION);
+/** Set when this build must not call the API (production without a usable address). */
+export const API_CONFIG_PROBLEM = apiConfigProblem(API_BASE_URL, PRODUCTION);
 
 export class ApiError extends Error {
   constructor(
@@ -25,6 +30,7 @@ async function performRequest(
   path: string,
   { method = "GET", body, token, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions,
 ): Promise<{ data: unknown; headers: Headers }> {
+  if (API_CONFIG_PROBLEM) throw new ApiError(0, "CONFIG_ERROR", API_CONFIG_MESSAGES[API_CONFIG_PROBLEM]);
   const headers: Record<string, string> = {};
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (token) headers.Authorization = `Bearer ${token}`;

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/AuthProvider";
+import { ServerGate } from "@/components/ServerGate";
 
 export const metadata: Metadata = {
   title: "PaceMate",
@@ -12,7 +13,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="ko">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <ServerGate>
+          <AuthProvider>{children}</AuthProvider>
+        </ServerGate>
       </body>
     </html>
   );

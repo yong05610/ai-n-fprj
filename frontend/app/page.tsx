@@ -253,7 +253,7 @@ export default function Home() {
         <main className="main">
           {view !== null && (
             <div className="page">
-              {current === "dashboard" && <Dashboard onCreatePath={() => go("path")} onOpenAnalysis={() => go("analysis")} onOpenTutor={() => go("tutor")} />}
+              {current === "dashboard" && <Dashboard onCreatePath={() => go("path")} onOpenAnalysis={() => go("analysis")} onOpenTutor={() => go("tutor")} onOpenPlan={() => go("wbs")} />}
               {current === "path" && (
                 <LearningPathWizard onClose={() => go("dashboard")} registerLeaveGuard={registerLeaveGuard} />
               )}

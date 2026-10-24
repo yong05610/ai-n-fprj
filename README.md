@@ -12,7 +12,7 @@ PaceMate is an AI-based personal learning planner. This repository contains the 
 ## Requirements
 
 - Node.js 20.9 or later (Node.js 24 LTS is used for this workspace)
-- Python 3.11 or later
+- Python 3.12 (`.python-version`; the versions in `backend/requirements.txt` are pinned and checked on 3.12)
 
 ## Run locally
 
@@ -47,8 +47,16 @@ The example env files run in **dev mode** (`AUTH_MODE=dev` / `STORE_BACKEND=memo
 ### Tests
 
 ```powershell
-backend\.venv\Scripts\python.exe -m pytest
+cd backend
+python -m pip install -r requirements-dev.txt
+python -m pytest
 ```
+
+`requirements.txt` is what a deployment installs (direct dependencies pinned with `==`); `requirements-dev.txt` adds pytest and the HTTP client the tests use.
+
+### Deployment settings (Render, backend)
+
+When the `RENDER` variable is set, the app refuses to start with `AUTH_MODE=dev`, `STORE_BACKEND=memory`, a missing or unsafe `CORS_ORIGINS` (no `*`, no localhost, https only, no trailing `/`, no empty entry), or an empty `FIREBASE_SERVICE_ACCOUNT_JSON` / `OPENAI_API_KEY`. The message names the rule or variable, never the value. `API_DOCS_ENABLED=false` turns `/docs`, `/redoc` and `/openapi.json` off (default: on). See `docs/deploy_guide.md`.
 
 ## Reference project
 

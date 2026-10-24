@@ -24,6 +24,7 @@ from ai_client import (
 )
 from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, auth_mode, delete_auth_user, get_current_uid
+from deploy_config import assert_safe_deploy_config
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import insight_rules
 import rag
@@ -103,6 +104,7 @@ CURRENT_TERMS_VERSION = "v1.1"
 
 assert_safe_auth_config()
 assert_safe_store_config()
+assert_safe_deploy_config()
 
 
 def running_modes() -> tuple[str, str]:
@@ -146,7 +148,17 @@ def _allowed_origins() -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+def api_docs_enabled() -> bool:
+    """/docs, /redoc and /openapi.json are on unless API_DOCS_ENABLED says false (off, 0, no)."""
+    return os.getenv("API_DOCS_ENABLED", "true").strip().lower() not in ("false", "0", "no", "off")
+
+
+_docs_on = api_docs_enabled()
+
 app = FastAPI(
+    docs_url="/docs" if _docs_on else None,
+    redoc_url="/redoc" if _docs_on else None,
+    openapi_url="/openapi.json" if _docs_on else None,
     title="PaceMate API",
     version="0.1.0",
     description="PaceMate MVP backend API",

@@ -334,3 +334,6 @@ td { color: #586277; }
 
 /* Ops fix: running-mode band under the top bar (development modes only) */
 .mode-banner { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 7px clamp(20px, 3vw, 42px); background: #fff6e5; border-bottom: 1px solid #f3dcae; color: #8a5a00; font-size: 11px; font-weight: 700; }
+
+/* Phase 7: server wake-up notice (same band style as the mode banner, fixed at the top of the gate) */
+.server-notice { position: fixed; top: 0; left: 0; right: 0; z-index: 50; justify-content: center; }

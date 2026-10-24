@@ -52,26 +52,16 @@ type DashboardSummary = {
 
 type Status = "loading" | "ready" | "error";
 
-/** Shown instead of a working link/button for a destination that does not exist yet. */
-function SoonLink({ children }: { children: React.ReactNode }) {
-  return (
-    <span aria-disabled="true">
-      <button type="button" className="link-btn" disabled>
-        {children}
-      </button>
-      <span className="soon-note">준비 중</span>
-    </span>
-  );
-}
-
 export function Dashboard({
   onCreatePath,
   onOpenAnalysis,
   onOpenTutor,
+  onOpenPlan,
 }: {
   onCreatePath: () => void;
   onOpenAnalysis: () => void;
   onOpenTutor: () => void;
+  onOpenPlan: () => void;
 }) {
   const { session } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -287,7 +277,9 @@ export function Dashboard({
                 <h2>오늘의 추천 과제</h2>
                 <p>이번 주 미완료 과제 중 시작하기 좋은 항목</p>
               </div>
-              <SoonLink>전체 일정 보기 →</SoonLink>
+              <button type="button" className="link-btn" onClick={onOpenPlan}>
+                전체 일정 보기 →
+              </button>
             </div>
             <div className="card progress-card">
               <div className="progress-top">
