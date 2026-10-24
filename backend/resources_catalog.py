@@ -45,10 +45,21 @@ STOPWORDS = frozenset(
 )
 MAX_REFERENCES = 5
 _PARTICLE_MAX = 2  # a Korean tag matches a longer input word only when at most this many characters follow it
+# Josa that may follow a generic word ("개발의", "기초를"); such a token is still the generic word.
+_STOPWORD_PARTICLES = ("의", "를", "을", "은", "는", "이", "가", "에", "로", "와", "과", "도", "에서", "으로")
+# Two-letter Latin fields are blocked as too generic ("a", "go"), except these well-known terms,
+# which only ever match as a whole token.
+SHORT_LATIN_ALLOWED = frozenset({"ai", "ui", "ux", "db", "qa"})
+
+
+def _is_stopword(token: str) -> bool:
+    if token in STOPWORDS:
+        return True
+    return any(token == word + particle for word in STOPWORDS if not word.isascii() for particle in _STOPWORD_PARTICLES)
 
 
 def _topic_tokens(text: str) -> set[str]:
-    return {t for t in _TOKEN_PATTERN.findall(text.lower()) if t not in STOPWORDS}
+    return {t for t in _TOKEN_PATTERN.findall(text.lower()) if not _is_stopword(t)}
 
 
 def _token_matches(query: str, target: str) -> bool:
@@ -68,34 +79,55 @@ def _count_hits(query_tokens: set[str], target_tokens: set[str]) -> int:
     return sum(1 for q in query_tokens if any(_token_matches(q, t) for t in target_tokens))
 
 
+def _first_tag_hit(query_tokens: set[str], tags: list[str]) -> int:
+    """Position of the first tag that matches the input (earlier tags are a document's main topics)."""
+    for i, tag in enumerate(tags):
+        if _count_hits(query_tokens, _topic_tokens(tag)):
+            return i
+    return len(tags)
+
+
+def _rank(query_tokens: set[str], gate_tokens: set[str], require_tag: bool) -> list[tuple[int, int, str, dict]]:
+    """Scored candidates: (score, first matching tag position, id, doc), best first."""
+    ranked = []
+    for doc in load_catalog():
+        tags = doc.get("tags", [])
+        tag_tokens = {t for tag in tags for t in _topic_tokens(tag)}
+        category_tokens = _topic_tokens(doc["category"])
+        if require_tag:
+            if not _count_hits(gate_tokens, tag_tokens):
+                continue
+        elif not _count_hits(gate_tokens, tag_tokens | category_tokens):
+            continue
+        score = _count_hits(query_tokens, tag_tokens) + _count_hits(query_tokens, category_tokens)
+        ranked.append((score, _first_tag_hit(query_tokens, tags), doc["id"], doc))
+    ranked.sort(key=lambda r: (-r[0], r[1], r[2]))
+    return ranked
+
+
 def match_references(field: str, course: str) -> list[dict]:
     """Reviewed documents that fit a learning's field and course (precision over recall).
 
-    A document is a candidate only when at least one token of the *field* matches its tags or its
-    category - the course text alone never matches across fields. Score of a candidate = (input
-    tokens, field and course together, equal to a token of its `tags`) + (input tokens equal to a
-    token of its category "<field> / <course>"). Generic words are ignored, no substring matching
-    is used, and the best MAX_REFERENCES documents (ties: id) are returned. A Latin field shorter
-    than _MIN_MATCH_LENGTH ("a", "AI") is too generic to mean anything.
+    1. A document is a candidate when at least one token of the *field* matches its tags or its
+       category. Score = (input tokens, field and course together, equal to a token of its `tags`)
+       + (input tokens equal to a token of its category "<field> / <course>"). Course text alone
+       never pulls in a document while the field matches something.
+    2. Only when the field matches nothing at all (free-text fields such as "VIBE CODING"), the
+       *course* tokens are scored on their own - and a document then needs a domain term (a tag)
+       to match exactly, so generic words never connect anything.
+    Generic words are ignored, no substring matching is used, and the best MAX_REFERENCES documents
+    (ties: earlier matching tag, then id) are returned. A Latin field shorter than _MIN_MATCH_LENGTH
+    ("a", "go") is too generic to mean anything unless it is in SHORT_LATIN_ALLOWED ("AI", "UX").
     """
-    stripped = field.strip()
-    if len(stripped) < _MIN_MATCH_LENGTH and stripped.isascii():
-        return []
-    field_tokens = _topic_tokens(field)
-    query_tokens = field_tokens | _topic_tokens(course)
-    if not field_tokens:
-        return []
+    stripped = field.strip().lower()
+    field_blocked = len(stripped) < _MIN_MATCH_LENGTH and stripped.isascii() and stripped not in SHORT_LATIN_ALLOWED
+    field_tokens = set() if field_blocked else _topic_tokens(field)
+    course_tokens = _topic_tokens(course)
 
-    scored = []
-    for doc in load_catalog():
-        tag_tokens = {t for tag in doc.get("tags", []) for t in _topic_tokens(tag)}
-        category_tokens = _topic_tokens(doc["category"])
-        if not _count_hits(field_tokens, tag_tokens | category_tokens):
-            continue
-        score = _count_hits(query_tokens, tag_tokens) + _count_hits(query_tokens, category_tokens)
-        scored.append((score, doc))
-    scored.sort(key=lambda pair: (-pair[0], pair[1]["id"]))
-    return [doc for _, doc in scored[:MAX_REFERENCES]]
+    ranked = _rank(field_tokens | course_tokens, field_tokens, require_tag=False) if field_tokens else []
+    if not ranked and course_tokens:
+        ranked = _rank(course_tokens, course_tokens, require_tag=True)
+    return [doc for _, _, _, doc in ranked[:MAX_REFERENCES]]
 
 
 SEARCH_QUERY_MAX_CHARS = 200

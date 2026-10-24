@@ -69,9 +69,9 @@ class TestLinkDocuments:
         got = {d["id"]: (d["title"], d["url"]) for d in load_catalog() if d.get("link_only")}
         assert len(table) == 31 and got == table
 
-    def test_the_ten_old_documents_are_unchanged_and_have_no_tags(self):
+    def test_the_ten_old_documents_keep_their_data_and_gained_tags_in_the_fix(self):
         old = [d for d in load_catalog() if not d.get("link_only")]
-        assert all("tags" not in d and d["verified_at"] == "2026-10-19" for d in old)
+        assert all(d["verified_at"] == "2026-10-19" and d["tags"] and "link_only" not in d for d in old)
 
     def test_link_only_documents_are_never_searchable_or_a_source(self, tmp_path, monkeypatch):
         chunks = [{"doc_id": "link_022", "chunks": [{"id": "link_022_c1", "text": "판다스 데이터프레임 설명", "keywords": ["판다스"], "verified": True}]}]
@@ -120,20 +120,21 @@ class TestMatching:
     def test_short_korean_fields_match_but_short_latin_ones_do_not(self):
         assert _ids("영어") == ["link_030", "link_031"]
         assert _ids("웹") and all(i.startswith("link_") for i in _ids("웹"))
-        assert match_references("AI", "") == [] and match_references("go", "") == []
+        assert match_references("go", "") == [] and match_references("QQ", "") == []
+        assert _ids("AI") == ["link_025"]  # allowed short Latin terms (ai, ui, ux, db, qa) match as whole tokens
 
     def test_generic_words_alone_never_match(self):
         for field in ("개발 입문", "코딩 기초", "공부 과정", "development basics"):
             assert match_references(field, "개발 기초") == []
 
     def test_unknown_or_vague_fields_do_not_match(self):
-        for field, course in [("VIBE CODING", ""), ("우주공학", "로켓 설계"), ("UX 디자인", "기초"), ("a", ""), ("AI", "")]:
+        for field, course in [("VIBE CODING", ""), ("우주공학", "로켓 설계"), ("UX 디자인", "기초"), ("a", ""), ("요리", "한식")]:
             assert match_references(field, course) == []
 
     def test_course_text_alone_never_matches_across_fields(self):
         # "기본문법" is the course of both a Python and a JavaScript document
         assert "doc_004" not in _ids("Python 개발", "기본문법")
-        assert match_references("우주공학", "html") == []
+        assert match_references("요리", "한식") == []
 
     def test_at_most_five_best_score_first_ties_by_id(self):
         docs = match_references("웹 개발", "React")
@@ -146,7 +147,8 @@ class TestMatching:
                 query, resources_catalog._topic_tokens(doc["category"])
             )
 
-        keys = [(-score(d), d["id"]) for d in docs]
+        query = resources_catalog._topic_tokens("웹 개발 React")
+        keys = [(-score(d), resources_catalog._first_tag_hit(query, d.get("tags", [])), d["id"]) for d in docs]
         assert keys == sorted(keys)
 
     def test_every_returned_document_is_reviewed_and_has_a_url(self):

@@ -23,8 +23,10 @@ class TestMatchReferences:
         # Repro: field="a" previously matched 4 JavaScript/Next.js docs via substring.
         assert match_references("a", "") == []
 
-    def test_two_character_field_does_not_match_anything(self):
-        assert match_references("AI", "") == []
+    def test_two_character_latin_field_is_blocked_unless_it_is_a_known_short_term(self):
+        assert match_references("go", "") == [] and match_references("qq", "") == []
+        # Phase 6C fix R3: "AI" is on the allow list and matches only as a whole token
+        assert [m["id"] for m in match_references("AI", "")] == ["link_025"]
 
     def test_substring_of_an_unrelated_field_does_not_match(self):
         # Repro: field="Java" previously matched the "JavaScript" catalog entries

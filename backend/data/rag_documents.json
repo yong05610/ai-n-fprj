@@ -8,7 +8,12 @@
     "license": "PSF License (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "python",
+      "파이썬",
+      "문법"
+    ]
   },
   {
     "id": "doc_002",
@@ -19,7 +24,13 @@
     "license": "PSF License (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "python",
+      "파이썬",
+      "자료구조",
+      "알고리즘"
+    ]
   },
   {
     "id": "doc_003",
@@ -30,7 +41,13 @@
     "license": "PSF License (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "python",
+      "파이썬",
+      "함수",
+      "모듈"
+    ]
   },
   {
     "id": "doc_004",
@@ -41,7 +58,14 @@
     "license": "CC BY-SA 2.5 (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "javascript",
+      "자바스크립트",
+      "js",
+      "웹",
+      "프론트엔드"
+    ]
   },
   {
     "id": "doc_005",
@@ -52,7 +76,16 @@
     "license": "CC BY-SA 2.5 (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "javascript",
+      "자바스크립트",
+      "js",
+      "비동기",
+      "async",
+      "웹",
+      "프론트엔드"
+    ]
   },
   {
     "id": "doc_006",
@@ -63,7 +96,14 @@
     "license": "W3Schools (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "sql",
+      "데이터베이스",
+      "db",
+      "데이터 분석",
+      "쿼리"
+    ]
   },
   {
     "id": "doc_007",
@@ -74,7 +114,13 @@
     "license": "CC BY-NC-SA 3.0 (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "git",
+      "깃",
+      "협업",
+      "버전 관리"
+    ]
   },
   {
     "id": "doc_008",
@@ -85,7 +131,17 @@
     "license": "MIT License (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "next",
+      "nextjs",
+      "넥스트",
+      "react",
+      "리액트",
+      "웹",
+      "프론트엔드",
+      "풀스택"
+    ]
   },
   {
     "id": "doc_009",
@@ -96,7 +152,15 @@
     "license": "MIT License (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "fastapi",
+      "python",
+      "파이썬",
+      "백엔드",
+      "api",
+      "서버"
+    ]
   },
   {
     "id": "doc_010",
@@ -107,7 +171,14 @@
     "license": "CC BY-NC-SA 4.0 (공개 무료)",
     "verified": true,
     "verified_at": "2026-10-19",
-    "chunks": []
+    "chunks": [],
+    "tags": [
+      "javascript",
+      "자바스크립트",
+      "js",
+      "웹",
+      "프론트엔드"
+    ]
   },
   {
     "id": "link_001",
@@ -260,7 +331,9 @@
       "react",
       "웹",
       "풀스택",
-      "프론트엔드"
+      "프론트엔드",
+      "넥스트",
+      "리액트"
     ],
     "chunks": []
   },
@@ -278,7 +351,8 @@
       "tailwind",
       "css",
       "프론트엔드",
-      "웹"
+      "웹",
+      "테일윈드"
     ],
     "chunks": []
   },
@@ -337,7 +411,9 @@
       "nodejs",
       "백엔드",
       "javascript",
-      "서버"
+      "서버",
+      "노드",
+      "자바스크립트"
     ],
     "chunks": []
   },
@@ -356,7 +432,8 @@
       "node",
       "백엔드",
       "서버",
-      "api"
+      "api",
+      "익스프레스"
     ],
     "chunks": []
   },
@@ -433,7 +510,8 @@
       "sql",
       "데이터베이스",
       "db",
-      "백엔드"
+      "백엔드",
+      "포스트그레스"
     ],
     "chunks": []
   },
@@ -471,7 +549,8 @@
       "go",
       "golang",
       "백엔드",
-      "서버"
+      "서버",
+      "고"
     ],
     "chunks": []
   },
@@ -508,7 +587,9 @@
       "c#",
       "dotnet",
       ".net",
-      "백엔드"
+      "백엔드",
+      "씨샵",
+      "닷넷"
     ],
     "chunks": []
   },
@@ -528,7 +609,8 @@
       "데이터",
       "분석",
       "python",
-      "데이터 분석"
+      "데이터 분석",
+      "파이썬"
     ],
     "chunks": []
   },
@@ -548,7 +630,8 @@
       "데이터",
       "배열",
       "python",
-      "데이터 분석"
+      "데이터 분석",
+      "파이썬"
     ],
     "chunks": []
   },
@@ -568,7 +651,9 @@
       "머신러닝",
       "ml",
       "데이터 분석",
-      "python"
+      "python",
+      "파이썬",
+      "사이킷런"
     ],
     "chunks": []
   },
@@ -608,7 +693,10 @@
       "html",
       "javascript",
       "웹",
-      "코딩"
+      "코딩",
+      "파이썬",
+      "자바스크립트",
+      "js"
     ],
     "chunks": []
   },
@@ -629,7 +717,8 @@
       "c",
       "python",
       "기초",
-      "cs"
+      "cs",
+      "파이썬"
     ],
     "chunks": []
   },
@@ -669,7 +758,8 @@
       "git",
       "협업",
       "pull request",
-      "브랜치"
+      "브랜치",
+      "깃"
     ],
     "chunks": []
   },
