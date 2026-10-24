@@ -7,6 +7,7 @@ import { GoalSwitch } from "@/components/GoalSwitch";
 import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
 import { LatestWinsSaver, type SaveState } from "@/lib/latestWins";
+import { SEARCH_LINKS_HEADING, SEARCH_LINKS_WARNING, type SearchLink, sourceLine, visibleSearchLinks } from "@/lib/searchLinks";
 import { mondayOfThisWeekKST } from "@/lib/week";
 import {
   type PlanTask,
@@ -35,7 +36,7 @@ type GoalDetail = {
   advice_content: string | null;
 };
 type Reference = { title: string; category: string; source_name: string | null; url: string | null; is_verified: boolean };
-type ReferencesResult = { references: Reference[]; references_notice: string | null };
+type ReferencesResult = { references: Reference[]; references_notice: string | null; search_links: SearchLink[] };
 type LoadStatus = "loading" | "ready" | "error";
 
 export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
@@ -355,7 +356,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
               refs.references.map((r) => (
                 <div key={r.title} className="resource">
                   <strong>{r.title}</strong>
-                  <p>{[r.source_name, r.category].filter(Boolean).join(" · ")}</p>
+                  <p>{sourceLine(r.source_name, r.category)}</p>
                   {r.url && (
                     <a href={r.url} target="_blank" rel="noreferrer">
                       원문 보기 ↗
@@ -367,6 +368,19 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
               <p className="small muted" style={{ whiteSpace: "pre-line" }}>
                 {refs.references_notice}
               </p>
+            )}
+            {refs && visibleSearchLinks(refs.search_links).length > 0 && (
+              <div className="search-links-block">
+                <h3>{SEARCH_LINKS_HEADING}</h3>
+                {visibleSearchLinks(refs.search_links).map((l) => (
+                  <div key={l.url} className="resource">
+                    <a href={l.url} target="_blank" rel="noreferrer">
+                      {l.label} ↗
+                    </a>
+                  </div>
+                ))}
+                <p className="small muted">{SEARCH_LINKS_WARNING}</p>
+              </div>
             )}
           </section>
         </aside>

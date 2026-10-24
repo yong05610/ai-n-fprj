@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { latestSources, parseSummaryLines, referencePanelState, shortenText, type TutorMessage } from "./tutorState";
+import { latestExtraLinks, latestSources, parseSummaryLines, referencePanelState, shortenText, type TutorMessage } from "./tutorState";
 
 const src = { doc_id: "doc_002", title: "자료", source_name: "공식 문서", url: "https://example.com" };
 const user = (c: string): TutorMessage => ({ role: "user", content: c, timestamp: "t", sources: [] });
@@ -32,4 +32,22 @@ test("summary lines split into title and level text", () => {
 test("shortenText collapses whitespace and cuts with an ellipsis", () => {
   assert.equal(shortenText("짧은  글\n입니다", 20), "짧은 글 입니다");
   assert.equal(shortenText("가나다라마바사", 4), "가나다라…");
+});
+
+test("latestExtraLinks reads the newest assistant answer and filters unsafe links", () => {
+  const msg = (extra: Partial<TutorMessage>): TutorMessage => ({ role: "assistant", content: "a", timestamp: "t", sources: [], ...extra });
+  const none = latestExtraLinks([{ role: "user", content: "q", timestamp: "t", sources: [] }]);
+  assert.deepEqual(none, { related: [], search: [] });
+  const old = msg({ search_links: [{ label: "x", url: "https://a.b/?q=1" }] });
+  const newest = msg({
+    related_links: [{ title: "자료", source_name: "MDN", url: "https://example.org/a" }],
+    search_links: [
+      { label: "ok", url: "https://www.google.com/search?q=a" },
+      { label: "bad", url: "javascript:alert(1)" },
+    ],
+  });
+  const got = latestExtraLinks([old, { role: "user", content: "q", timestamp: "t", sources: [] }, newest]);
+  assert.equal(got.related.length, 1);
+  assert.deepEqual(got.search.map((l) => l.label), ["ok"]);
+  assert.deepEqual(latestExtraLinks([msg({})]), { related: [], search: [] }); // older response shape
 });

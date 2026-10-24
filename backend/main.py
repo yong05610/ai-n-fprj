@@ -25,7 +25,7 @@ from prompts import (
     INSIGHT_SYSTEM_PROMPT,
     INSIGHT_SYSTEM_PROMPT_BASIC,
 )
-from resources_catalog import match_references, no_match_notice
+from resources_catalog import match_references, no_match_notice, search_links
 from schemas import (
     ErrorResponse,
     PathRecommendationRequest,
@@ -44,6 +44,7 @@ from schemas import (
     GoalUpdateRequest,
     GoalResponse,
     GoalReferencesResponse,
+    SearchLinkItem,
     InsightItem,
     InsightRequest,
     InsightResponse,
@@ -895,6 +896,7 @@ def get_goal_references(goal_id: str, uid: str = Depends(require_consented_uid),
     return GoalReferencesResponse(
         references=references,
         references_notice=None if matches else no_match_notice(goal["field"]),
+        search_links=[SearchLinkItem(**link) for link in search_links(goal["field"], goal["course"])],
     )
 
 
@@ -1568,12 +1570,21 @@ def get_analytics_overview(uid: str = Depends(require_consented_uid), db=Depends
 
 
 # 7. Conversations (AI Tutor - 단일화된 튜터 호출 엔드포인트)
-def _conversation_out(conv: dict[str, Any]) -> dict[str, Any]:
+def _current_learning(db, uid: str) -> tuple[Optional[str], Optional[str]]:
+    """(field, course) of the user's current learning when it is still active, else (None, None)."""
+    user = db.get("users", uid) or {}
+    goal = db.get("goals", user["active_goal_id"]) if user.get("active_goal_id") else None
+    if not goal or goal.get("user_id") != uid or goal.get("status") != "active":
+        return None, None
+    return goal["field"], goal["course"]
+
+
+def _conversation_out(conv: dict[str, Any], current: tuple[Optional[str], Optional[str]] = (None, None)) -> dict[str, Any]:
     return {
         "id": conv["id"],
         "user_id": conv["user_id"],
         "title": conv["title"],
-        "messages": conv.get("messages", []),
+        "messages": [tutor.decorate(m, *current) for m in conv.get("messages", [])],
         "created_at": conv["created_at"],
         "updated_at": conv["updated_at"],
     }
@@ -1630,7 +1641,7 @@ def list_conversations(uid: str = Depends(require_consented_uid), db=Depends(get
     summary="대화 세션 상세 및 전체 메시지 이력 조회",
 )
 def get_conversation(conversation_id: str, uid: str = Depends(require_consented_uid), db=Depends(get_db)):
-    return _conversation_out(_get_owned(db, "conversations", conversation_id, uid))
+    return _conversation_out(_get_owned(db, "conversations", conversation_id, uid), _current_learning(db, uid))
 
 
 def _stored_pair(conv: dict[str, Any], client_request_id: str):
@@ -1665,7 +1676,7 @@ def send_message(
         response.status_code = status.HTTP_200_OK
         return SendMessageResponse(
             user_message=stored[0],
-            assistant_message=stored[1],
+            assistant_message=tutor.decorate(stored[1], *_current_learning(db, uid)),
             conversation_title=conv["title"],
             refused=bool(stored[1].get("refused")),
         )
@@ -1680,7 +1691,7 @@ def send_message(
 
     question = payload.content.strip()
     # 1) summary + reflections (all active learnings), 2) reference search, 3) one AI call.
-    summary, _, _, reflections = _learning_context(db, uid, question)
+    summary, current_field, current_course, reflections = _learning_context(db, uid, question)
     retrieved = rag.search(question)
     user_payload = {
         "question": question,
@@ -1706,11 +1717,14 @@ def send_message(
 
     refused = not answer.relevant
     if refused:
-        content, sources = tutor.REFUSAL_TEXT, []
+        content, sources, keywords = tutor.REFUSAL_TEXT, [], []
     else:
         sources = tutor.sources_for(answer.used_source_ids, retrieved)
+        keywords = tutor.keywords_for(answer, bool(sources))
         content = answer.answer.strip()
         if not sources:
+            if keywords:
+                content = f"{content}\n\n{tutor.keywords_line(keywords)}"
             content = f"{content}\n\n{tutor.NO_SOURCE_NOTE}"
 
     now = _now_iso()
@@ -1721,7 +1735,14 @@ def send_message(
         "sources": [],
         "client_request_id": payload.client_request_id,
     }
-    assistant_message = {"role": "assistant", "content": content, "timestamp": now, "sources": sources, "refused": refused}
+    assistant_message = {
+        "role": "assistant",
+        "content": content,
+        "timestamp": now,
+        "sources": sources,
+        "refused": refused,
+        "search_keywords": keywords,
+    }
     title = conv["title"]
     if not history and title == tutor.DEFAULT_TITLE:
         title = tutor.make_title(question)
@@ -1731,7 +1752,10 @@ def send_message(
         {"messages": [*history, user_message, assistant_message], "title": title, "updated_at": now},
     )
     return SendMessageResponse(
-        user_message=user_message, assistant_message=assistant_message, conversation_title=title, refused=refused
+        user_message=user_message,
+        assistant_message=tutor.decorate(assistant_message, current_field, current_course),
+        conversation_title=title,
+        refused=refused,
     )
 
 

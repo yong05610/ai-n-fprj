@@ -5,7 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiRequest } from "@/lib/api";
 import { splitAnswer } from "@/lib/richText";
-import { type TutorMessage, latestSources, parseSummaryLines, referencePanelState, shortenText } from "@/lib/tutorState";
+import {
+  RELATED_LINKS_HEADING,
+  SEARCH_LINKS_HEADING,
+  SEARCH_LINKS_WARNING,
+  type SearchLink,
+  visibleSearchLinks,
+} from "@/lib/searchLinks";
+import { type TutorMessage, latestExtraLinks, latestSources, parseSummaryLines, referencePanelState, shortenText } from "@/lib/tutorState";
 import { buildHash, parseHash } from "@/lib/viewHash";
 import { dateTimeKSTLabel, timeKSTLabel } from "@/lib/week";
 
@@ -49,6 +56,21 @@ function AnswerText({ text }: { text: string }) {
           <span key={i}>{seg.text}</span>
         ),
       )}
+    </span>
+  );
+}
+
+function SearchLinkRow({ links }: { links: SearchLink[] }) {
+  const shown = visibleSearchLinks(links);
+  if (shown.length === 0) return null;
+  return (
+    <span className="search-links" style={{ display: "block" }}>
+      <span className="small muted">{SEARCH_LINKS_HEADING}: </span>
+      {shown.map((l) => (
+        <a key={l.url} href={l.url} target="_blank" rel="noreferrer" style={{ marginRight: 8 }}>
+          {l.label} ↗
+        </a>
+      ))}
     </span>
   );
 }
@@ -190,6 +212,7 @@ export function TutorScreen() {
   const messages = current?.messages ?? [];
   const refState = referencePanelState(messages);
   const sources = latestSources(messages);
+  const extra = latestExtraLinks(messages);
   const summaryLines = summary ? parseSummaryLines(summary.learning_summary) : [];
 
   return (
@@ -270,6 +293,7 @@ export function TutorScreen() {
             {messages.map((m, i) => (
               <div key={`${m.timestamp}-${i}`} className={`bubble${m.role === "user" ? " user" : ""}`}>
                 {m.role === "assistant" ? <AnswerText text={m.content} /> : <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>}
+                {m.role === "assistant" && m.sources.length === 0 && <SearchLinkRow links={m.search_links ?? []} />}
                 <small>
                   {m.role === "assistant" ? "AI 생성 · 참고용 · " : ""}
                   {timeKSTLabel(m.timestamp)}
@@ -355,6 +379,33 @@ export function TutorScreen() {
                 )}
               </div>
             ))}
+          {extra.related.length > 0 && (
+            <>
+              <h3>{RELATED_LINKS_HEADING}</h3>
+              {extra.related.map((l) => (
+                <div key={l.url} className="resource">
+                  <strong>{l.title}</strong>
+                  {l.source_name && <p>{l.source_name}</p>}
+                  <a href={l.url} target="_blank" rel="noreferrer">
+                    원문 보기 ↗
+                  </a>
+                </div>
+              ))}
+            </>
+          )}
+          {extra.search.length > 0 && (
+            <>
+              <h3>{SEARCH_LINKS_HEADING}</h3>
+              {extra.search.map((l) => (
+                <div key={l.url} className="resource">
+                  <a href={l.url} target="_blank" rel="noreferrer">
+                    {l.label} ↗
+                  </a>
+                </div>
+              ))}
+              <p className="small muted">{SEARCH_LINKS_WARNING}</p>
+            </>
+          )}
           <p className="small muted">요약과 회고는 본인 UID의 기록만 사용합니다.</p>
         </aside>
       </div>

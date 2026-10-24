@@ -1,7 +1,7 @@
 """Pre-reviewed reference catalog (docs/phase2_prep.md Task 2.3, backend/data/rag_documents.json).
 
 Phase 4's plan/generate only picks from this fixed, team-reviewed list by a
-simple field/course substring match - it never asks the AI to invent sources.
+score-based field/course tag match - it never asks the AI to invent sources.
 Each entry's `category` is "<field> / <course>" (as the Phase 2 catalog defines
 it); `chunks` is reserved for Phase 6's RAG index and unused here.
 """
@@ -10,6 +10,7 @@ import json
 import os
 import re
 from functools import lru_cache
+from urllib.parse import quote
 
 
 _CATALOG_PATH = os.path.join(os.path.dirname(__file__), "data", "rag_documents.json")
@@ -18,8 +19,9 @@ _CATALOG_PATH = os.path.join(os.path.dirname(__file__), "data", "rag_documents.j
 # {"python", "개발"} and "JavaScript" to {"javascript"} - never a single run spanning both.
 _TOKEN_PATTERN = re.compile(r"[a-z0-9]+|[가-힣]+")
 
-# A field string shorter than this is too generic/short to mean anything on its own
-# ("a", "AI") and produced false matches against unrelated catalog entries.
+# A Latin field string shorter than this is too generic/short to mean anything on its own
+# ("a", "AI") and produced false matches against unrelated catalog entries. Korean names
+# ("영어", "웹") are short but specific, and matching is by whole token, so they are allowed.
 _MIN_MATCH_LENGTH = 3
 
 
@@ -34,48 +36,90 @@ def _category_parts(doc: dict) -> tuple[str, str]:
     return doc_field.strip().lower(), doc_course.strip().lower()
 
 
-def _head_token(value: str) -> str | None:
-    """The leading token of a field string - its domain-specific term.
+# Generic words carry no topic: "개발" or "입문" alone must never connect two unrelated fields.
+STOPWORDS = frozenset(
+    {
+        "개발", "개발자", "기초", "입문", "코딩", "학습", "공부", "과정", "기본", "초급", "강의",
+        "development", "developer", "basic", "basics", "beginner", "coding", "study", "course", "learn",
+    }
+)
+MAX_REFERENCES = 5
+_PARTICLE_MAX = 2  # a Korean tag matches a longer input word only when at most this many characters follow it
 
-    Every multi-word field in this catalog is authored as "<distinctive term>
-    <generic suffix>" ("Python 개발", "웹 개발", "백엔드 개발", "데이터 분석"). Matching
-    on *any* shared token let unrelated fields collide on the generic suffix
-    alone (field="Python 개발" matching "웹 개발"/"백엔드 개발" docs just because
-    they all share the word "개발"/"development"). The head token is the one
-    that actually identifies the field.
+
+def _topic_tokens(text: str) -> set[str]:
+    return {t for t in _TOKEN_PATTERN.findall(text.lower()) if t not in STOPWORDS}
+
+
+def _token_matches(query: str, target: str) -> bool:
+    """Exact equality; for Korean also "target + a short particle" ("영어를" ~ "영어").
+
+    Latin tokens are never matched by prefix, so "java" never matches "javascript"; the Korean
+    form follows the same rule ("자바" does not match "자바스크립트": four characters follow it).
     """
-    tokens = _TOKEN_PATTERN.findall(value.strip().lower())
-    return tokens[0] if tokens else None
+    if query == target:
+        return True
+    if not target.isascii() and len(target) >= 2 and query.startswith(target):
+        return len(query) - len(target) <= _PARTICLE_MAX
+    return False
+
+
+def _count_hits(query_tokens: set[str], target_tokens: set[str]) -> int:
+    return sum(1 for q in query_tokens if any(_token_matches(q, t) for t in target_tokens))
 
 
 def match_references(field: str, course: str) -> list[dict]:
-    """Field match is mandatory - course text alone never matches across fields.
+    """Reviewed documents that fit a learning's field and course (precision over recall).
 
-    Matching is by exact head-token equality, not substring containment: a
-    plain substring check made "Java" match the "JavaScript" doc (and "UX
-    디자인" match an "SQL 기초" doc via the shared word "기초"). "java" and
-    "javascript" are different tokens even though one contains the other, so
-    exact equality rejects it while "Python" == "Python 개발"'s head token
-    "python" still matches.
-
-    The catalog is small and unranked (10 entries, Task 2.3), so once a field
-    matches, every doc under that field is returned; `course` isn't used to
-    narrow further - a within-field narrowing pass can be added if the catalog
-    grows enough to need it.
+    A document is a candidate only when at least one token of the *field* matches its tags or its
+    category - the course text alone never matches across fields. Score of a candidate = (input
+    tokens, field and course together, equal to a token of its `tags`) + (input tokens equal to a
+    token of its category "<field> / <course>"). Generic words are ignored, no substring matching
+    is used, and the best MAX_REFERENCES documents (ties: id) are returned. A Latin field shorter
+    than _MIN_MATCH_LENGTH ("a", "AI") is too generic to mean anything.
     """
-    field_l = field.strip().lower()
-    if len(field_l) < _MIN_MATCH_LENGTH:
+    stripped = field.strip()
+    if len(stripped) < _MIN_MATCH_LENGTH and stripped.isascii():
         return []
-    query_head = _head_token(field)
-    if not query_head:
+    field_tokens = _topic_tokens(field)
+    query_tokens = field_tokens | _topic_tokens(course)
+    if not field_tokens:
         return []
 
-    matches = []
+    scored = []
     for doc in load_catalog():
-        doc_field, _ = _category_parts(doc)
-        if query_head == _head_token(doc_field):
-            matches.append(doc)
-    return matches
+        tag_tokens = {t for tag in doc.get("tags", []) for t in _topic_tokens(tag)}
+        category_tokens = _topic_tokens(doc["category"])
+        if not _count_hits(field_tokens, tag_tokens | category_tokens):
+            continue
+        score = _count_hits(query_tokens, tag_tokens) + _count_hits(query_tokens, category_tokens)
+        scored.append((score, doc))
+    scored.sort(key=lambda pair: (-pair[0], pair[1]["id"]))
+    return [doc for _, doc in scored[:MAX_REFERENCES]]
+
+
+SEARCH_QUERY_MAX_CHARS = 200
+SEARCH_LINK_LABEL_SUFFIX = "(검토 전 외부 링크)"
+
+
+def search_links(field: str, course: str, extra_terms: list[str] | None = None) -> list[dict]:
+    """Search-engine links built only from the learning's own words and a fixed server template.
+
+    Nothing here comes from AI output or from a client-sent URL; the query is percent-encoded, so
+    spaces, `&`, `#` and quotes cannot break out of the `q` parameter. At most three links.
+    """
+    terms = [t.strip() for t in [course, field, *(extra_terms or [])] if t and t.strip()]
+    query = " ".join(terms)[:SEARCH_QUERY_MAX_CHARS].strip()
+    if not query:
+        return []
+    google = quote(query, safe="")
+    docs_query = quote(f"{query} 공식 문서"[:SEARCH_QUERY_MAX_CHARS], safe="")
+    youtube = quote(query, safe="")
+    return [
+        {"label": f"구글에서 검색 {SEARCH_LINK_LABEL_SUFFIX}", "url": f"https://www.google.com/search?q={google}"},
+        {"label": f"공식 문서 검색 {SEARCH_LINK_LABEL_SUFFIX}", "url": f"https://www.google.com/search?q={docs_query}"},
+        {"label": f"유튜브에서 검색 {SEARCH_LINK_LABEL_SUFFIX}", "url": f"https://www.youtube.com/results?search_query={youtube}"},
+    ]
 
 
 def no_match_notice(field: str) -> str:

@@ -100,7 +100,7 @@ def _chunks_path() -> str:
 def _load_index(path: str, mtime: float) -> tuple[_IndexedChunk, ...]:
     """Read-only index of verified chunks whose document is in the reviewed catalog."""
     del mtime  # part of the cache key so an edited file is re-read
-    docs = {d["id"]: d for d in load_catalog()}
+    docs = {d["id"]: d for d in load_catalog() if not d.get("link_only")}  # link-only docs are never evidence
     with open(path, "r", encoding="utf-8") as f:
         entries = json.load(f)
     indexed = []

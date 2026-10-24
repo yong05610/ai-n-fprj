@@ -165,7 +165,7 @@ erDiagram
         string id PK
         string user_id FK "users.uid"
         string title "대화 세션 제목"
-        list messages "메시지 객체 배열 [role, content, timestamp, sources(assistant 의 참고자료), client_request_id(user 의 멱등 키), refused(assistant)]"
+        list messages "메시지 객체 배열 [role, content, timestamp, sources(assistant 의 참고자료), client_request_id(user 의 멱등 키), refused(assistant), search_keywords(assistant, 출처 없는 답변의 더 찾아볼 키워드 0~3개, Phase 6C)]"
         string client_request_id "새 대화 생성 멱등 키, 선택"
         timestamp created_at
         timestamp updated_at
@@ -305,7 +305,7 @@ erDiagram
 | `GET` | `/api/goals/{goal_id}` | 목표 상세 조회 (확정 때 저장한 `advice_title`, `advice_content` 포함, 없는 기존 목표는 null) | `goals` |
 | `GET` | `/api/goals/{goal_id}/insight` | 저장된 마지막 AI 학습 인사이트 `{insight: {summary, difficulty, next_action, generated_at, record_count, reflection_count, is_stale} \| null}`. **AI 를 호출하지 않는다.** 타 UID 403, 없는 id 404 | `insights` |
 | `POST` | `/api/goals/{goal_id}/insight` | AI 학습 인사이트 만들기 `{client_request_id}`. 기록 부족이면 AI 미호출·미저장 200 `{insight: null, is_insufficient: true, message, record_count, reflection_count}`. 충분하면 AI 1회 호출·검증·저장 후 201, 같은 `client_request_id` 재요청은 200(AI 재호출 없음). 같은 학습의 마지막 생성 후 60초 이내 새 요청은 429 `INSIGHT_COOLDOWN`(`details.retry_after_seconds`). 검증 실패·AI 오류는 502/503/504 이며 기존 인사이트 유지 | `insights` |
-| `GET` | `/api/goals/{goal_id}/references` | 학습에 연결된 검토 참고자료(읽기 전용). 응답 `{references[{title, category, source_name, url, is_verified}], references_notice}`, plan/generate 와 같은 분야 일치 규칙(`source_name` 은 이번에 `ResourceReferenceItem` 에 추가한 선택 필드). 타 UID 403, 없는 id 404 | `goals` |
+| `GET` | `/api/goals/{goal_id}/references` | 학습에 연결된 검토 참고자료(읽기 전용). 응답 `{references[{title, category, source_name, url, is_verified}], references_notice, search_links[{label, url}]}`. 매칭은 plan/generate 와 같은 규칙(Phase 6C: 분야 토큰이 자료 tags·category 에 하나 이상 일치해야 후보, 점수 = tags 일치 + category 일치, 일반어 제외, 최대 5건). `search_links` 는 서버가 고정 템플릿(구글·공식 문서·유튜브 검색, 퍼센트 인코딩, 최대 3개)으로 만든 검토 전 외부 링크이며 항상 존재(`source_name` 은 `ResourceReferenceItem` 의 선택 필드). 타 UID 403, 없는 id 404 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |
 | `GET` | `/api/tasks` | 과제 목록 조회 (`goal_id`, `plan_week_start` 필터) | `tasks` |
@@ -325,8 +325,8 @@ erDiagram
 | `GET` | `/api/analytics/overview` | **종합 학습 분석 화면용** 진행 중 학습별 일정·진행률·이번 주 요일별 학습 분(읽기 전용, AI 호출 없음) | `summary` |
 | `POST` | `/api/conversations` | 새 튜터 대화 세션 생성(제목 "새 대화", `client_request_id` 로 멱등: 재요청 200) | `conversations` |
 | `GET` | `/api/conversations` | 최근 갱신순 튜터 대화 목록 조회 (최대 50건, 메시지 제외) | `conversations` |
-| `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 (assistant 메시지의 `sources`: doc_id, title, source_name, url) | `conversations` |
-| `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화).** 요청 `{content(1~1000자), client_request_id}`, 응답 `{user_message, assistant_message, conversation_title, refused}`. 같은 `client_request_id` 재요청은 중복 저장 없이 200. AI 1회 호출(학습 관련 판정 + 답변 + 사용 자료), 실패 시 저장 없음(502/503/504), 대화 200메시지 초과 409 `CONVERSATION_FULL` | `conversations` |
+| `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 (assistant 메시지의 `sources`: doc_id, title, source_name, url; `search_keywords`(저장), `search_links[{label,url}]`·`related_links[{title,source_name,url}]`(저장하지 않고 응답 때 서버가 생성, Phase 6C)) | `conversations` |
+| `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화).** 요청 `{content(1~1000자), client_request_id}`, 응답 `{user_message, assistant_message, conversation_title, refused}`. 같은 `client_request_id` 재요청은 중복 저장 없이 200. AI 1회 호출(학습 관련 판정 + 답변 + 사용 자료 + 출처 없을 때 `search_keywords` 0~3개(URL 금지, 서버 검증)), 응답 assistant_message 에 `search_keywords`, `search_links`, `related_links`(출처 있을 때 현재 학습과 매칭되는 링크 자료 최대 2건) 포함, 실패 시 저장 없음(502/503/504), 대화 200메시지 초과 409 `CONVERSATION_FULL` | `conversations` |
 | `GET` | `/api/resources` | 사전 검토된 읽기 전용 참고자료 목록 검색·조회 | `resources` |
 | `GET` | `/api/user/profile` | 익명 사용자 프로필 조회. `is_admin`(ADMIN_UIDS 에 포함되면 true, 읽기 전용) 포함 | `user` |
 | `PATCH` | `/api/user/profile` | 사용자 프로필 수정. `active_goal_id` 변경(학습 전환)은 본인 소유이고 status=active 인 목표만 허용 | `user` |

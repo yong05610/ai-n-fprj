@@ -1,7 +1,18 @@
 /** Pure state helpers for the tutor screen (Phase 6), so they can be unit-tested. */
 
+import { type RelatedLink, type SearchLink, visibleRelatedLinks, visibleSearchLinks } from "./searchLinks";
+
 export type TutorSource = { doc_id: string; title: string; source_name: string; url: string | null };
-export type TutorMessage = { role: string; content: string; timestamp: string; sources: TutorSource[] };
+export type TutorMessage = {
+  role: string;
+  content: string;
+  timestamp: string;
+  sources: TutorSource[];
+  // Phase 6C, built by the server at response time (absent in older responses)
+  search_keywords?: string[];
+  search_links?: SearchLink[];
+  related_links?: RelatedLink[];
+};
 
 /** Sources used by the most recent assistant answer (empty if it used none). */
 export function latestSources(messages: TutorMessage[]): TutorSource[] {
@@ -9,6 +20,16 @@ export function latestSources(messages: TutorMessage[]): TutorSource[] {
     if (messages[i].role === "assistant") return messages[i].sources ?? [];
   }
   return [];
+}
+
+/** Links of the most recent assistant answer: reviewed related materials and search links. */
+export function latestExtraLinks(messages: TutorMessage[]): { related: RelatedLink[]; search: SearchLink[] } {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      return { related: visibleRelatedLinks(messages[i].related_links), search: visibleSearchLinks(messages[i].search_links) };
+    }
+  }
+  return { related: [], search: [] };
 }
 
 /**

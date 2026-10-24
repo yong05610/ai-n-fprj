@@ -93,7 +93,7 @@ erDiagram
         string id PK
         string user_id FK
         string title
-        list messages "role, content, timestamp + assistant 는 sources[{doc_id,title,source_name,url}], refused / user 는 client_request_id (Phase 6)"
+        list messages "role, content, timestamp + assistant 는 sources[{doc_id,title,source_name,url}], refused, search_keywords[0~3개, 출처 없는 답변만, 저장](Phase 6C) / user 는 client_request_id (Phase 6). 링크(search_links, related_links)는 저장하지 않고 응답 때 서버가 만든다"
         string client_request_id "새 대화 생성 멱등 키, 선택 (Phase 6)"
         string created_at
         string updated_at

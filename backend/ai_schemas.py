@@ -44,11 +44,14 @@ class AITutorAnswer(BaseModel):
 
     `used_source_ids` are doc ids taken from the `reference_chunks` the server sent; the server
     builds the visible source list (title, URL) itself and rejects ids it did not send.
+    `search_keywords` are follow-up search words for an answer without sources (count, length and
+    "no URL" are checked by tutor.validate_tutor_answer so a violation can be fed back to the model).
     """
 
     relevant: bool
     answer: str = ""
     used_source_ids: List[str] = Field(default_factory=list, max_length=10)
+    search_keywords: List[str] = Field(default_factory=list, max_length=20)
 
 
 class AIInsight(BaseModel):

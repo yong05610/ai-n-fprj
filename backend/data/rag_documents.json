@@ -108,5 +108,610 @@
     "verified": true,
     "verified_at": "2026-10-19",
     "chunks": []
+  },
+  {
+    "id": "link_001",
+    "title": "MDN: HTML 구조 만들기 (한국어)",
+    "category": "웹 개발 / HTML",
+    "source_name": "MDN Web Docs",
+    "url": "https://developer.mozilla.org/ko/docs/Learn_web_development/Core/Structuring_content",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "html",
+      "웹",
+      "프론트엔드",
+      "마크업",
+      "frontend"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_002",
+    "title": "MDN: CSS 스타일링 기초 (한국어)",
+    "category": "웹 개발 / CSS",
+    "source_name": "MDN Web Docs",
+    "url": "https://developer.mozilla.org/ko/docs/Learn_web_development/Core/Styling_basics",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "css",
+      "웹",
+      "프론트엔드",
+      "스타일",
+      "frontend"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_003",
+    "title": "MDN: HTTP (한국어)",
+    "category": "웹 개발 / HTTP",
+    "source_name": "MDN Web Docs",
+    "url": "https://developer.mozilla.org/ko/docs/Web/HTTP",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "http",
+      "웹",
+      "네트워크",
+      "api",
+      "백엔드",
+      "프론트엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_004",
+    "title": "web.dev: 웹 개발 학습하기",
+    "category": "웹 개발 / 웹 기초",
+    "source_name": "Google web.dev",
+    "url": "https://web.dev/learn",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "웹",
+      "프론트엔드",
+      "성능",
+      "접근성",
+      "html",
+      "css",
+      "frontend"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_005",
+    "title": "TypeScript 핸드북",
+    "category": "웹 개발 / TypeScript",
+    "source_name": "TypeScript 공식 문서",
+    "url": "https://www.typescriptlang.org/docs/handbook/intro.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "typescript",
+      "타입스크립트",
+      "프론트엔드",
+      "웹"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_006",
+    "title": "React 빠르게 시작하기 (한국어)",
+    "category": "웹 개발 / React",
+    "source_name": "React 공식 문서",
+    "url": "https://ko.react.dev/learn",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "react",
+      "리액트",
+      "프론트엔드",
+      "컴포넌트",
+      "웹",
+      "frontend"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_007",
+    "title": "Vue.js 소개",
+    "category": "웹 개발 / Vue",
+    "source_name": "Vue.js 공식 문서",
+    "url": "https://vuejs.org/guide/introduction.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "vue",
+      "뷰",
+      "프론트엔드",
+      "웹"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_008",
+    "title": "Next.js 튜토리얼 (Learn Next.js)",
+    "category": "웹 개발 / Next.js",
+    "source_name": "Next.js 공식",
+    "url": "https://nextjs.org/learn",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "next",
+      "nextjs",
+      "react",
+      "웹",
+      "풀스택",
+      "프론트엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_009",
+    "title": "Tailwind CSS 설치 (Vite)",
+    "category": "웹 개발 / CSS 프레임워크",
+    "source_name": "Tailwind CSS 공식 문서",
+    "url": "https://tailwindcss.com/docs/installation/using-vite",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "tailwind",
+      "css",
+      "프론트엔드",
+      "웹"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_010",
+    "title": "The Odin Project: 웹 개발 커리큘럼",
+    "category": "웹 개발 / 종합 커리큘럼",
+    "source_name": "The Odin Project",
+    "url": "https://www.theodinproject.com/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "웹",
+      "풀스택",
+      "프론트엔드",
+      "백엔드",
+      "커리큘럼",
+      "부트캠프"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_011",
+    "title": "roadmap.sh: 개발자 로드맵",
+    "category": "웹 개발 / 학습 로드맵",
+    "source_name": "roadmap.sh",
+    "url": "https://roadmap.sh/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "로드맵",
+      "프론트엔드",
+      "백엔드",
+      "devops",
+      "커리어",
+      "취업"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_012",
+    "title": "Node.js 소개 (Node.js Learn)",
+    "category": "백엔드 개발 / Node.js",
+    "source_name": "Node.js 공식",
+    "url": "https://nodejs.org/learn/getting-started/introduction-to-nodejs",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "node",
+      "nodejs",
+      "백엔드",
+      "javascript",
+      "서버"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_013",
+    "title": "Express 설치와 시작",
+    "category": "백엔드 개발 / Express",
+    "source_name": "Express 공식 문서",
+    "url": "https://expressjs.com/en/starter/installing/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "express",
+      "node",
+      "백엔드",
+      "서버",
+      "api"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_014",
+    "title": "Dev.java: Java 학습 자료",
+    "category": "백엔드 개발 / Java",
+    "source_name": "Dev.java (Oracle)",
+    "url": "https://dev.java/learn/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "java",
+      "자바",
+      "백엔드",
+      "spring"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_015",
+    "title": "Spring 퀵스타트",
+    "category": "백엔드 개발 / Spring",
+    "source_name": "Spring 공식",
+    "url": "https://spring.io/quickstart/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "spring",
+      "스프링",
+      "java",
+      "자바",
+      "백엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_016",
+    "title": "Docker 시작하기",
+    "category": "백엔드 개발 / Docker",
+    "source_name": "Docker Docs",
+    "url": "https://docs.docker.com/get-started/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "docker",
+      "도커",
+      "컨테이너",
+      "배포",
+      "devops",
+      "백엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_017",
+    "title": "PostgreSQL 공식 튜토리얼",
+    "category": "백엔드 개발 / PostgreSQL",
+    "source_name": "PostgreSQL 공식 문서",
+    "url": "https://www.postgresql.org/docs/current/tutorial.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "postgresql",
+      "postgres",
+      "sql",
+      "데이터베이스",
+      "db",
+      "백엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_018",
+    "title": "SQLBolt: 대화형 SQL 학습",
+    "category": "백엔드 개발 / SQL",
+    "source_name": "SQLBolt",
+    "url": "https://sqlbolt.com/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "sql",
+      "데이터베이스",
+      "db",
+      "쿼리",
+      "데이터 분석",
+      "백엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_019",
+    "title": "A Tour of Go",
+    "category": "백엔드 개발 / Go",
+    "source_name": "Go 공식",
+    "url": "https://go.dev/tour/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "go",
+      "golang",
+      "백엔드",
+      "서버"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_020",
+    "title": "Kotlin 시작하기",
+    "category": "백엔드 개발 / Kotlin",
+    "source_name": "Kotlin 공식 문서",
+    "url": "https://kotlinlang.org/docs/getting-started.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "kotlin",
+      "코틀린",
+      "백엔드",
+      "안드로이드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_021",
+    "title": "C# 둘러보기 (한국어)",
+    "category": "백엔드 개발 / C#",
+    "source_name": "Microsoft Learn",
+    "url": "https://learn.microsoft.com/ko-kr/dotnet/csharp/tour-of-csharp/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "csharp",
+      "c#",
+      "dotnet",
+      ".net",
+      "백엔드"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_022",
+    "title": "10 minutes to pandas",
+    "category": "데이터 분석 / pandas",
+    "source_name": "pandas 공식 문서",
+    "url": "https://pandas.pydata.org/docs/user_guide/10min.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "pandas",
+      "판다스",
+      "데이터",
+      "분석",
+      "python",
+      "데이터 분석"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_023",
+    "title": "NumPy 입문 (absolute beginners)",
+    "category": "데이터 분석 / NumPy",
+    "source_name": "NumPy 공식 문서",
+    "url": "https://numpy.org/doc/stable/user/absolute_beginners.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "numpy",
+      "넘파이",
+      "데이터",
+      "배열",
+      "python",
+      "데이터 분석"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_024",
+    "title": "scikit-learn 시작하기",
+    "category": "데이터 분석 / 머신러닝",
+    "source_name": "scikit-learn 공식 문서",
+    "url": "https://scikit-learn.org/stable/getting_started.html",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "scikit-learn",
+      "sklearn",
+      "머신러닝",
+      "ml",
+      "데이터 분석",
+      "python"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_025",
+    "title": "Google 머신러닝 단기집중과정",
+    "category": "AI·머신러닝 / 입문",
+    "source_name": "Google for Developers",
+    "url": "https://developers.google.com/machine-learning/crash-course",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "머신러닝",
+      "ml",
+      "ai",
+      "딥러닝",
+      "데이터 분석"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_026",
+    "title": "생활코딩",
+    "category": "Python 개발 / 한국어 입문",
+    "source_name": "생활코딩 (opentutorials.org)",
+    "url": "https://www.opentutorials.org/course/1",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "생활코딩",
+      "입문",
+      "python",
+      "html",
+      "javascript",
+      "웹",
+      "코딩"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_027",
+    "title": "CS50x: 컴퓨터 과학 입문",
+    "category": "컴퓨터 공학 / 기초",
+    "source_name": "Harvard CS50",
+    "url": "https://cs50.harvard.edu/x/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "cs50",
+      "컴퓨터 과학",
+      "알고리즘",
+      "c",
+      "python",
+      "기초",
+      "cs"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_028",
+    "title": "VisuAlgo: 자료구조·알고리즘 시각화",
+    "category": "컴퓨터 공학 / 알고리즘",
+    "source_name": "VisuAlgo",
+    "url": "https://visualgo.net/en",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "알고리즘",
+      "자료구조",
+      "코딩테스트",
+      "정렬",
+      "그래프",
+      "algorithm"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_029",
+    "title": "GitHub 헬로 월드 (한국어)",
+    "category": "협업 도구 / GitHub",
+    "source_name": "GitHub Docs",
+    "url": "https://docs.github.com/ko/get-started/using-github/hello-world",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "github",
+      "깃허브",
+      "git",
+      "협업",
+      "pull request",
+      "브랜치"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_030",
+    "title": "BBC Learning English",
+    "category": "영어 / 듣기·학습",
+    "source_name": "BBC",
+    "url": "https://www.bbc.co.uk/learningenglish",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "영어",
+      "english",
+      "회화",
+      "듣기",
+      "어휘",
+      "토익",
+      "영어 회화"
+    ],
+    "chunks": []
+  },
+  {
+    "id": "link_031",
+    "title": "VOA Learning English",
+    "category": "영어 / 듣기·뉴스",
+    "source_name": "Voice of America",
+    "url": "https://learningenglish.voanews.com/",
+    "license": "링크만 제공(원문 복제 없음)",
+    "verified": true,
+    "verified_at": "2026-10-24",
+    "link_only": true,
+    "tags": [
+      "영어",
+      "english",
+      "듣기",
+      "뉴스",
+      "어휘",
+      "영어 회화"
+    ],
+    "chunks": []
   }
 ]

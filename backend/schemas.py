@@ -203,9 +203,15 @@ class GoalResponse(BaseModel):
     updated_at: str
 
 
+class SearchLinkItem(BaseModel):
+    label: str = Field(..., description="링크 이름. 검토 전 외부 링크임을 드러낸다")
+    url: str = Field(..., description="서버가 고정 템플릿으로 만든 검색 URL (AI·클라이언트가 만든 URL 이 아님)")
+
+
 class GoalReferencesResponse(BaseModel):
-    references: List["ResourceReferenceItem"] = Field(..., description="이 학습의 분야·과정에 연결된 검토 자료 (없으면 빈 목록)")
+    references: List["ResourceReferenceItem"] = Field(..., description="이 학습의 분야·과정에 연결된 검토 자료 (없으면 빈 목록, 최대 5건)")
     references_notice: Optional[str] = Field(None, description="검토 자료가 없을 때의 안내와 검색 키워드 제안")
+    search_links: List[SearchLinkItem] = Field(default_factory=list, description="직접 검색해 보기 링크(검토 전 외부 링크). 항상 존재, 최대 3개")
 
 
 # --- 4. Tasks CRUD ---
@@ -606,6 +612,12 @@ class SourceItem(BaseModel):
     url: Optional[str] = None
 
 
+class RelatedLinkItem(BaseModel):
+    title: str
+    source_name: Optional[str] = None
+    url: str
+
+
 class MessageItem(BaseModel):
     role: str = Field(..., description="user 또는 assistant")
     content: str = Field(..., description="메시지 내용")
@@ -613,6 +625,17 @@ class MessageItem(BaseModel):
     sources: List[SourceItem] = Field(
         default_factory=list,
         description="assistant 메시지에서 답변에 실제 쓴 참고자료. 서버가 검색된 자료에서 만들며 AI 가 만들지 않는다",
+    )
+    search_keywords: List[str] = Field(
+        default_factory=list,
+        description="출처가 없는 assistant 답변에서 학습자가 이어서 찾아볼 키워드(0~3개, 저장됨). 링크는 저장하지 않는다",
+    )
+    search_links: List[SearchLinkItem] = Field(
+        default_factory=list, description="search_keywords 로 서버가 응답 때 만든 검색 링크(저장하지 않음, 키워드가 있을 때만)"
+    )
+    related_links: List[RelatedLinkItem] = Field(
+        default_factory=list,
+        description="출처가 있는 답변에서, 현재 학습과 매칭되는 검토된 링크 자료 최대 2건(근거가 아님). 서버가 응답 때 만든다(저장하지 않음)",
     )
 
 
