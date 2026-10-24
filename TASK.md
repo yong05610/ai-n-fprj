@@ -185,8 +185,8 @@
 - [ ] F.4 [FE] 위저드 미리보기(총·가용 시간, 주차별 그룹, 편집 시 즉시 재배치), 주간 계획 전체 주 이동과 "이어서" 표시, 대시보드 이번 주·오늘 예정 시간
 
 ## Phase 6C — 학습 자료 접근성 개선 (AI · P0, Phase 7 앞, 2026-10-24 사용자 지적)
-지시서: docs/phase6c_dev_prompt.md (선행: 6B 수정 검증). 링크 목록: docs/phase6c_resource_links.md. 개선 이력: docs/ai_improvement_log.md IMP-004. 실시간 웹검색은 도입하지 않는다(결정 2026-10-24).
-- [ ] C6.1 검토된 링크 31건을 rag_documents.json 에 링크 전용 자료로 추가(튜터 출처로는 쓰지 않음)
+지시서: docs/phase6c_dev_prompt.md (선행: 6B 수정 검증). 링크 목록: docs/phase6c_resource_links.md. **검증 상태(2026-10-25, docs/phase6c_verification.md):** 링크 데이터(31건 일치)·검색 링크·튜터 키워드 승인, 분야 매칭 수정 필요(docs/phase6c_fix_instructions.md: 실제 테스트 학습 VIBE CODING/웹 개발의 기초가 매칭되지 않음). C6.2~C6.4 는 수정 검증과 화면 확인 뒤 체크. 개선 이력: docs/ai_improvement_log.md IMP-004. 실시간 웹검색은 도입하지 않는다(결정 2026-10-24).
+- [x] C6.1 검토된 링크 31건을 rag_documents.json 에 링크 전용 자료로 추가(튜터 출처로는 쓰지 않음)
 - [ ] C6.2 분야 매칭을 tags 기반 토큰 일치 점수로 개선(정밀도 우선, 기존 회귀 테스트 유지)
 - [ ] C6.3 서버 생성 검색 링크("검토 전 외부 링크" 라벨)를 계획 화면과 튜터에 표시
 - [ ] C6.4 튜터 search_keywords(URL 금지 검증)와 related_links 표시
