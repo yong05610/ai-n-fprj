@@ -25,7 +25,7 @@ PaceMate는 독학 학습자를 위한 AI 학습 플래너(14일 MVP)다. 이 �
 - 설계와 결정: docs/phase1_design.md, docs/erd_current.md, docs/phase3_auth.md, docs/phase4_plan.md
 - 협업 운영 요령(규칙 진화, 지시서·보고서·검증 템플릿, 체크리스트): docs/project_operating_playbook.md
 - 개선 이력(발표·평가용): docs/ai_improvement_log.md(발생 현상, 원인, 결정, 설계, 효과). 개선이 생기면 PM 이 항목을 추가한다. 배포 전 확인: docs/pre_deploy_checklist.md
-- 사용자용 가이드: docs/firebase_setup_guide.md
+- 사용자용 가이드: docs/firebase_setup_guide.md, docs/deploy_guide.md(배포: Vercel, Render, Firebase 도메인)
 
 ## 핵심 결정 (바꾸지 않는다. 바꾸려면 사용자 승인)
 - UID 는 Firebase ID 토큰에서만 정한다. 요청 본문의 user_id 나 소유 정보를 믿지 않는다. 개인 데이터 API 는 require_consented_uid 를 쓴다. 오류는 ErrorResponse 형식이다.

@@ -32,6 +32,7 @@
 - [ ] 베타 안내, AI 처리, 개인정보, 삭제 방법 설명(8.1)
 
 ## F. 배포(Phase 7) 설정 — 사용자가 직접
+(클릭 순서와 값 표: docs/deploy_guide.md, 개발팀 준비: docs/phase7_dev_prompt.md)
 - [ ] Render: 시작 명령, 환경변수(OPENAI_API_KEY, FIREBASE_SERVICE_ACCOUNT_JSON, CORS_ORIGINS, ADMIN_UIDS), health 경로. `AUTH_MODE=dev`, `STORE_BACKEND=memory` 는 배포에서 거부됨
 - [ ] Vercel: `NEXT_PUBLIC_*` 값(같은 Firebase 프로젝트), `NEXT_PUBLIC_API_BASE_URL` 을 Render URL 로
 - [ ] CORS 는 실제 배포 Origin 만 허용(7.7)
