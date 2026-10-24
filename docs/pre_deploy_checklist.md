@@ -3,7 +3,7 @@
 각 Phase 검증에서 "미검증"으로 남긴 항목을 모았다. Phase 7 배포 직전에 한꺼번에 확인하고, 확인하면 날짜와 확인자를 적는다. 화면 항목은 사용자가 직접 보거나 스크린샷을 보낸다.
 
 ## A. Firebase 실연동 (최우선, 한 번도 검증하지 않음)
-- [ ] 서버를 `$env:STORE_BACKEND`, `$env:AUTH_MODE` 없이 새 터미널에서 시작(docs/firebase_setup_guide.md §8). 새 목표 id 가 20자리 영숫자, 콘솔 Firestore 에 문서 생성
+- [ ] 서버를 `$env:STORE_BACKEND`, `$env:AUTH_MODE` 없이 새 터미널에서 시작(시작 로그의 `auth_mode`, `store_backend` 와 http://localhost:8001/health 로 `firebase`, `firestore` 인지 확인, 화면의 개발 모드 띠가 없어야 함)(docs/firebase_setup_guide.md §8). 새 목표 id 가 20자리 영숫자, 콘솔 Firestore 에 문서 생성
 - [ ] 동의 → 계획 확정 → 기록 → 튜터 질문 후 서버를 껐다 켜도 데이터 유지
 - [ ] 복수 학습 2개 생성, 3번째 거부(R1), 학습 전환
 - [ ] 튜터 대화 저장·목록·새로고침 복원, 메시지 200개 한도(문서 크기)
