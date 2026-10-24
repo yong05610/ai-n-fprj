@@ -302,15 +302,14 @@ def _resolve_plan_period(start_date_str: str, plan_week_start: Optional[str], ta
     return start, week_start
 
 
-PLAN_TASKS_MIN = 3
-PLAN_TASKS_MAX = 60
+PLAN_TASKS_MIN = schedule.PLAN_TASKS_MIN
+PLAN_TASKS_MAX = schedule.PLAN_TASKS_MAX
 
 
 def _goal_available_minutes(goal: dict[str, Any]) -> int:
-    """Phase 5F: the time budget of a whole learning = weekly minutes x the weeks from the week of
-    its start date to the week of its target date (both included)."""
-    weeks = schedule.week_count(_goal_start_date(goal), date.fromisoformat(goal["target_date"]))
-    return schedule.available_minutes(goal["weekly_hours"], weeks)
+    """Phase 5F: the time budget of a whole learning = floor(weekly minutes x the days from its start
+    date to its target date, both included, / 7) - see schedule.available_minutes."""
+    return schedule.available_minutes(goal["weekly_hours"], _goal_start_date(goal), date.fromisoformat(goal["target_date"]))
 
 
 def _validate_task_time_budget(
@@ -751,7 +750,9 @@ def generate_plan(
     start_date, week_start = _resolve_plan_period(payload.start_date, payload.plan_week_start, target_date)
     weeks = schedule.week_count(start_date, target_date)
     weekly_minutes = payload.weekly_hours * 60
-    max_total_minutes = schedule.available_minutes(payload.weekly_hours, weeks)
+    max_total_minutes = schedule.available_minutes(payload.weekly_hours, start_date, target_date)
+    days = schedule.period_days(start_date, target_date)
+    real_weeks = schedule.period_weeks(start_date, target_date)
     user_payload = {
         "field": payload.field,
         "course": payload.course,
@@ -762,8 +763,13 @@ def generate_plan(
         "target_level_description": payload.target_level_description,
         "weekly_hours": payload.weekly_hours,
         "weekly_minutes": weekly_minutes,
-        "week_count": weeks,
+        # the period by its real days (the Monday-based `weeks` only places tasks on the calendar)
+        "period_days": days,
+        "week_count": real_weeks,
         "max_total_minutes": max_total_minutes,
+        # advice for a realistic amount, never enforced by the server
+        "suggested_task_count_range": schedule.suggested_task_count_range(real_weeks),
+        "suggested_total_range_minutes": schedule.suggested_total_range_minutes(max_total_minutes),
     }
     try:
         # A whole-course answer is long: this call alone gets a longer timeout and output budget.
@@ -807,6 +813,7 @@ def generate_plan(
         plan_week_end=clock.week_sunday(target_date).isoformat(),
         week_count=weeks,
         available_minutes=max_total_minutes,
+        coverage_percent=schedule.coverage_percent(sum(t.estimated_minutes for t in tasks), max_total_minutes),
         total_estimated_minutes=sum(t.estimated_minutes for t in tasks),
         tasks=tasks,
         advice=AdviceItem(title=draft.advice_title, content=draft.advice_content),
@@ -876,7 +883,7 @@ def confirm_plan(
         raise bad_request("과제 제목은 서로 달라야 합니다. 같은 제목의 과제가 있습니다.", {"field": "tasks"})
     total_minutes = sum(t.estimated_minutes for t in payload.tasks)
     weekly_minutes = payload.weekly_hours * 60
-    available = schedule.available_minutes(payload.weekly_hours, schedule.week_count(start_date, target_date))
+    available = schedule.available_minutes(payload.weekly_hours, start_date, target_date)
     if total_minutes > available:
         raise bad_request(
             f"과업 총 예상 시간({insight_rules.format_minutes(total_minutes)})이 가용 시간"

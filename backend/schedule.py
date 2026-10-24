@@ -24,8 +24,49 @@ def week_count(start_date: date, target_date: date) -> int:
     return max(1, (last - first).days // 7 + 1)
 
 
-def available_minutes(weekly_hours: int, weeks: int) -> int:
-    return weekly_hours * 60 * weeks
+def period_days(start_date: date, target_date: date) -> int:
+    """Days of the period, both ends included (start == target is one day)."""
+    return (target_date - start_date).days + 1
+
+
+def available_minutes(weekly_hours: int, start_date: date, target_date: date) -> int:
+    """Time budget of a period (Phase 5F fix): floor(weekly minutes x included days / 7).
+
+    A period that starts on a Sunday has one day in its first week, so counting that week whole
+    would overstate the time (docs/phase5f_fix_instructions.md R1). The result never exceeds the
+    whole-week figure weekly minutes x week_count; a Monday-to-Sunday week gives exactly the
+    weekly minutes. Weeks for the placement and the screens are still Monday-based (week_count).
+    """
+    weekly = weekly_hours * 60
+    by_days = weekly * period_days(start_date, target_date) // 7
+    return min(by_days, weekly * week_count(start_date, target_date))
+
+
+# Advice for the model only (never a validation rule): how much a plan of this period usually holds.
+SUGGESTED_TASKS_PER_WEEK = (1, 2)
+SUGGESTED_TOTAL_SHARE = (50, 100)  # percent of the available minutes
+PLAN_TASKS_MIN, PLAN_TASKS_MAX = 3, 60
+
+
+def period_weeks(start_date: date, target_date: date) -> float:
+    """The period in weeks by its real days, one decimal (61 days -> 8.7)."""
+    return round(period_days(start_date, target_date) / 7, 1)
+
+
+def suggested_task_count_range(weeks: float) -> list[int]:
+    low, high = (round(weeks * per) for per in SUGGESTED_TASKS_PER_WEEK)
+    low = min(max(low, PLAN_TASKS_MIN), PLAN_TASKS_MAX)
+    high = min(max(high, low), PLAN_TASKS_MAX)
+    return [low, high]
+
+
+def suggested_total_range_minutes(available: int) -> list[int]:
+    return [available * share // 100 for share in SUGGESTED_TOTAL_SHARE]
+
+
+def coverage_percent(total_minutes: int, available: int) -> int:
+    """Share of the available time a plan uses, as a whole percent (0 when there is no time)."""
+    return round(total_minutes * 100 / available) if available > 0 else 0
 
 
 def default_weekday(timeline_start: int, weekly_minutes: int) -> str:

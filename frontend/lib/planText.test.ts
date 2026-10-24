@@ -4,6 +4,9 @@ import { test } from "node:test";
 import {
   budgetBar,
   continuedLabel,
+  coverageHint,
+  coverageText,
+  partialWeekNote,
   dashboardScheduleText,
   overBudgetMessage,
   planSummaryText,
@@ -14,9 +17,25 @@ import {
   weeklyPlanHeaderText,
 } from "./planText";
 
-test("summary names total, available, weeks and weekly hours", () => {
-  assert.equal(planSummaryText(300, 3600, 12, 5), "총 예상 시간 5시간 / 가용 시간 60시간 (12주 × 주 5시간)");
-  assert.equal(planSummaryText(95, 420, 1, 7), "총 예상 시간 1시간 35분 / 가용 시간 7시간 (1주 × 주 7시간)");
+test("summary names total, available, real days with weeks, and weekly hours", () => {
+  assert.equal(planSummaryText(300, 2614, 61, 8.7, 5), "총 예상 시간 5시간 / 가용 시간 43시간 34분 (총 61일(약 8.7주), 주 5시간)");
+  assert.equal(planSummaryText(95, 420, 7, 1, 7), "총 예상 시간 1시간 35분 / 가용 시간 7시간 (총 7일(약 1.0주), 주 7시간)");
+});
+
+test("partial week note names the first and the last partial week, nothing for whole weeks", () => {
+  assert.equal(partialWeekNote(7, 7), null);
+  assert.equal(partialWeekNote(1, 7), "첫 주는 1일만 남아 있어요");
+  assert.equal(partialWeekNote(7, 4), "마지막 주는 4일까지예요");
+  assert.equal(partialWeekNote(5, 3), "첫 주는 5일만 남아 있어요 · 마지막 주는 3일까지예요");
+});
+
+test("coverage hint appears below 40 percent in a neutral tone and never above", () => {
+  assert.equal(coverageHint(15), "이 계획은 가용 시간의 15% 예요. 더 깊게 배우려면 목표 수준이나 기간을 조정해 보세요.");
+  assert.equal(coverageHint(39) !== null, true);
+  assert.equal(coverageHint(40), null);
+  assert.equal(coverageHint(92), null);
+  assert.ok(!/경고|위험|부족|미달|실패/.test(coverageHint(5) ?? ""));
+  assert.equal(coverageText(77), "가용 시간의 77% 사용");
 });
 
 test("the bar is capped at 100 and flags an overrun", () => {

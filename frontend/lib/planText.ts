@@ -6,9 +6,30 @@ import { formatHoursMinutes, weekRangeLabel } from "@/lib/weekPlan";
 
 export { formatHoursMinutes };
 
-/** "총 예상 시간 5시간 / 가용 시간 60시간 (12주 × 주 5시간)" */
-export function planSummaryText(totalMinutes: number, availableMinutes: number, weeks: number, weeklyHours: number): string {
-  return `총 예상 시간 ${formatHoursMinutes(totalMinutes)} / 가용 시간 ${formatHoursMinutes(availableMinutes)} (${weeks}주 × 주 ${weeklyHours}시간)`;
+/** "총 예상 시간 5시간 / 가용 시간 43시간 34분 (총 61일(약 8.7주), 주 5시간)" */
+export function planSummaryText(totalMinutes: number, availableMinutes: number, days: number, weeks: number, weeklyHours: number): string {
+  return `총 예상 시간 ${formatHoursMinutes(totalMinutes)} / 가용 시간 ${formatHoursMinutes(availableMinutes)} (총 ${days}일(약 ${weeks.toFixed(1)}주), 주 ${weeklyHours}시간)`;
+}
+
+/** Small print when the first or the last week of the period is a partial week; null for whole weeks. */
+export function partialWeekNote(firstDays: number, lastDays: number): string | null {
+  const parts: string[] = [];
+  if (firstDays < 7) parts.push(`첫 주는 ${firstDays}일만 남아 있어요`);
+  if (lastDays < 7) parts.push(`마지막 주는 ${lastDays}일까지예요`);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+export const COVERAGE_HINT_BELOW = 40;
+
+/** Neutral hint when a plan uses a small share of the available time (never blocks confirming). */
+export function coverageHint(percent: number): string | null {
+  return percent < COVERAGE_HINT_BELOW
+    ? `이 계획은 가용 시간의 ${percent}% 예요. 더 깊게 배우려면 목표 수준이나 기간을 조정해 보세요.`
+    : null;
+}
+
+export function coverageText(percent: number): string {
+  return `가용 시간의 ${percent}% 사용`;
 }
 
 /** Share of the available time the plan uses, 0..100 for the bar (capped), plus whether it is over. */

@@ -23,8 +23,40 @@ export function weekCount(start: string, target: string): number {
   return Math.max(1, Math.round(weeks));
 }
 
-export function availableMinutes(weeklyHours: number, weeks: number): number {
-  return weeklyHours * 60 * weeks;
+/** Days of the period, both ends included (start == target is one day). */
+export function periodDays(start: string, target: string): number {
+  return daysBetweenDateStrings(start, target) + 1;
+}
+
+/** The period in weeks by its real days, one decimal (61 days -> 8.7). */
+export function periodWeeks(start: string, target: string): number {
+  return Math.round((periodDays(start, target) / 7) * 10) / 10;
+}
+
+/**
+ * Time budget of a period: floor(weekly minutes x included days / 7), never above the whole-week
+ * figure (weekly minutes x weekCount). A Sunday start therefore does not count its first week whole.
+ * Same rule as backend/schedule.py; both read the "available" vectors of schedule_cases.json.
+ */
+export function availableMinutes(weeklyHours: number, start: string, target: string): number {
+  const weekly = weeklyHours * 60;
+  const byDays = Math.floor((weekly * periodDays(start, target)) / 7);
+  return Math.min(byDays, weekly * weekCount(start, target));
+}
+
+/** Share of the available time a plan uses, in whole percent (0 without time). */
+export function coveragePercent(totalMinutes: number, available: number): number {
+  return available > 0 ? Math.round((totalMinutes * 100) / available) : 0;
+}
+
+/** Days the first week has from the start date on (7 when the start is a Monday). */
+export function firstWeekDays(start: string): number {
+  return 7 - daysBetweenDateStrings(mondayOfDateString(start), start);
+}
+
+/** Days of the last week up to the target date (7 when the target is a Sunday). */
+export function lastWeekDays(target: string): number {
+  return daysBetweenDateStrings(mondayOfDateString(target), target) + 1;
 }
 
 /** floor((start % week) / week * 7) as an integer computation, so no float rounding can move a boundary. */

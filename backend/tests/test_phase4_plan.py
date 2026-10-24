@@ -266,7 +266,9 @@ class TestPlanGenerate:
         assert response.json()["detail"]["details"]["field"] == "target_date"
 
     def test_target_date_same_as_start_date_is_allowed(self, client: TestClient, consented_headers, override_ai):
-        override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
+        # a one-day period holds 7h x 60 / 7 = 60 minutes (Phase 5F fix), so the plan is small
+        small = {**VALID_PLAN_RESPONSE, "tasks": [{**t, "estimated_minutes": 20} for t in VALID_PLAN_RESPONSE["tasks"]]}
+        override_ai(FakeAIClient(raws=[_raw(small)]))
         payload = {**PLAN_REQUEST_BASE, "start_date": "2026-10-26", "target_date": "2026-10-26"}
         assert client.post("/api/plan/generate", json=payload, headers=consented_headers).status_code == 200
 
@@ -283,13 +285,13 @@ class TestPlanGenerate:
     def test_initial_payload_includes_precomputed_max_total_minutes(
         self, client: TestClient, consented_headers, override_ai
     ):
-        # P4-9: the model must not have to compute the budget itself. Phase 5F: it is the available
-        # minutes of the whole period (2026-10-19 .. 2026-12-31 = 11 weeks x 420 minutes).
+        # P4-9: the model must not have to compute the budget itself. Phase 5F fix: it is the available
+        # minutes of the period by its real days (2026-10-21 .. 2026-12-31 = 72 days -> 420 x 72 / 7).
         fake = override_ai(FakeAIClient(raws=[_raw(VALID_PLAN_RESPONSE)]))
         client.post("/api/plan/generate", json=PLAN_REQUEST_BASE, headers=consented_headers)
         sent = fake.payloads_seen[0]
-        assert sent["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60 * 11
-        assert sent["weekly_minutes"] == 420 and sent["week_count"] == 11
+        assert sent["max_total_minutes"] == 4320
+        assert sent["weekly_minutes"] == 420 and sent["period_days"] == 72 and sent["week_count"] == 10.3
 
     def test_over_budget_retry_gets_previous_total_as_feedback_then_succeeds(
         self, client: TestClient, consented_headers, override_ai
@@ -307,7 +309,7 @@ class TestPlanGenerate:
         assert fake.calls == 2
         second_attempt_payload = fake.payloads_seen[1]
         assert second_attempt_payload["previous_total_minutes"] == 6000
-        assert second_attempt_payload["max_total_minutes"] == PLAN_REQUEST_BASE["weekly_hours"] * 60 * 11
+        assert second_attempt_payload["max_total_minutes"] == 4320
 
     def test_a_weekday_in_the_ai_output_is_ignored_the_server_places_the_tasks(self, client: TestClient, consented_headers, override_ai):
         # Phase 5F: the weekday is never the AI's; whatever it sends is dropped (even an invalid one)
@@ -391,7 +393,7 @@ class TestPlanConfirm:
         assert client.post("/api/plan/confirm", json=payload, headers=consented_headers).status_code == 400
 
     def test_rejects_total_minutes_exceeding_the_available_time(self, client: TestClient, consented_headers):
-        # Phase 5F: weekly_hours=7 over 11 weeks -> 4620 min available; three 2000-minute tasks
+        # Phase 5F: weekly_hours=7 over 72 days -> 4320 min available; three 2000-minute tasks
         # (each within the per-task le=6000 schema bound) together breach it.
         big = {**CONFIRM_REQUEST["tasks"][0], "estimated_minutes": 2000}
         payload = {**CONFIRM_REQUEST, "tasks": [big, {**big, "title": "다른 과업"}, {**big, "title": "또 다른 과업"}]}

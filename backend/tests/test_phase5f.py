@@ -54,9 +54,11 @@ def _ctask(title, minutes=60, weekday="none"):
 class TestGenerate:
     def test_response_has_the_period_and_the_server_placement(self, client: TestClient, consented_headers, override_ai):
         override_ai(FakeAIClient(raws=[_plan([_task(1, 120), _task(2, 90), _task(3, 150), _task(4, 240)])]))
-        request = {**PLAN_REQUEST_BASE, "weekly_hours": 5, "target_date": "2026-11-06"}  # 3 weeks x 300 min
+        request = {**PLAN_REQUEST_BASE, "weekly_hours": 5, "target_date": "2026-11-06"}  # Wed 10/21 .. Fri 11/06 = 17 days
         body = _generate(client, consented_headers, request).json()
-        assert (body["week_count"], body["available_minutes"], body["total_estimated_minutes"]) == (3, 900, 600)
+        # 3 calendar weeks for the placement, but the time is 300 x 17 / 7 = 728 minutes (not 3 x 300)
+        assert (body["week_count"], body["available_minutes"], body["total_estimated_minutes"]) == (3, 728, 600)
+        assert body["coverage_percent"] == 82
         assert body["plan_week_start"] == "2026-10-19" and body["plan_week_end"] == "2026-11-08"  # Sunday of the target's week
         assert [t["timeline_start_minutes"] for t in body["tasks"]] == [0, 120, 210, 360]
         assert [t["plan_week_start"] for t in body["tasks"]] == ["2026-10-19", "2026-10-19", "2026-10-19", "2026-10-26"]
@@ -67,8 +69,9 @@ class TestGenerate:
         fake = override_ai(FakeAIClient(raws=[_plan(_tasks(3))]))
         _generate(client, consented_headers)
         sent = fake.payloads_seen[0]
-        assert {"weekly_hours", "weekly_minutes", "week_count", "max_total_minutes"} <= set(sent)
-        assert sent["max_total_minutes"] == sent["weekly_minutes"] * sent["week_count"]
+        assert {"weekly_hours", "weekly_minutes", "period_days", "week_count", "max_total_minutes"} <= set(sent)
+        assert sent["period_days"] == 72 and sent["week_count"] == 10.3  # 72 days by the calendar, in weeks
+        assert sent["max_total_minutes"] == sent["weekly_minutes"] * sent["period_days"] // 7 == 4320
 
     def test_nothing_is_saved(self, client: TestClient, consented_headers, override_ai):
         override_ai(FakeAIClient(raws=[_plan(_tasks(3))]))
@@ -108,13 +111,13 @@ class TestGenerate:
         assert _generate(client, consented_headers).status_code == 502
 
     def test_total_over_the_available_time_gets_the_budget_feedback(self, client: TestClient, consented_headers, override_ai):
-        # 11 weeks x 420 = 4620
+        # 420 x 72 / 7 = 4320
         fake = override_ai(FakeAIClient(raws=[_plan(_tasks(3, 2000)), _plan(_tasks(3, 60))]))
         assert _generate(client, consented_headers).status_code == 200
-        assert fake.payloads_seen[1]["previous_total_minutes"] == 6000 and fake.payloads_seen[1]["max_total_minutes"] == 4620
+        assert fake.payloads_seen[1]["previous_total_minutes"] == 6000 and fake.payloads_seen[1]["max_total_minutes"] == 4320
 
     def test_a_total_exactly_at_the_limit_is_accepted(self, client: TestClient, consented_headers, override_ai):
-        override_ai(FakeAIClient(raws=[_plan(_tasks(3, 1540))]))  # 3 x 1540 = 4620
+        override_ai(FakeAIClient(raws=[_plan(_tasks(3, 1440))]))  # 3 x 1440 = 4320
         assert _generate(client, consented_headers).status_code == 200
 
     def test_a_task_shorter_than_10_minutes_or_longer_than_6000_is_a_schema_error(self, client: TestClient, consented_headers, override_ai):
@@ -175,15 +178,16 @@ class TestConfirm:
         assert res.status_code == 400 and get_store().find("tasks", user_id="test-uid-alice") == []
 
     def test_over_the_available_time_is_a_400_that_names_both_totals(self, client: TestClient, consented_headers):
-        # 2026-10-21 .. 2026-11-30 = 7 weeks x 420 = 2940 minutes
+        # 2026-10-21 .. 2026-11-30 = 41 days -> 420 x 41 / 7 = 2460 minutes (41 hours)
         res = _confirm(client, consented_headers, [_ctask("a", 1000), _ctask("b", 1000), _ctask("c", 1000)])
         assert res.status_code == 400
         message = res.json()["detail"]["message"]
-        assert "50시간" in message and "49시간" in message  # 3000 minutes vs 2940 minutes
+        assert "50시간" in message and "41시간" in message  # 3000 minutes vs 2460 minutes
         assert get_store().find("goals", user_id="test-uid-alice") == []
 
     def test_exactly_the_available_time_is_accepted(self, client: TestClient, consented_headers):
-        assert _confirm(client, consented_headers, [_ctask("a", 980), _ctask("b", 980), _ctask("c", 980)]).status_code == 201
+        assert _confirm(client, consented_headers, [_ctask("a", 820), _ctask("b", 820), _ctask("c", 820)]).status_code == 201  # 2460
+        assert _confirm(client, consented_headers, [_ctask("a", 820), _ctask("b", 820), _ctask("c", 821)], course="B").status_code == 400  # 2461 > 2460
 
     def test_a_multi_week_plan_stores_the_week_and_timeline_per_task(self, client: TestClient, consented_headers):
         res = _confirm(client, consented_headers, [_ctask("a", 600), _ctask("b", 300), _ctask("c", 300)])  # week = 420
@@ -216,11 +220,11 @@ def _goal(client, headers, tasks, **kw):
 
 class TestManualTaskBudget:
     def test_the_whole_learning_must_stay_within_the_available_time(self, client: TestClient, consented_headers):
-        data = _goal(client, consented_headers, [_ctask("a", 900), _ctask("b", 900), _ctask("c", 900)])  # 2700 of 2940
-        body = {"goal_id": data["goal"]["id"], "plan_week_start": "2026-10-19", "title": "추가", "estimated_minutes": 241}
+        data = _goal(client, consented_headers, [_ctask("a", 800), _ctask("b", 800), _ctask("c", 800)])  # 2400 of 2460
+        body = {"goal_id": data["goal"]["id"], "plan_week_start": "2026-10-19", "title": "추가", "estimated_minutes": 61}
         res = client.post("/api/tasks", json=body, headers=consented_headers)
         assert res.status_code == 400 and "가용 시간" in res.json()["detail"]["message"]
-        assert client.post("/api/tasks", json={**body, "estimated_minutes": 240}, headers=consented_headers).status_code == 201
+        assert client.post("/api/tasks", json={**body, "estimated_minutes": 60}, headers=consented_headers).status_code == 201
 
     def test_a_task_in_a_later_week_is_no_longer_limited_by_that_weeks_minutes(self, client: TestClient, consented_headers):
         data = _goal(client, consented_headers, _tasks_for_confirm(3))
@@ -257,7 +261,7 @@ class TestDashboardAcrossWeeks:
         self._setup(client, consented_headers)
         body = _dashboard(client, consented_headers)
         assert {t["title"] for t in body["today_tasks"]} == {"1장", "2장", "3장"}
-        assert body["week_scheduled_minutes"] == 300 and body["plan_total_minutes"] == 600 and body["plan_available_minutes"] == 1200
+        assert body["week_scheduled_minutes"] == 300 and body["plan_total_minutes"] == 600 and body["plan_available_minutes"] == 1028  # 300 x 24 days / 7
         assert body["total_task_count"] == 4 and body["progress_percentage"] == 0
 
     def test_second_week_has_the_continued_task_and_the_next_one(self, client: TestClient, consented_headers, monkeypatch):

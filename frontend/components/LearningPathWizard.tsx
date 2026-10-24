@@ -11,14 +11,27 @@ import {
   TASK_COUNT_MIN,
   budgetBar,
   continuedLabel,
+  coverageHint,
+  coverageText,
   overBudgetMessage,
+  partialWeekNote,
   planSummaryText,
   spanNote,
   taskCountHint,
   taskCountOk,
   weekGroupHeading,
 } from "@/lib/planText";
-import { availableMinutes, duplicateTitleIndexes, groupByWeek, placeTasks, weekCount } from "@/lib/schedule";
+import {
+  availableMinutes,
+  coveragePercent,
+  duplicateTitleIndexes,
+  firstWeekDays,
+  groupByWeek,
+  lastWeekDays,
+  periodDays,
+  periodWeeks,
+  placeTasks,
+} from "@/lib/schedule";
 import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from "@/lib/wizardStorage";
 import { mondayOfDateString, todayKSTDateString } from "@/lib/week";
 import { startDateError } from "@/lib/wizardDates";
@@ -47,6 +60,7 @@ type PlanGenerateResponse = {
   plan_week_end: string;
   week_count?: number;
   available_minutes?: number;
+  coverage_percent?: number;
   total_estimated_minutes: number;
   tasks: (WeeklyTask & { plan_week_start?: string; timeline_start_minutes?: number })[];
   advice: { title: string; content: string };
@@ -339,11 +353,16 @@ export function LearningPathWizard({
   // Phase 5F: the preview is placed on the client (lib/schedule.ts, same test vectors as the server)
   // and re-placed on every edit. Only the server's placement at confirm time is stored.
   const weeklyMinutes = weeklyHours * 60;
-  const planWeeks = startDate && targetDate ? weekCount(startDate, targetDate) : 1;
-  const available = availableMinutes(weeklyHours, planWeeks);
+  // The budget follows the real days of the period (a Sunday start does not count its week whole).
+  const hasPeriod = Boolean(startDate && targetDate && targetDate >= startDate);
+  const days = hasPeriod ? periodDays(startDate, targetDate) : 0;
+  const available = hasPeriod ? availableMinutes(weeklyHours, startDate, targetDate) : 0;
+  const partialNote = hasPeriod ? partialWeekNote(firstWeekDays(startDate), lastWeekDays(targetDate)) : null;
   const totalMinutes = tasks.reduce((sum, t) => sum + (Number.isFinite(t.estimated_minutes) ? t.estimated_minutes : 0), 0);
   const overBudget = totalMinutes > available;
   const bar = budgetBar(totalMinutes, available);
+  const coverage = coveragePercent(totalMinutes, available);
+  const thinHint = overBudget ? null : coverageHint(coverage);
   const minutesList = tasks.map((t) => t.estimated_minutes);
   const placements = useMemo(() => placeTasks(minutesList, weeklyMinutes), [minutesList.join(","), weeklyMinutes]); // eslint-disable-line react-hooks/exhaustive-deps
   const weekGroups = useMemo(
@@ -837,9 +856,12 @@ export function LearningPathWizard({
           {activeTab === "tasks" && (
             <div>
               <p className={overBudget ? "error" : "small muted"} role={overBudget ? "alert" : undefined}>
-                {planSummaryText(totalMinutes, available, planWeeks, weeklyHours)}
+                {planSummaryText(totalMinutes, available, days, hasPeriod ? periodWeeks(startDate, targetDate) : 0, weeklyHours)}
+                {!overBudget && ` · ${coverageText(coverage)}`}
                 {overBudget && ` · ${overBudgetMessage(totalMinutes, available)}`}
               </p>
+              {partialNote && <p className="small muted">{partialNote}</p>}
+              {thinHint && <p className="small muted">{thinHint}</p>}
               <div className="bar" role="progressbar" aria-label="가용 시간 중 계획한 시간" aria-valuenow={bar.percent} aria-valuemin={0} aria-valuemax={100}>
                 <span style={{ width: `${bar.percent}%` }} />
               </div>

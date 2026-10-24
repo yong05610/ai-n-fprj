@@ -8,7 +8,7 @@ import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
 import { LatestWinsSaver, type SaveState } from "@/lib/latestWins";
 import { continuedLabel, weeklyPlanHeaderText } from "@/lib/planText";
-import { lastScheduledWeekIndex, planWeekMondays, tasksInWeek, weekCount, weekIndexOf } from "@/lib/schedule";
+import { availableMinutes, lastScheduledWeekIndex, planWeekMondays, tasksInWeek, weekCount, weekIndexOf } from "@/lib/schedule";
 import { SEARCH_LINKS_HEADING, SEARCH_LINKS_WARNING, type SearchLink, sourceLine, visibleSearchLinks } from "@/lib/searchLinks";
 import { mondayOfDateString, mondayOfThisWeekKST } from "@/lib/week";
 import {
@@ -155,7 +155,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
     [goal, tasks, weeklyMinutes, thisWeek],
   );
   const planTotalMinutes = totalMinutes(tasks);
-  const planAvailableMinutes = goal ? goal.weekly_hours * 60 * weekCount(goal.start_date, goal.target_date) : 0;
+  const planAvailableMinutes = goal ? availableMinutes(goal.weekly_hours, goal.start_date, goal.target_date) : 0;
   const relation = week ? weekRelationLabel(weekOffset(week, thisWeek)) : "";
 
   function changeWeekday(taskId: string, raw: string) {

@@ -46,8 +46,46 @@ def test_week_count_matches_the_shared_vectors(case):
     assert got == case["week_count"]
 
 
-def test_available_minutes():
-    assert schedule.available_minutes(5, 12) == 3600 and schedule.available_minutes(10, 1) == 600
+@pytest.mark.parametrize("case", VECTORS["available"], ids=lambda c: c["name"])
+def test_available_minutes_match_the_shared_vectors(case):
+    start, target = date.fromisoformat(case["start_date"]), date.fromisoformat(case["target_date"])
+    assert schedule.period_days(start, target) == case["days"]
+    assert schedule.period_weeks(start, target) == case["weeks"]
+    assert schedule.available_minutes(case["weekly_hours"], start, target) == case["available_minutes"]
+
+
+def test_available_minutes_pm_case_and_the_whole_week_ceiling():
+    # start Sunday 2026-10-25, 60 days later: 61 days -> floor(300 x 61 / 7) = 2614, not 10 whole weeks (3000)
+    assert schedule.available_minutes(5, date(2026, 10, 25), date(2026, 12, 24)) == 2614
+    # a Monday-to-Sunday week is exactly the weekly minutes; two such weeks are twice that
+    assert schedule.available_minutes(5, date(2026, 10, 19), date(2026, 10, 25)) == 300
+    assert schedule.available_minutes(5, date(2026, 10, 19), date(2026, 11, 1)) == 600
+
+
+@pytest.mark.parametrize("hours", [1, 5, 7, 40, 100])
+def test_available_never_exceeds_the_whole_week_figure_and_never_goes_down_with_a_longer_period(hours):
+    start, previous = date(2026, 10, 21), 0  # a Wednesday
+    for extra in range(0, 120):
+        target = date.fromordinal(start.toordinal() + extra)
+        got = schedule.available_minutes(hours, start, target)
+        assert got <= hours * 60 * schedule.week_count(start, target) and got >= previous and got >= 0
+        previous = got
+
+
+def test_coverage_percent_is_a_whole_percent_and_safe_without_time():
+    assert schedule.coverage_percent(3600, 23400) == 15 and schedule.coverage_percent(600, 600) == 100
+    assert schedule.coverage_percent(0, 100) == 0 and schedule.coverage_percent(10, 0) == 0
+    assert schedule.coverage_percent(1, 3) == 33 and schedule.coverage_percent(2, 3) == 67
+
+
+def test_suggested_ranges_follow_the_period_and_stay_inside_3_to_60():
+    assert schedule.suggested_task_count_range(8.7) == [9, 17]  # about 1 to 2 tasks per week
+    assert schedule.suggested_task_count_range(26.0) == [26, 52]
+    assert schedule.suggested_task_count_range(0.1) == [3, 3]  # never below 3
+    assert schedule.suggested_task_count_range(52.0) == [52, 60]  # never above 60
+    assert schedule.suggested_task_count_range(200.0) == [60, 60]
+    assert schedule.suggested_total_range_minutes(23400) == [11700, 23400]
+    assert schedule.suggested_total_range_minutes(0) == [0, 0]
 
 
 def test_design_example_by_hand():

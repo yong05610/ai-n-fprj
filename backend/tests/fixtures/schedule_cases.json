@@ -1955,5 +1955,106 @@
    "target_date": "2027-01-04",
    "week_count": 2
   }
+ ],
+ "available": [
+  {
+   "name": "monday_to_sunday_week",
+   "weekly_hours": 5,
+   "start_date": "2026-10-19",
+   "target_date": "2026-10-25",
+   "days": 7,
+   "weeks": 1.0,
+   "available_minutes": 300
+  },
+  {
+   "name": "sunday_start_monday_target",
+   "weekly_hours": 5,
+   "start_date": "2026-10-25",
+   "target_date": "2026-10-26",
+   "days": 2,
+   "weeks": 0.3,
+   "available_minutes": 85
+  },
+  {
+   "name": "wednesday_to_friday_of_next_week",
+   "weekly_hours": 5,
+   "start_date": "2026-10-21",
+   "target_date": "2026-10-30",
+   "days": 10,
+   "weeks": 1.4,
+   "available_minutes": 428
+  },
+  {
+   "name": "one_day_wednesday",
+   "weekly_hours": 5,
+   "start_date": "2026-10-21",
+   "target_date": "2026-10-21",
+   "days": 1,
+   "weeks": 0.1,
+   "available_minutes": 42
+  },
+  {
+   "name": "one_day_sunday",
+   "weekly_hours": 5,
+   "start_date": "2026-10-25",
+   "target_date": "2026-10-25",
+   "days": 1,
+   "weeks": 0.1,
+   "available_minutes": 42
+  },
+  {
+   "name": "start_equals_target_monday",
+   "weekly_hours": 7,
+   "start_date": "2026-10-26",
+   "target_date": "2026-10-26",
+   "days": 1,
+   "weeks": 0.1,
+   "available_minutes": 60
+  },
+  {
+   "name": "eighty_three_days",
+   "weekly_hours": 5,
+   "start_date": "2026-10-25",
+   "target_date": "2027-01-15",
+   "days": 83,
+   "weeks": 11.9,
+   "available_minutes": 3557
+  },
+  {
+   "name": "sunday_start_sixty_days_later_pm_case",
+   "weekly_hours": 5,
+   "start_date": "2026-10-25",
+   "target_date": "2026-12-24",
+   "days": 61,
+   "weeks": 8.7,
+   "available_minutes": 2614
+  },
+  {
+   "name": "two_full_weeks",
+   "weekly_hours": 10,
+   "start_date": "2026-10-19",
+   "target_date": "2026-11-01",
+   "days": 14,
+   "weeks": 2.0,
+   "available_minutes": 1200
+  },
+  {
+   "name": "twenty_six_weeks_fifteen_hours",
+   "weekly_hours": 15,
+   "start_date": "2026-10-26",
+   "target_date": "2027-04-25",
+   "days": 182,
+   "weeks": 26.0,
+   "available_minutes": 23400
+  },
+  {
+   "name": "year_boundary",
+   "weekly_hours": 3,
+   "start_date": "2026-12-30",
+   "target_date": "2027-01-05",
+   "days": 7,
+   "weeks": 1.0,
+   "available_minutes": 180
+  }
  ]
 }

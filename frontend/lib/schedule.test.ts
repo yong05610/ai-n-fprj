@@ -5,11 +5,16 @@ import { test } from "node:test";
 
 import {
   availableMinutes,
+  coveragePercent,
   defaultWeekday,
   duplicateTitleIndexes,
+  firstWeekDays,
   groupByWeek,
+  lastWeekDays,
   lastScheduledWeekIndex,
   normalizedTitle,
+  periodDays,
+  periodWeeks,
   placeTasks,
   planWeekMondays,
   tasksInWeek,
@@ -28,6 +33,7 @@ const VECTORS = JSON.parse(readFileSync(path.resolve(process.cwd(), "../backend/
     portions: [number, number][][];
   }[];
   week_count: { start_date: string; target_date: string; week_count: number }[];
+  available: { name: string; weekly_hours: number; start_date: string; target_date: string; days: number; weeks: number; available_minutes: number }[];
 };
 
 test("the shared vectors are there (9 schedules, 7 week counts)", () => {
@@ -56,8 +62,35 @@ for (const c of VECTORS.week_count) {
   });
 }
 
-test("available minutes and the default weekday boundaries", () => {
-  assert.equal(availableMinutes(5, 12), 3600);
+for (const c of VECTORS.available) {
+  test(`available minutes match the shared vector: ${c.name}`, () => {
+    assert.equal(periodDays(c.start_date, c.target_date), c.days);
+    assert.equal(periodWeeks(c.start_date, c.target_date), c.weeks);
+    assert.equal(availableMinutes(c.weekly_hours, c.start_date, c.target_date), c.available_minutes);
+  });
+}
+
+test("the shared vectors include the available-time cases (11)", () => {
+  assert.equal(VECTORS.available.length, 11);
+});
+
+test("PM case: a Sunday start and 61 days is 2614 minutes, not 10 whole weeks; a Monday-Sunday week is exact", () => {
+  assert.equal(availableMinutes(5, "2026-10-25", "2026-12-24"), 2614);
+  assert.equal(availableMinutes(5, "2026-10-19", "2026-10-25"), 300);
+});
+
+test("partial first and last weeks", () => {
+  assert.deepEqual([firstWeekDays("2026-10-19"), firstWeekDays("2026-10-21"), firstWeekDays("2026-10-25")], [7, 5, 1]);
+  assert.deepEqual([lastWeekDays("2026-10-25"), lastWeekDays("2026-10-22"), lastWeekDays("2026-10-19")], [7, 4, 1]);
+});
+
+test("coverage percent is whole and safe without time", () => {
+  assert.equal(coveragePercent(3600, 23400), 15);
+  assert.equal(coveragePercent(2, 3), 67);
+  assert.equal(coveragePercent(10, 0), 0);
+});
+
+test("default weekday boundaries", () => {
   assert.equal(defaultWeekday(299, 300), "sun");
   assert.equal(defaultWeekday(300, 300), "mon");
   assert.equal(defaultWeekday(0, 420), "mon");

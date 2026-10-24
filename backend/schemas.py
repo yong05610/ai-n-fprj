@@ -131,7 +131,8 @@ class PlanGenerateResponse(BaseModel):
     plan_week_start: str = Field(..., description="계획 첫 주의 월요일 (YYYY-MM-DD)")
     plan_week_end: str = Field(..., description="계획 마지막 주(목표일이 속한 주)의 일요일 (YYYY-MM-DD)")
     week_count: int = Field(1, ge=1, description="(Phase 5F) 시작일이 속한 주부터 목표일이 속한 주까지의 주 수(양 끝 포함)")
-    available_minutes: int = Field(0, ge=0, description="(Phase 5F) 가용 분 = 주당 가능 분 × 주 수")
+    available_minutes: int = Field(0, ge=0, description="(Phase 5F) 가용 분 = floor(주당 분 × 시작일~목표일 일수(양 끝 포함) / 7). 시작일이 주 중간이면 첫 주를 통째로 세지 않는다")
+    coverage_percent: int = Field(0, ge=0, description="(Phase 5F 수정) 총 예상 분 / 가용 분을 정수 퍼센트로(가용이 0 이면 0). 안내용이며 서버는 하한으로 거부하지 않는다")
     total_estimated_minutes: int = Field(..., description="과업 총 예상 시간 (분)")
     tasks: List[WeeklyTaskPlanItem] = Field(..., description="전체 학습 과제 목록(순서대로, 초안, 미저장). 주차·타임라인·추천 요일 기본값은 서버가 계산")
     advice: AdviceItem = Field(..., description="AI 학습 조언")
@@ -591,7 +592,7 @@ class DashboardSummaryResponse(BaseModel):
     week_scheduled_minutes: int = Field(0, description="(Phase 5F) 이번 주 예정 분 합(그 주에 시작하는 과제 + 앞 주에서 이어지는 과제의 이번 주 몫)")
     today_scheduled_minutes: int = Field(0, description="(Phase 5F) 오늘이 추천 요일인 과제의 이번 주 예정 분 합")
     plan_total_minutes: int = Field(0, description="(Phase 5F) 이 학습의 전체 과제 예상 분 합")
-    plan_available_minutes: int = Field(0, description="(Phase 5F) 가용 분 = 주당 가능 분 × 주 수")
+    plan_available_minutes: int = Field(0, description="(Phase 5F) 가용 분 = floor(주당 분 × 시작일~목표일 일수 / 7)")
     weekly_hits: List[DailyHitItem]
     insight: AIInsightSummary
     goals_overview: List[GoalOverviewItem] = Field(

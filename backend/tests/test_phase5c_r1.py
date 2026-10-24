@@ -56,9 +56,11 @@ class TestBoundariesAndCounting:
     def test_a_single_shared_day_with_two_goals_is_rejected_both_ends_inclusive(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="A", start="2026-11-01", target="2026-11-10")
         _confirm(client, consented_headers, course="B", start="2026-11-10", target="2026-11-20")  # A and B share 11/10 only
-        assert _confirm(client, consented_headers, course="C", start="2026-11-10", target="2026-11-10").status_code == 409
-        assert _confirm(client, consented_headers, course="D", start="2026-11-09", target="2026-11-09").status_code == 201
-        assert _confirm(client, consented_headers, course="E", start="2026-11-11", target="2026-11-11").status_code == 201
+        # one-day goals only hold 60 minutes (Phase 5F fix: available time by real days), so small tasks
+        small = [{"title": f"작은 과제 {i}", "estimated_minutes": 10, "suggested_weekday": "none"} for i in range(3)]
+        assert _confirm(client, consented_headers, course="C", start="2026-11-10", target="2026-11-10", tasks=small).status_code == 409
+        assert _confirm(client, consented_headers, course="D", start="2026-11-09", target="2026-11-09", tasks=small).status_code == 201
+        assert _confirm(client, consented_headers, course="E", start="2026-11-11", target="2026-11-11", tasks=small).status_code == 201
 
     def test_two_goals_that_never_share_a_day_do_not_block_a_spanning_goal(self, client: TestClient, consented_headers):
         _confirm(client, consented_headers, course="A", start="2026-11-01", target="2026-11-10")
