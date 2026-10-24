@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, List
 
@@ -22,7 +23,7 @@ from ai_client import (
     plan_timeout_seconds,
 )
 from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
-from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
+from auth import assert_safe_auth_config, auth_mode, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import insight_rules
 import rag
@@ -96,12 +97,48 @@ from schemas import (
     ConsentCreateRequest,
     ConsentResponse,
 )
-from store import USER_OWNED_COLLECTIONS, assert_safe_store_config, get_store
+from store import USER_OWNED_COLLECTIONS, assert_safe_store_config, get_store, store_backend
 
 CURRENT_TERMS_VERSION = "v1.1"
 
 assert_safe_auth_config()
 assert_safe_store_config()
+
+
+def running_modes() -> tuple[str, str]:
+    """(auth_mode, store_backend) as the code branches on them: "dev" or "firebase", "memory" or
+    "firestore". Mode names only - never a secret, URL, project id or UID."""
+    return ("dev" if auth_mode() == "dev" else "firebase", "memory" if store_backend() == "memory" else "firestore")
+
+
+_startup_logger = logging.getLogger("pacemate.startup")
+
+
+def log_startup_modes() -> None:
+    """One INFO line with the running modes, plus a WARNING when this run is development-only.
+
+    Found necessary after a real incident: a server kept running with AUTH_MODE=dev and
+    STORE_BACKEND=memory inherited from a terminal, and nothing said so. The line is written
+    through a logger that has its own handler when the process configured none, so it is visible
+    under uvicorn too."""
+    if not _startup_logger.hasHandlers():
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+        _startup_logger.addHandler(handler)
+        _startup_logger.setLevel(logging.INFO)
+        _startup_logger.propagate = False
+    mode_auth, mode_store = running_modes()
+    _startup_logger.info("startup auth_mode=%s store_backend=%s", mode_auth, mode_store)
+    if mode_store == "memory":
+        _startup_logger.warning("data is NOT persisted: store_backend=memory (data disappears when the server stops)")
+    if mode_auth == "dev":
+        _startup_logger.warning("auth_mode=dev: fake dev tokens are accepted (local development only)")
+
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    log_startup_modes()
+    yield
 
 
 def _allowed_origins() -> list[str]:
@@ -113,6 +150,7 @@ app = FastAPI(
     title="PaceMate API",
     version="0.1.0",
     description="PaceMate MVP backend API",
+    lifespan=_lifespan,
     responses={
         400: {"model": ErrorResponse, "description": "잘못된 요청"},
         401: {"model": ErrorResponse, "description": "인증 실패 (토큰 누락 또는 유효하지 않음)"},
@@ -133,9 +171,10 @@ app.add_middleware(
 )
 
 
-@app.get("/health", tags=["health"], summary="서비스 헬스체크")
+@app.get("/health", tags=["health"], summary="서비스 헬스체크 (실행 모드 포함, 인증 불필요)")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "pacemate-api"}
+    mode_auth, mode_store = running_modes()
+    return {"status": "ok", "service": "pacemate-api", "auth_mode": mode_auth, "store_backend": mode_store}
 
 
 # --- Common helpers & dependencies ---

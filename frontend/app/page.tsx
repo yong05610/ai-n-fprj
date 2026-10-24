@@ -10,6 +10,7 @@ import { ConsentModal } from "@/components/ConsentModal";
 import { Dashboard } from "@/components/Dashboard";
 import { ExecutionScreen } from "@/components/ExecutionScreen";
 import { LearningPathWizard } from "@/components/LearningPathWizard";
+import { ModeBanner } from "@/components/ModeBanner";
 import { SettingsScreen } from "@/components/SettingsScreen";
 import { TutorScreen } from "@/components/TutorScreen";
 import { WeeklyPlanScreen } from "@/components/WeeklyPlanScreen";
@@ -246,6 +247,8 @@ export default function Home() {
             </button>
           </div>
         </header>
+
+        <ModeBanner />
 
         <main className="main">
           {view !== null && (
