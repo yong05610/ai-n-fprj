@@ -61,3 +61,16 @@ class AIInsight(BaseModel):
     summary: str = Field(..., min_length=1, max_length=300)
     difficulty: str = Field("", max_length=300)
     next_action: str = Field(..., min_length=1, max_length=300)
+
+
+class AIInsightBasic(BaseModel):
+    """Insight asked for with fewer than two reflections: summary and next_action only.
+
+    `difficulty` is never requested in this case. The field exists only so that a stray value
+    from the model still reaches the server's safety net (main._validate_ai_insight rejects it)
+    instead of being dropped silently; the stored difficulty is always "" for this schema.
+    """
+
+    summary: str = Field(..., min_length=1, max_length=300)
+    next_action: str = Field(..., min_length=1, max_length=300)
+    difficulty: str = Field("", max_length=300)

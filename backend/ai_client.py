@@ -52,9 +52,11 @@ class AIRetryFeedback(ValueError):
     before the next attempt.
     """
 
-    def __init__(self, message: str, feedback: dict) -> None:
+    def __init__(self, message: str, feedback: dict, reason: str = "other") -> None:
         super().__init__(message)
         self.feedback = feedback
+        # A short category (never user text) so callers can count why attempts were rejected.
+        self.reason = reason
 
 
 def ai_configured() -> bool:
@@ -89,15 +91,20 @@ class AIClient(ABC):
         user_payload: dict,
         response_model: Type[T],
         validator: Optional[Callable[[T], None]] = None,
+        on_reject: Optional[Callable[[Exception, int], None]] = None,
     ) -> T:
+        """`on_reject(error, attempt)` is called for every attempt that is thrown away (1-based);
+        it receives the exception only so the caller can log a category, never any content."""
         last_error: Optional[Exception] = None
         last_kind = "timeout"
         payload = dict(user_payload)
-        for _ in range(MAX_RETRIES + 1):
+        for attempt in range(1, MAX_RETRIES + 2):
             try:
                 raw = self._raw_complete(system_prompt, payload)
             except AIRetryableError as exc:
                 last_error, last_kind = exc, "timeout"
+                if on_reject is not None:
+                    on_reject(exc, attempt)
                 continue
             try:
                 parsed = response_model.model_validate_json(raw)
@@ -107,9 +114,13 @@ class AIClient(ABC):
             except AIRetryFeedback as exc:
                 last_error, last_kind = exc, "schema"
                 payload = {**payload, **exc.feedback}
+                if on_reject is not None:
+                    on_reject(exc, attempt)
                 continue
             except (ValidationError, ValueError) as exc:
                 last_error, last_kind = exc, "schema"
+                if on_reject is not None:
+                    on_reject(exc, attempt)
                 continue
 
         if last_kind == "timeout":

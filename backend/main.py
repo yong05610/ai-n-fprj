@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, List
@@ -10,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 import clock
 from ai_client import AIClient, AIRetryFeedback, AISchemaError, AITimeoutError, AIUnavailableError, get_ai_client
-from ai_schemas import AIInsight, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
+from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, delete_auth_user, get_current_uid
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import insight_rules
@@ -22,6 +23,7 @@ from prompts import (
     ROLE_IDEAS_SYSTEM_PROMPT,
     TUTOR_SYSTEM_PROMPT,
     INSIGHT_SYSTEM_PROMPT,
+    INSIGHT_SYSTEM_PROMPT_BASIC,
 )
 from resources_catalog import match_references, no_match_notice
 from schemas import (
@@ -1831,6 +1833,24 @@ def _own_insight(db, uid: str, goal_id: str) -> Optional[dict[str, Any]]:
 
 
 INSIGHT_MIN_REFLECTIONS_FOR_DIFFICULTY = 2
+insight_logger = logging.getLogger("pacemate.insight")
+
+
+def _insight_reject_reason(exc: Exception) -> str:
+    """Category of a rejected attempt: only a fixed label, never user text, numbers or UIDs."""
+    if isinstance(exc, AIRetryFeedback):
+        return exc.reason
+    errors = exc.errors() if hasattr(exc, "errors") else []
+    kinds = {e.get("type") for e in errors}
+    if "string_too_long" in kinds:
+        return "length"
+    if kinds & {"string_too_short", "missing"}:
+        return "empty_part"
+    return "other"
+
+
+def _log_insight_reject(exc: Exception, attempt: int) -> None:
+    insight_logger.info("insight_validation_reject reason=%s attempt=%d", _insight_reject_reason(exc), attempt)
 
 
 def _validate_ai_insight(
@@ -1842,14 +1862,18 @@ def _validate_ai_insight(
     (the model must not add up or convert numbers; see insight_rules)."""
     summary, difficulty, next_action = parsed.summary.strip(), parsed.difficulty.strip(), parsed.next_action.strip()
     problem = None
+    reason = "other"
     if not summary or not next_action:
-        problem = "summary 와 next_action 은 비어 있으면 안 됩니다."
+        problem, reason = "summary 와 next_action 은 비어 있으면 안 됩니다.", "empty_part"
     else:
         text = " ".join([summary, difficulty, next_action])
         if any(term in text for term in INSIGHT_FORBIDDEN_TERMS):
             problem = "추천 요일은 마감일이 아닙니다. 연체·실패·밀림·지연·마감처럼 평가하거나 마감으로 보는 표현을 쓰지 마세요."
+            reason = "forbidden_term"
         elif difficulty and reflection_count < INSIGHT_MIN_REFLECTIONS_FOR_DIFFICULTY:
-            problem = "회고가 2건 미만이면 difficulty 를 비워야 합니다."
+            # Safety net. With fewer than two reflections difficulty is not even requested
+            # (AIInsightBasic / INSIGHT_SYSTEM_PROMPT_BASIC), so this only fires on a stray value.
+            problem, reason = "회고가 2건 미만이면 difficulty 를 비워야 합니다.", "difficulty_without_reflections"
         else:
             wrong = insight_rules.find_unsupported_quantities([summary, difficulty, next_action], facts)
             if wrong:
@@ -1858,8 +1882,9 @@ def _validate_ai_insight(
                     + ", ".join(dict.fromkeys(wrong))
                     + ". 제공된 값만 그대로 쓰고 스스로 더하거나 환산하지 마세요."
                 )
+                reason = "quantity"
     if problem:
-        raise AIRetryFeedback(problem, feedback={"validation_error": problem})
+        raise AIRetryFeedback(problem, feedback={"validation_error": problem}, reason=reason)
 
 
 @app.get(
@@ -1995,11 +2020,16 @@ def create_goal_insight(
         ],
     }
     try:
+        # Two reflections or more: ask for summary, difficulty and next_action. Fewer: the model is
+        # not asked for difficulty at all (a repeated difficulty needs two reflections), which
+        # avoids the rejected-and-retried round trips seen with the single schema.
+        with_difficulty = reflection_used >= INSIGHT_MIN_REFLECTIONS_FOR_DIFFICULTY
         result = ai.generate(
-            INSIGHT_SYSTEM_PROMPT,
+            INSIGHT_SYSTEM_PROMPT if with_difficulty else INSIGHT_SYSTEM_PROMPT_BASIC,
             user_payload,
-            AIInsight,
+            AIInsight if with_difficulty else AIInsightBasic,
             validator=lambda parsed: _validate_ai_insight(parsed, facts, reflection_used),
+            on_reject=_log_insight_reject,
         )
     except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
         raise _ai_error_response(exc)  # nothing is stored; an earlier insight stays as it was
@@ -2009,7 +2039,7 @@ def create_goal_insight(
         "user_id": uid,
         "goal_id": goal_id,
         "summary": result.summary.strip(),
-        "difficulty": result.difficulty.strip(),
+        "difficulty": result.difficulty.strip() if with_difficulty else "",  # basic schema: nothing was requested
         "next_action": result.next_action.strip(),
         "generated_at": now,
         "record_count": inputs["record_count"],
