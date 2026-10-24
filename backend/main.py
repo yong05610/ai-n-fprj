@@ -1579,12 +1579,22 @@ def _current_learning(db, uid: str) -> tuple[Optional[str], Optional[str]]:
     return goal["field"], goal["course"]
 
 
+def _decorated_messages(messages: list[dict], current: tuple[Optional[str], Optional[str]]) -> list[dict]:
+    """Messages with the response-time links; each answer is ordered against the question before it."""
+    out, question = [], ""
+    for m in messages:
+        out.append(tutor.decorate(m, *current, question))
+        if m.get("role") == "user":
+            question = m.get("content", "")
+    return out
+
+
 def _conversation_out(conv: dict[str, Any], current: tuple[Optional[str], Optional[str]] = (None, None)) -> dict[str, Any]:
     return {
         "id": conv["id"],
         "user_id": conv["user_id"],
         "title": conv["title"],
-        "messages": [tutor.decorate(m, *current) for m in conv.get("messages", [])],
+        "messages": _decorated_messages(conv.get("messages", []), current),
         "created_at": conv["created_at"],
         "updated_at": conv["updated_at"],
     }
@@ -1676,7 +1686,7 @@ def send_message(
         response.status_code = status.HTTP_200_OK
         return SendMessageResponse(
             user_message=stored[0],
-            assistant_message=tutor.decorate(stored[1], *_current_learning(db, uid)),
+            assistant_message=tutor.decorate(stored[1], *_current_learning(db, uid), stored[0].get("content", "")),
             conversation_title=conv["title"],
             refused=bool(stored[1].get("refused")),
         )
@@ -1753,7 +1763,7 @@ def send_message(
     )
     return SendMessageResponse(
         user_message=user_message,
-        assistant_message=tutor.decorate(assistant_message, current_field, current_course),
+        assistant_message=tutor.decorate(assistant_message, current_field, current_course, question),
         conversation_title=title,
         refused=refused,
     )

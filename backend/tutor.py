@@ -8,7 +8,7 @@ from typing import Iterable
 
 from ai_client import AIRetryFeedback
 from ai_schemas import AITutorAnswer
-from rag import RetrievedChunk
+from rag import RetrievedChunk, tokenize, topic_tokens
 from resources_catalog import match_references, search_links
 
 DEFAULT_TITLE = "새 대화"
@@ -85,24 +85,36 @@ def keywords_line(keywords: list[str]) -> str:
     return f"더 찾아볼 키워드: {', '.join(keywords)}"
 
 
-def related_links_for(field: str | None, course: str | None, sources: Iterable[dict]) -> list[dict]:
-    """Reviewed link materials matching the current learning (at most 2, not already a source)."""
+def _question_overlap(question_tokens: set[str], doc: dict) -> int:
+    """How many question words equal a word of the document's tags or title (exact, no prefixes)."""
+    doc_tokens = {t for text in [*doc.get("tags", []), doc.get("title", "")] for t in tokenize(text)}
+    return len(question_tokens & doc_tokens)
+
+
+def related_links_for(field: str | None, course: str | None, sources: Iterable[dict], question: str = "") -> list[dict]:
+    """Reviewed link materials matching the current learning (at most 2, not already a source).
+
+    The server alone orders them: a link whose tags or title share an exact word with the question
+    comes first (more shared words first); without any overlap the matching order is kept.
+    """
     if not field:
         return []
     used = {s["doc_id"] for s in sources}
-    links = [
-        {"title": d["title"], "source_name": d.get("source_name"), "url": d["url"]}
-        for d in match_references(field, course or "")
-        if d["id"] not in used and d.get("url")
+    docs = [d for d in match_references(field, course or "") if d["id"] not in used and d.get("url")]
+    question_tokens = topic_tokens(question)
+    if question_tokens:
+        docs = sorted(docs, key=lambda d: -_question_overlap(question_tokens, d))  # stable: ties keep match order
+    return [
+        {"title": d["title"], "source_name": d.get("source_name"), "url": d["url"]} for d in docs[:RELATED_LINKS_LIMIT]
     ]
-    return links[:RELATED_LINKS_LIMIT]
 
 
-def decorate(message: dict, field: str | None, course: str | None) -> dict:
+def decorate(message: dict, field: str | None, course: str | None, question: str = "") -> dict:
     """A copy of an assistant message with the links the server builds at response time.
 
     Stored: `search_keywords` only. Built here (never stored): `search_links` from the stored
-    keywords and `related_links` for an answer that has sources.
+    keywords and `related_links` - for every answered (not refused) message, with or without sources.
+    `question` is the user message this answer belongs to (used only to order the related links).
     """
     out = {**message, "search_keywords": list(message.get("search_keywords", []))}
     out["search_links"], out["related_links"] = [], []
@@ -110,8 +122,7 @@ def decorate(message: dict, field: str | None, course: str | None) -> dict:
         return out
     if out["search_keywords"]:
         out["search_links"] = search_links(field or "", "", out["search_keywords"])
-    elif message.get("sources"):
-        out["related_links"] = related_links_for(field, course, message["sources"])
+    out["related_links"] = related_links_for(field, course, message.get("sources", []), question)
     return out
 
 

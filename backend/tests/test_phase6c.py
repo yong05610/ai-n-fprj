@@ -286,7 +286,8 @@ class TestTutorSendMessage:
         content = msg["content"]
         assert content.index("더 찾아볼 키워드: 동기부여 방법, 학습 습관") < content.index(tutor.NO_SOURCE_NOTE)
         assert msg["search_keywords"] == ["동기부여 방법", "학습 습관"] and msg["sources"] == []
-        assert len(msg["search_links"]) == 3 and msg["related_links"] == []
+        assert len(msg["search_links"]) == 3
+        assert 1 <= len(msg["related_links"]) <= 2  # 6C fix 2: related links no longer depend on sources
         query = parse_qs(urlparse(msg["search_links"][0]["url"]).query)["q"][0]
         assert "동기부여 방법" in query and "Python 개발" in query
 
