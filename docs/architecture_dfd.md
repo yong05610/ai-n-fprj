@@ -71,17 +71,17 @@ flowchart TB
 
 ## 3. DFD
 
-범례: **타원 = 터미널(외부 개체, 레벨 1 에서는 화면)**, 둥근 사각형 = 프로세스, 원통 = 데이터 저장소.
+범례: **사각형 = 터미널(외부 개체, 레벨 1 에서는 화면), 타원 = 프로세스**, 원통 = 데이터 저장소.
 
 ### 3-1. 레벨 0 (컨텍스트)
 
 ```mermaid
 flowchart LR
-    L(["학습자"])
-    AD(["관리자<br/>(ADMIN_UIDS)"])
-    FB(["Firebase<br/>Authentication"])
-    OAI(["OpenAI"])
-    SYS("PaceMate<br/>시스템")
+    L["학습자"]
+    AD["관리자<br/>(ADMIN_UIDS)"]
+    FB["Firebase<br/>Authentication"]
+    OAI["OpenAI"]
+    SYS(("PaceMate<br/>시스템"))
     DOC[("검토된 학습 자료<br/>읽기 전용")]
 
     L -->|"동의, 학습 목표·기록·회고, 질문, 피드백, 삭제 요청"| SYS
@@ -97,9 +97,9 @@ flowchart LR
 ### 3-2. 레벨 1: API 함수마다 프로세스, 터미널은 화면만
 
 작성 규칙(사용자 지정, 2026-10-25):
-1. **터미널(타원)끼리는 데이터 흐름이 없다.** 그래서 학습자, 관리자, OpenAI 터미널은 레벨 1 에서 쓰지 않는다.
-2. **터미널(타원)은 화면만** 둔다(`[화면] 이름`). 학습자와 관리자는 화면을 통해서만 시스템과 만난다.
-3. **API 함수 하나가 프로세스 하나**다(`P그룹.번호 메서드 경로`). 번호는 표 3-2-1 과 같다. 복잡해지면 나중에 레벨을 나눈다.
+1. **터미널(사각형)끼리는 데이터 흐름이 없다.** 그래서 학습자, 관리자, OpenAI 터미널은 레벨 1 에서 쓰지 않는다.
+2. **터미널(사각형)은 화면만** 둔다(`[화면] 이름`). 학습자와 관리자는 화면을 통해서만 시스템과 만난다.
+3. **API 함수 하나가 프로세스(타원) 하나**다(`P그룹.번호 메서드 경로`). 번호는 표 3-2-1 과 같다. 복잡해지면 나중에 레벨을 나눈다.
 4. 저장소(원통)는 **프로세스와만** 연결한다(화면이나 저장소끼리 직접 잇지 않는다).
 5. **OpenAI 호출은 터미널이 아니라 내부 프로세스**(`AI 호출: 용도`)로 그린다. 해당 API 프로세스가 입력을 넘기고 결과를 받는다. 모든 API 프로세스는 먼저 토큰 검증(Firebase)을 거치지만, 그림이 복잡해져서 생략한다(§4 인증 흐름 참고).
 
@@ -151,16 +151,16 @@ flowchart LR
 #### 3-2-2. P1 인증·계정
 ```mermaid
 flowchart LR
-    S1(["[화면] 동의 창"])
-    S2(["[화면] 내 정보·설정"])
-    S3(["[화면] 앱 공통(관리자 메뉴)"])
-    S4(["[화면] 학습 실행 기록(학습 전환)"])
-    S5(["[화면] 서버 깨우기 화면"])
-    P11("P1.1 POST /api/consent")
-    P12("P1.2 GET /api/user/profile")
-    P13("P1.3 PATCH /api/user/profile")
-    P14("P1.4 POST /api/user/delete-data")
-    P15("P1.5 GET /health")
+    S1["[화면] 동의 창"]
+    S2["[화면] 내 정보·설정"]
+    S3["[화면] 앱 공통(관리자 메뉴)"]
+    S4["[화면] 학습 실행 기록(학습 전환)"]
+    S5["[화면] 서버 깨우기 화면"]
+    P11(["P1.1 POST /api/consent"])
+    P12(["P1.2 GET /api/user/profile"])
+    P13(["P1.3 PATCH /api/user/profile"])
+    P14(["P1.4 POST /api/user/delete-data"])
+    P15(["P1.5 GET /health"])
     DU[("users")]
     DC[("consent_records")]
     DO[("사용자 소유 데이터<br/>goals tasks study_logs<br/>reflections conversations insights")]
@@ -191,15 +191,15 @@ flowchart LR
 #### 3-2-3. P2 학습 경로·계획 (AI 호출 내부 프로세스 포함)
 ```mermaid
 flowchart LR
-    S(["[화면] 학습 경로 설정"])
-    P21("P2.1 POST /api/path/ideas")
-    P22("P2.2 POST /api/path/recommend")
-    P23("P2.3 POST /api/plan/generate")
-    P24("P2.4 POST /api/plan/confirm")
-    A1("AI 호출: 직무 예시")
-    A2("AI 호출: 과정·수준 추천")
-    A3("AI 호출: 계획 초안")
-    SH("일정 계산<br/>schedule.py")
+    S["[화면] 학습 경로 설정"]
+    P21(["P2.1 POST /api/path/ideas"])
+    P22(["P2.2 POST /api/path/recommend"])
+    P23(["P2.3 POST /api/plan/generate"])
+    P24(["P2.4 POST /api/plan/confirm"])
+    A1(["AI 호출: 직무 예시"])
+    A2(["AI 호출: 과정·수준 추천"])
+    A3(["AI 호출: 계획 초안"])
+    SH(["일정 계산<br/>schedule.py"])
     DG[("goals")]
     DT[("tasks")]
 
@@ -229,15 +229,15 @@ flowchart LR
 #### 3-2-4. P3 목표·과제 조회와 과제 상태
 ```mermaid
 flowchart LR
-    S1(["[화면] 대시보드"])
-    S2(["[화면] 학습 과제 계획"])
-    S3(["[화면] 학습 실행 기록"])
-    S4(["[화면] 학습 경로 설정"])
-    P31("P3.1 GET /api/goals")
-    P32("P3.2 GET /api/goals/{id}")
-    P33("P3.3 GET /api/goals/{id}/references")
-    P34("P3.4 GET /api/tasks")
-    P35("P3.5 PATCH /api/tasks/{id}")
+    S1["[화면] 대시보드"]
+    S2["[화면] 학습 과제 계획"]
+    S3["[화면] 학습 실행 기록"]
+    S4["[화면] 학습 경로 설정"]
+    P31(["P3.1 GET /api/goals"])
+    P32(["P3.2 GET /api/goals/{id}"])
+    P33(["P3.3 GET /api/goals/{id}/references"])
+    P34(["P3.4 GET /api/tasks"])
+    P35(["P3.5 PATCH /api/tasks/{id}"])
     DG[("goals")]
     DT[("tasks")]
     DL[("study_logs")]
@@ -271,15 +271,15 @@ flowchart LR
 #### 3-2-5. P4 학습 실행 기록·타이머
 ```mermaid
 flowchart LR
-    S(["[화면] 학습 실행 기록"])
-    P41("P4.1 GET /api/study-logs")
-    P42("P4.2 POST /api/study-logs")
-    P43("P4.3 PATCH /api/study-logs/{id}")
-    P44("P4.4 DELETE /api/study-logs/{id}")
-    P45("P4.5 POST /api/timer/start")
-    P46("P4.6 POST /api/timer/finish")
-    P47("P4.7 POST /api/timer/cancel")
-    P48("P4.8 GET /api/timer/active")
+    S["[화면] 학습 실행 기록"]
+    P41(["P4.1 GET /api/study-logs"])
+    P42(["P4.2 POST /api/study-logs"])
+    P43(["P4.3 PATCH /api/study-logs/{id}"])
+    P44(["P4.4 DELETE /api/study-logs/{id}"])
+    P45(["P4.5 POST /api/timer/start"])
+    P46(["P4.6 POST /api/timer/finish"])
+    P47(["P4.7 POST /api/timer/cancel"])
+    P48(["P4.8 GET /api/timer/active"])
     DL[("study_logs<br/>reflections")]
     DU[("users<br/>active_timer")]
 
@@ -314,15 +314,15 @@ flowchart LR
 #### 3-2-6. P5 대시보드·분석·인사이트
 ```mermaid
 flowchart LR
-    S1(["[화면] 대시보드"])
-    S2(["[화면] 종합 학습 분석"])
-    S3(["[화면] 학습 실행 기록<br/>(인사이트 카드)"])
-    P51("P5.1 GET /api/dashboard/summary")
-    P52("P5.2 GET /api/analytics/overview")
-    P53("P5.3 GET /api/goals/{id}/insight")
-    P54("P5.4 POST /api/goals/{id}/insight")
-    AI("AI 호출: 인사이트")
-    RU("충분/부족 판정<br/>insight_rules.py")
+    S1["[화면] 대시보드"]
+    S2["[화면] 종합 학습 분석"]
+    S3["[화면] 학습 실행 기록<br/>(인사이트 카드)"]
+    P51(["P5.1 GET /api/dashboard/summary"])
+    P52(["P5.2 GET /api/analytics/overview"])
+    P53(["P5.3 GET /api/goals/{id}/insight"])
+    P54(["P5.4 POST /api/goals/{id}/insight"])
+    AI(["AI 호출: 인사이트"])
+    RU(["충분/부족 판정<br/>insight_rules.py"])
     DG[("goals")]
     DT[("tasks")]
     DL[("study_logs<br/>reflections")]
@@ -356,14 +356,14 @@ flowchart LR
 #### 3-2-7. P6 AI 튜터
 ```mermaid
 flowchart LR
-    S(["[화면] AI 튜터"])
-    P61("P6.1 GET /api/conversations")
-    P62("P6.2 POST /api/conversations")
-    P63("P6.3 GET /api/conversations/{id}")
-    P64("P6.4 POST /api/conversations/{id}/messages")
-    P65("P6.5 GET /api/data/summary")
-    AI("AI 호출: 튜터 답변")
-    RG("자료 검색·답변 검증<br/>rag.py, tutor.py")
+    S["[화면] AI 튜터"]
+    P61(["P6.1 GET /api/conversations"])
+    P62(["P6.2 POST /api/conversations"])
+    P63(["P6.3 GET /api/conversations/{id}"])
+    P64(["P6.4 POST /api/conversations/{id}/messages"])
+    P65(["P6.5 GET /api/data/summary"])
+    AI(["AI 호출: 튜터 답변"])
+    RG(["자료 검색·답변 검증<br/>rag.py, tutor.py"])
     DC[("conversations")]
     DG[("goals")]
     DT[("tasks")]
@@ -400,14 +400,14 @@ flowchart LR
 #### 3-2-8. P7 피드백·관리자
 ```mermaid
 flowchart LR
-    S1(["[화면] 내 정보·설정<br/>(피드백 카드)"])
-    S2(["[화면] 관리자: 사용자 관리"])
-    S3(["[화면] 관리자: 사용자 피드백"])
-    P71("P7.1 POST /api/feedback")
-    P72("P7.2 GET /api/admin/users")
-    P73("P7.3 GET /api/admin/feedback")
-    P74("P7.4 GET /api/admin/feedback/summary")
-    P75("P7.5 PATCH /api/admin/feedback/{id}")
+    S1["[화면] 내 정보·설정<br/>(피드백 카드)"]
+    S2["[화면] 관리자: 사용자 관리"]
+    S3["[화면] 관리자: 사용자 피드백"]
+    P71(["P7.1 POST /api/feedback"])
+    P72(["P7.2 GET /api/admin/users"])
+    P73(["P7.3 GET /api/admin/feedback"])
+    P74(["P7.4 GET /api/admin/feedback/summary"])
+    P75(["P7.5 PATCH /api/admin/feedback/{id}"])
     DF[("feedback<br/>UID 저장 안 함")]
     DU[("users")]
 
