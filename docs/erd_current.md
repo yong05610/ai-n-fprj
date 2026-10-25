@@ -2,6 +2,7 @@
 
 **기준:** `backend/store.py`, `backend/schemas.py`, `docs/phase1_design.md`, `PRD.md` §6
 **목적:** Phase 3 시점 구현과 설계의 데이터 구조를 한 장으로 맞춰 공통 기준으로 삼는다.
+**관련:** 시스템 구성도, 모듈 구조, DFD, 인증·계획 흐름은 docs/architecture_dfd.md
 **주의:** 기존 설계 문서는 수정하지 않았다. 이 문서는 검증용 참고본이며, 아래 "합의 필요 사항"이 확정되면 설계 문서에 반영한다.
 
 ## 1. ERD

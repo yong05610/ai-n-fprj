@@ -22,7 +22,7 @@ PaceMate는 독학 학습자를 위한 AI 학습 플래너(14일 MVP)다. 이 �
 ## 기준 문서
 - 제품: 서비스기획서.md, PRD.md, mission.md, mockup/index.html(표준 목업)
 - 작업: TASK.md
-- 설계와 결정: docs/phase1_design.md, docs/erd_current.md, docs/phase3_auth.md, docs/phase4_plan.md
+- 설계와 결정: docs/phase1_design.md, docs/erd_current.md, docs/architecture_dfd.md(구성도·DFD), docs/phase3_auth.md, docs/phase4_plan.md
 - 협업 운영 요령(규칙 진화, 지시서·보고서·검증 템플릿, 체크리스트): docs/project_operating_playbook.md
 - 개선 이력(발표·평가용): docs/ai_improvement_log.md(발생 현상, 원인, 결정, 설계, 효과). 개선이 생기면 PM 이 항목을 추가한다. 배포 전 확인: docs/pre_deploy_checklist.md
 - 사용자용 가이드: docs/firebase_setup_guide.md, docs/deploy_guide.md(배포: Vercel, Render, Firebase 도메인)
