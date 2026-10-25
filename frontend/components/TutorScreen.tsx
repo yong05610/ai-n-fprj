@@ -83,6 +83,7 @@ export function TutorScreen() {
   const [opening, setOpening] = useState(true);
   const [openError, setOpenError] = useState<string | null>(null);
   const [summary, setSummary] = useState<DataSummary | null>(null);
+  const [summaryFailed, setSummaryFailed] = useState(false);
 
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -109,8 +110,10 @@ export function TutorScreen() {
   async function loadSummary() {
     try {
       setSummary(await apiRequest<DataSummary>("/api/data/summary", { token: await token() }));
+      setSummaryFailed(false);
     } catch {
       setSummary(null); // the side panel is a convenience; chatting still works
+      setSummaryFailed(true);
     }
   }
 
@@ -349,7 +352,15 @@ export function TutorScreen() {
           <h2>답변 참고 정보</h2>
           <div className="context-block">
             <span className="pill blue">학습 요약</span>
-            {summaryLines.length === 0 && <p className="small muted">학습 요약을 불러오는 중이거나 아직 없어요.</p>}
+            {summaryLines.length === 0 && summaryFailed && (
+              <p className="small muted">
+                학습 요약을 불러오지 못했어요.{" "}
+                <button type="button" className="link-btn" onClick={() => void loadSummary()}>
+                  다시 시도
+                </button>
+              </p>
+            )}
+            {summaryLines.length === 0 && !summaryFailed && <p className="small muted">학습 요약을 불러오는 중이거나 아직 없어요.</p>}
             {summaryLines.map((line) => (
               <div key={line.title}>
                 <p>{line.title}</p>

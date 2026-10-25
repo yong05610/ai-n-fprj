@@ -40,3 +40,13 @@ export function nextAttemptDelayMs(failedAttempts: number, elapsedMs: number): n
 export function attemptTimeoutMs(elapsedMs: number): number {
   return Math.max(1_000, Math.min(ATTEMPT_TIMEOUT_MS, MAX_WAIT_MS - elapsedMs));
 }
+
+/**
+ * Whether a failed request looks like a server that is still waking up: no connection, a timeout,
+ * or the gateway answering 502/503/504 for it. Anything else (400, 401, 403, 404, 500 ...) is a real
+ * answer and is never retried.
+ */
+export function isWakeFailure(status: number, code: string): boolean {
+  if (status === 0) return code === "NETWORK_ERROR" || code === "REQUEST_TIMEOUT";
+  return status === 502 || status === 503 || status === 504;
+}

@@ -17,6 +17,7 @@ import {
   type Weekday,
   completionCounts,
   formatHoursMinutes,
+  learningListView,
   neighborWeek,
   pickInitialWeek,
   toWeekday,
@@ -58,7 +59,6 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
   const { session } = useAuth();
   const goalSwitch = useGoalSwitch();
   const { loaded, goals, activeGoalId } = goalSwitch;
-  const hasActiveGoals = goals.some((g) => g.status === "active");
   const goalId = activeGoalId && goals.some((g) => g.id === activeGoalId && g.status === "active") ? activeGoalId : null;
 
   const [status, setStatus] = useState<LoadStatus>("loading");
@@ -198,7 +198,9 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
     </div>
   );
 
-  if (!loaded) {
+  const listView = learningListView(loaded, goalSwitch.loadFailed, goals.filter((g) => g.status === "active").length);
+
+  if (listView === "loading") {
     return (
       <>
         {heading}
@@ -209,7 +211,24 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
     );
   }
 
-  if (!hasActiveGoals) {
+  if (listView === "error") {
+    // The list of learnings could not be read: say so, never "no learning in progress".
+    return (
+      <>
+        {heading}
+        <section className="card">
+          <p className="error" role="alert">
+            학습 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
+          </p>
+          <button type="button" className="btn" onClick={() => void goalSwitch.reload()}>
+            다시 시도
+          </button>
+        </section>
+      </>
+    );
+  }
+
+  if (listView === "none") {
     return (
       <>
         {heading}

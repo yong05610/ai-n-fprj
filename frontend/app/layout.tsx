@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { AuthProvider } from "@/components/AuthProvider";
+import { WakeNotice } from "@/components/WakeNotice";
 import { ServerGate } from "@/components/ServerGate";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <ServerGate>
           <AuthProvider>{children}</AuthProvider>
+          <WakeNotice />
         </ServerGate>
       </body>
     </html>

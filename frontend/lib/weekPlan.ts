@@ -105,3 +105,13 @@ export function completionCounts(tasks: Pick<PlanTask, "status">[]): { done: num
 export function totalMinutes(tasks: Pick<PlanTask, "estimated_minutes">[]): number {
   return tasks.reduce((sum, t) => sum + t.estimated_minutes, 0);
 }
+
+/**
+ * Which state the plan screen shows for the list of learnings. A list that could not be read is an
+ * error, never "none": an empty state is only for a list that was read and is empty.
+ */
+export function learningListView(loaded: boolean, loadFailed: boolean, activeCount: number): "loading" | "error" | "none" | "some" {
+  if (!loaded) return "loading";
+  if (loadFailed) return "error";
+  return activeCount > 0 ? "some" : "none";
+}

@@ -17,9 +17,13 @@ export function useGoalSwitch() {
   const [switching, setSwitching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // A failed load is not "no learnings": screens that claim an empty state must check this first.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = useCallback(async () => {
     if (!session) return;
+    setLoaded(false);
+    setLoadFailed(false);
     try {
       const token = await session.getToken();
       const [goalList, profile] = await Promise.all([
@@ -29,8 +33,8 @@ export function useGoalSwitch() {
       setGoals(goalList);
       setActiveGoalId(profile.active_goal_id);
     } catch {
-      // The widget is a convenience; the screen it sits on keeps working without it.
-      setGoals([]);
+      // The widget itself is a convenience, but the list stays unknown, not empty.
+      setLoadFailed(true);
     } finally {
       setLoaded(true);
     }
@@ -55,5 +59,5 @@ export function useGoalSwitch() {
     }
   }
 
-  return { goals, activeGoalId, switching, error, loaded, switchGoal };
+  return { goals, activeGoalId, switching, error, loaded, loadFailed, reload: load, switchGoal };
 }

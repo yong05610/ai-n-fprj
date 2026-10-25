@@ -186,6 +186,38 @@ export function Dashboard({
     <>
       {heading}
 
+      <section className="card" style={{ marginBottom: 14 }} aria-label="종합 학습 현황">
+        <div className="card-head">
+          <div>
+            <h2>종합 학습 현황 · 진행 중인 모든 학습</h2>
+            <p>아래 통계는 최근 학습 기준이고, 이 영역은 진행 중인 전체 학습을 보여줘요.</p>
+          </div>
+          <button type="button" className="link-btn" onClick={onOpenAnalysis}>
+            종합 분석 →
+          </button>
+        </div>
+        {summary.goals_overview.length === 0 ? (
+          <p className="description">진행 중인 학습이 없습니다.</p>
+        ) : (
+          summary.goals_overview.map((g) => (
+            <div key={g.goal_id} className="goal-row">
+              <div>
+                <strong>{g.course}</strong>
+                <p className="small muted" style={{ margin: "2px 0 0" }}>
+                  {formatPeriod(g.start_date, g.target_date, thisYear)}
+                </p>
+              </div>
+              <div>
+                <div className="bar" role="progressbar" aria-valuenow={g.progress_percentage} aria-valuemin={0} aria-valuemax={100}>
+                  <span style={{ width: `${g.progress_percentage}%` }}></span>
+                </div>
+              </div>
+              <b>{g.progress_percentage}%</b>
+            </div>
+          ))
+        )}
+      </section>
+
       {recentBlock ? (
         <div className="grid stats">
           <article className="card stat">
@@ -236,38 +268,6 @@ export function Dashboard({
           </p>
         </section>
       )}
-
-      <section className="card" style={{ marginBottom: 14 }} aria-label="종합 학습 현황">
-        <div className="card-head">
-          <div>
-            <h2>종합 학습 현황 · 진행 중인 모든 학습</h2>
-            <p>위 통계는 최근 학습 기준이고, 이 영역은 진행 중인 전체 학습을 보여줘요.</p>
-          </div>
-          <button type="button" className="link-btn" onClick={onOpenAnalysis}>
-            종합 분석 →
-          </button>
-        </div>
-        {summary.goals_overview.length === 0 ? (
-          <p className="description">진행 중인 학습이 없습니다.</p>
-        ) : (
-          summary.goals_overview.map((g) => (
-            <div key={g.goal_id} className="goal-row">
-              <div>
-                <strong>{g.course}</strong>
-                <p className="small muted" style={{ margin: "2px 0 0" }}>
-                  {formatPeriod(g.start_date, g.target_date, thisYear)}
-                </p>
-              </div>
-              <div>
-                <div className="bar" role="progressbar" aria-valuenow={g.progress_percentage} aria-valuemin={0} aria-valuemax={100}>
-                  <span style={{ width: `${g.progress_percentage}%` }}></span>
-                </div>
-              </div>
-              <b>{g.progress_percentage}%</b>
-            </div>
-          ))
-        )}
-      </section>
 
       {recentBlock && (
         <div className="grid two-col">

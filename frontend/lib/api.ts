@@ -1,3 +1,6 @@
+import { isWakeFailure } from "@/lib/coldStart";
+import { reportWaiting } from "@/lib/serverWake";
+import { realWakeDeps, retryWhileWaking } from "@/lib/wakeRetry";
 import { API_CONFIG_MESSAGES, apiConfigProblem, resolveApiBase } from "@/lib/deployConfig";
 
 const PRODUCTION = process.env.NODE_ENV === "production";
@@ -26,7 +29,7 @@ type RequestOptions = {
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
-async function performRequest(
+async function performOnce(
   path: string,
   { method = "GET", body, token, timeoutMs = DEFAULT_TIMEOUT_MS }: RequestOptions,
 ): Promise<{ data: unknown; headers: Headers }> {
@@ -68,6 +71,18 @@ async function performRequest(
     throw new ApiError(response.status, code, message, details);
   }
   return { data, headers: response.headers };
+}
+
+const isWakeError = (error: unknown) => error instanceof ApiError && isWakeFailure(error.status, error.code);
+
+/**
+ * Reads (GET) are repeated while the server wakes up, with a notice. Writes are sent once: a failed
+ * write shows the screen's own error and the user repeats it (the AI writes keep their
+ * client_request_id for that), so nothing is saved twice behind the user's back.
+ */
+async function performRequest(path: string, options: RequestOptions) {
+  if ((options.method ?? "GET") !== "GET") return performOnce(path, options);
+  return retryWhileWaking(() => performOnce(path, options), isWakeError, realWakeDeps(reportWaiting));
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
