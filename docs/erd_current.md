@@ -205,7 +205,7 @@ erDiagram
 - 약관 버전: `CURRENT_TERMS_VERSION` 을 `v1.1` 로 올렸다(동의 모달에 피드백 저장 안내 한 줄 추가). v1.0 으로 동의한 기존 사용자는 개인 데이터 API 에서 CONSENT_REQUIRED 를 받고 재동의하면 `users.consent_version` 이 v1.1 로 갱신되며 기존 데이터는 그대로 보인다(구현 확인: Phase 5E).
 - 관리자 API 는 `/api/admin/*` 이며 허용 목록 밖은 403 ErrorResponse 다.
 
-## 참고자료 수집·승인 규칙 (결정 2026-10-25, PRD FR-08, 서비스기획서 5.4, Phase 8B 구현 예정, docs/phase8b_design.md)
+## 참고자료 수집·승인 규칙 (결정 2026-10-25, PRD FR-08, Phase 8B 구현 예정, docs/phase8b_design.md)
 - **현재 구현 상태(검증된 사실):** 참고자료는 파일 `backend/data/rag_documents.json` 에서만 읽는다. `resource_candidates` 와 Firestore 의 `learning_documents` 는 아직 없다. 위 ERD 의 해당 필드는 **설계(추가 예정)** 이며 구현·검증 전이다.
 - `resource_candidates`: 검토 대기·승인·반려 후보. **서비스 화면과 AI 답변에 노출하지 않는다.** UID 없음. `USER_OWNED_COLLECTIONS` 에 넣지 않으며 `delete-data` 로 지워지지 않는다.
 - `learning_documents`(Firestore): 승인된 자료만 넣는다. **후보를 이 컬렉션에 넣지 않는다.** Firestore 보안 규칙이 이 컬렉션을 누구나 읽게 두기 때문이다(`firebase/firestore.rules`). `resource_candidates` 는 규칙의 "그 밖의 컬렉션"에 해당해 클라이언트 읽기도 막힌다.

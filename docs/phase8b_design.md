@@ -1,6 +1,6 @@
 # Phase 8B 설계 — 참고자료 수집·승인 (관리자)
 
-작성: 검증/PM, 2026-10-26. 상태: **설계안(사용자 검토 대기)**. 요구사항은 PRD FR-08, 배경은 서비스기획서 5.4, 단계별 확대는 docs/resource_curation_roadmap.md. 개발 지시는 docs/phase8b_dev_prompt.md.
+작성: 검증/PM, 2026-10-26. 상태: **설계안(사용자 검토 대기)**. 요구사항·상세는 PRD FR-08, 목적 요약은 서비스기획서 5.4, 단계별 확대는 docs/resource_curation_roadmap.md. 개발 지시는 docs/phase8b_dev_prompt.md.
 
 **이름:** TASK.md 의 Phase 9 는 "피드백 개선·재배포"라서, 이 작업은 **Phase 8B**(테스트와 나란히 진행)로 부른다.
 
