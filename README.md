@@ -58,6 +58,10 @@ python -m pytest
 
 When the `RENDER` variable is set, the app refuses to start with `AUTH_MODE=dev`, `STORE_BACKEND=memory`, a missing or unsafe `CORS_ORIGINS` (no `*`, no localhost, https only, no trailing `/`, no empty entry), or an empty `FIREBASE_SERVICE_ACCOUNT_JSON` / `OPENAI_API_KEY`. The message names the rule or variable, never the value. `API_DOCS_ENABLED=false` turns `/docs`, `/redoc` and `/openapi.json` off (default: on). See `docs/deploy_guide.md`.
 
+### Reference material switches (backend, Phase 8B; every default is "off")
+
+`RESOURCE_READ_SOURCE=file` (default) reads only `backend/data/rag_documents.json`; `file+approved` also reads the admin-approved Firestore documents (60 s cache) and falls back to the file if that read fails. `COLLECTORS_ENABLED` (comma list of `direct_link`, `ai_topic`; empty = none) turns the admin collectors on; `COLLECTOR_DAILY_CANDIDATES` (default 20 per collector and Asia/Seoul day) and `COLLECTOR_AI_TOPIC_DAILY_RUNS` (default 5) limit them. `FIELD_STATS_ENABLED=true` turns on the admin field-demand numbers (`FIELD_STATS_MIN_USERS`, default 3, never below 2). Allowed link hosts live in `backend/data/allowed_domains.json`.
+
 ## Reference project
 
 `reference-AI NATIVE M -2/` is a temporary reference copy of a separate project. It is for reading and comparison only; it is excluded from this repository and is not part of PaceMate's source, install, or deployment steps. Remove the folder and its `.gitignore` entry when it is no longer needed. Do not copy its secrets or environment files into this project.

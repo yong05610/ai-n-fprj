@@ -337,6 +337,13 @@ erDiagram
 | `GET` | `/api/admin/feedback` | **[관리자]** 피드백 목록 `?status=all\|new\|seen\|candidate\|done&limit=`(최신순, 최대 200) | `admin` |
 | `GET` | `/api/admin/feedback/summary` | **[관리자]** 미확인 건수, 사용성·AI 유용성 평균과 응답 수, 개선 후보 수, 최근 30일 반영 완료 수 | `admin` |
 | `PATCH` | `/api/admin/feedback/{id}` | **[관리자]** 상태만 변경 `{status: seen\|candidate\|done}` (의견 수정·삭제 없음) | `admin` |
+| `GET` | `/api/admin/resources/collectors` | **[관리자]** 수집기 목록 `{items:[{type,label,enabled,daily_limit,used_today,daily_run_limit,runs_today}]}`. 켜짐은 `COLLECTORS_ENABLED`(기본 모두 꺼짐) | `admin` |
+| `POST` | `/api/admin/resources/candidates` | **[관리자]** 링크 직접 입력(direct_link) `{url, field?, course?, note?, client_request_id?}` → 검사·메타데이터·AI 제안 후 후보. 응답 `{candidates, pending_count, auto_rejected_count, duplicate_count}`. 꺼진 수집기 409, 하루 상한 429, 같은 `client_request_id` 재시도는 200 | `admin` |
+| `POST` | `/api/admin/resources/collect` | **[관리자]** 수집기 실행 `{collector:"ai_topic", field, course, count(1~5), client_request_id?}`. 응답 형식은 위와 같고 걸러진 건수가 `auto_rejected_count`·`duplicate_count`. AI 오류 502/503/504, 없는 수집기 404 | `admin` |
+| `GET` | `/api/admin/resources/candidates` | **[관리자]** 후보 목록 `?status=pending\|approved\|rejected\|all&collector=&page=`(기본 pending, 최신순 50건). 후보는 사용자 화면·AI 답변에 나오지 않는다 | `admin` |
+| `PATCH` | `/api/admin/resources/candidates/{id}` | **[관리자]** `{action:"approve", edits?:{title,field,course,level_label,tags,summary}}` 또는 `{action:"reject", reject_reason}`. 같은 처리 반복은 200(변경 없음), 반대 처리는 409, 수정 값 오류·반려 사유 누락은 422(`details.field`). 승인하면 `learning_documents` 에 링크 전용 문서 1건 | `admin` |
+| `GET` | `/api/admin/resources/stats` | **[관리자]** 수집기별 후보·승인·반려·자동 반려(사유별) 건수, 승인율, 등록→승인 소요 시간 중앙값 | `admin` |
+| `GET` | `/api/admin/resources/field-demand` | **[관리자]** 분야별 서로 다른 사용자 수와 연결 자료 수 `{min_users, items:[{field,user_count,linked_document_count}]}`. `FIELD_STATS_ENABLED=true` 일 때만(꺼짐이 기본, 꺼져 있으면 404). 사용자가 `FIELD_STATS_MIN_USERS`(기본 3, 최소 2) 미만인 분야는 응답에서 뺀다 | `admin` |
 
 ---
 

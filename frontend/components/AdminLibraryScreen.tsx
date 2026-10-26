@@ -262,13 +262,13 @@ export function AdminLibraryScreen() {
   function listBlock(view: ReturnType<typeof listView>, items: ResourceCandidate[], emptyText: string, reload: () => void) {
     if (view === "loading")
       return (
-        <section className="card">
+        <section className="card resource-section">
           <p className="description">불러오는 중…</p>
         </section>
       );
     if (view === "error")
       return (
-        <section className="card">
+        <section className="card resource-section">
           <p className="error" role="alert">
             목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.
           </p>
@@ -279,7 +279,7 @@ export function AdminLibraryScreen() {
       );
     if (view === "empty")
       return (
-        <section className="card">
+        <section className="card resource-section">
           <p className="description">{emptyText}</p>
         </section>
       );
@@ -299,7 +299,7 @@ export function AdminLibraryScreen() {
         수집은 관리자가 버튼을 누를 때만 일어나요. 검토 대기 자료는 학습자에게 보이지 않고, 승인한 자료만 참고 링크가 돼요.
       </div>
 
-      <section className="card table-wrap">
+      <section className="card table-wrap resource-section">
         <h3>수집기 상태</h3>
         {collectors.failed && collectors.data === null ? (
           <>
@@ -336,7 +336,7 @@ export function AdminLibraryScreen() {
         )}
       </section>
 
-      <section className="card">
+      <section className="card resource-section">
         <h3>링크 직접 입력</h3>
         <form onSubmit={submitLink}>
           <div className="field">
@@ -369,7 +369,7 @@ export function AdminLibraryScreen() {
         </form>
       </section>
 
-      <section className="card">
+      <section className="card resource-section">
         <h3>AI 주제 제안</h3>
         <p className="small muted">{AI_TOPIC_NOTICE}</p>
         <form onSubmit={submitTopic}>
@@ -437,7 +437,7 @@ export function AdminLibraryScreen() {
           () => void loadDone(),
         )}
 
-      <section className="card table-wrap">
+      <section className="card table-wrap resource-section">
         <h3>수집 통계</h3>
         {stats.failed && stats.data === null ? (
           <>
@@ -493,7 +493,7 @@ export function AdminLibraryScreen() {
       </section>
 
       {demand !== null && demandAreaVisible(demand) && demand.kind === "ok" && (
-        <section className="card table-wrap">
+        <section className="card table-wrap resource-section">
           <h3>분야별 수요</h3>
           <p className="small muted">서로 다른 사용자 수 기준이에요. 사용자가 적은 분야는 표시하지 않아요.</p>
           {demand.items.length === 0 ? (

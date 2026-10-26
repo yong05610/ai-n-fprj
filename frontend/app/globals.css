@@ -339,7 +339,7 @@ td { color: #586277; }
 .server-notice { position: fixed; top: 0; left: 0; right: 0; z-index: 50; justify-content: center; }
 
 /* Admin reference library (Phase 8B) */
-.resource-card { margin-bottom: 12px; }
+.resource-section, .resource-card { margin-bottom: 14px; }
 .resource-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
 .resource-title { font-size: 12px; overflow-wrap: anywhere; }
 .resource-url { margin: 3px 0 0; font-size: 9px; overflow-wrap: anywhere; }
