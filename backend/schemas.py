@@ -923,6 +923,17 @@ class AdminResourceStatsResponse(BaseModel):
     collectors: List[AdminResourceStatsEntry]
 
 
+class AdminFieldDemandItem(BaseModel):
+    field: str = Field(..., description="분야 이름만. 소문자·공백 정리 기준으로 묶은 대표 표기")
+    user_count: int = Field(..., description="이 분야에 학습이 있는 서로 다른 사용자 수(FIELD_STATS_MIN_USERS 이상인 분야만)")
+    linked_document_count: int = Field(..., description="계획 화면이 쓰는 같은 매칭 함수로 연결된 참고자료 수(최대 5). 0 이면 자료 공백")
+
+
+class AdminFieldDemandResponse(BaseModel):
+    min_users: int
+    items: List[AdminFieldDemandItem]
+
+
 class DataDeleteResponse(BaseModel):
     status: str = "deleted"
     message: str = "사용자의 모든 학습 데이터 및 동의 기록이 성공적으로 삭제되었습니다."

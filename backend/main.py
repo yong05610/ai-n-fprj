@@ -26,6 +26,7 @@ from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDr
 from auth import assert_safe_auth_config, auth_mode, delete_auth_user, get_current_uid
 from deploy_config import assert_safe_deploy_config
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
+import field_demand
 import insight_rules
 import rag
 import resource_collectors
@@ -100,6 +101,7 @@ from schemas import (
     AdminResourceCandidateListResponse,
     AdminResourceCollectRequest,
     AdminResourceCollectResponse,
+    AdminFieldDemandResponse,
     AdminResourceCollectorItem,
     AdminResourceCollectorsResponse,
     AdminResourceLinkRequest,
@@ -2600,6 +2602,22 @@ def admin_resource_candidate_action(
 )
 def admin_resource_stats(admin_uid: str = Depends(require_admin_uid), db=Depends(get_db)):
     return AdminResourceStatsResponse.model_validate(resource_pipeline.collect_stats(db))
+
+
+@app.get(
+    "/api/admin/resources/field-demand",
+    response_model=AdminFieldDemandResponse,
+    tags=["admin"],
+    summary="[관리자] 분야별 서로 다른 사용자 수와 연결 자료 수. FIELD_STATS_ENABLED=true 일 때만(꺼져 있으면 404)",
+)
+def admin_resource_field_demand(admin_uid: str = Depends(require_admin_uid), db=Depends(get_db)):
+    if not field_demand.enabled():
+        raise not_found()
+    # One read of every goal, grouped in memory (never one query per user). Nothing here is stored or logged.
+    rows = field_demand.compute(
+        db.find("goals"), lambda f: len(match_references(f, "")), field_demand.min_users()
+    )
+    return AdminFieldDemandResponse(min_users=field_demand.min_users(), items=rows)
 
 
 # 9. User Profile & Data Deletion
