@@ -7,10 +7,16 @@ the in-memory store.
 import pytest
 from fastapi.testclient import TestClient
 
-from datetime import date
+from datetime import date, timedelta
 
 import clock
 from tests.conftest import auth_headers
+
+def _monday(weeks_ago: int = 0) -> str:
+    """Monday of this week (Asia/Seoul) or of an earlier week. Dates are relative to the service clock so the
+    tests keep passing when the week (or the year) changes."""
+    return (clock.week_monday(clock.today()) - timedelta(weeks=weeks_ago)).isoformat()
+
 
 GOAL = {
     "field": "Python 개발",
@@ -20,7 +26,7 @@ GOAL = {
     "target_level_order": 3,
     "target_level_name": "실무 기초",
     "weekly_hours": 7,
-    "target_date": "2026-12-31",
+    "target_date": (clock.today() + timedelta(days=120)).isoformat(),
 }
 
 
@@ -31,7 +37,7 @@ def _make_goal(client: TestClient, headers: dict) -> dict:
 def _make_task(client: TestClient, headers: dict, goal_id: str, **overrides) -> dict:
     payload = {
         "goal_id": goal_id,
-        "plan_week_start": "2026-10-19",
+        "plan_week_start": _monday(),
         "title": "반복문 연습",
         "estimated_minutes": 60,
         **overrides,
@@ -42,7 +48,7 @@ def _make_task(client: TestClient, headers: dict, goal_id: str, **overrides) -> 
 def _log_payload(task_id: str, **overrides) -> dict:
     return {
         "task_id": task_id,
-        "study_date": "2026-10-19",
+        "study_date": _monday(),
         "minutes": 30,
         "activity": "for문 예제 5개 풀이",
         **overrides,
@@ -169,17 +175,17 @@ class TestStudyLogValidation:
 
     def test_started_after_ended_rejected(self, client: TestClient, consented_headers, goal_and_task):
         _, task = goal_and_task
-        payload = _log_payload(task["id"], started_at="2026-10-19T10:00:00Z", ended_at="2026-10-19T09:00:00Z")
+        payload = _log_payload(task["id"], started_at=f"{_monday()}T10:00:00Z", ended_at=f"{_monday()}T09:00:00Z")
         assert client.post("/api/study-logs", json=payload, headers=consented_headers).status_code == 422
 
     def test_started_equal_ended_rejected(self, client: TestClient, consented_headers, goal_and_task):
         _, task = goal_and_task
-        payload = _log_payload(task["id"], started_at="2026-10-19T09:00:00Z", ended_at="2026-10-19T09:00:00Z")
+        payload = _log_payload(task["id"], started_at=f"{_monday()}T09:00:00Z", ended_at=f"{_monday()}T09:00:00Z")
         assert client.post("/api/study-logs", json=payload, headers=consented_headers).status_code == 422
 
     def test_only_one_of_started_ended_rejected(self, client: TestClient, consented_headers, goal_and_task):
         _, task = goal_and_task
-        payload = _log_payload(task["id"], started_at="2026-10-19T09:00:00Z")
+        payload = _log_payload(task["id"], started_at=f"{_monday()}T09:00:00Z")
         assert client.post("/api/study-logs", json=payload, headers=consented_headers).status_code == 422
 
     def test_valid_started_ended_with_user_supplied_minutes_kept_as_is(
@@ -188,7 +194,7 @@ class TestStudyLogValidation:
         # 열린 결정 2: minutes는 started_at/ended_at에서 자동 계산되지 않고 사용자 값을 그대로 저장한다.
         _, task = goal_and_task
         payload = _log_payload(
-            task["id"], minutes=5, started_at="2026-10-19T09:00:00Z", ended_at="2026-10-19T10:00:00Z"
+            task["id"], minutes=5, started_at=f"{_monday()}T09:00:00Z", ended_at=f"{_monday()}T10:00:00Z"
         )
         body = client.post("/api/study-logs", json=payload, headers=consented_headers).json()
         assert body["minutes"] == 5
@@ -459,7 +465,7 @@ class TestTimer:
         def fake_now_iso():
             # First call = start time, second = finish time (10 minutes later).
             start_instant["n"] += 1
-            return "2026-10-19T09:00:00Z" if start_instant["n"] == 1 else "2026-10-19T09:10:00Z"
+            return f"{_monday()}T09:00:00Z" if start_instant["n"] == 1 else f"{_monday()}T09:10:00Z"
 
         monkeypatch.setattr(main, "_now_iso", fake_now_iso)
         client.post("/api/timer/start", json={"task_id": task["id"]}, headers=consented_headers)
@@ -572,8 +578,8 @@ class TestDashboardSummary:
         import main
 
         _, task = goal_and_task
-        client.post("/api/study-logs", json=_log_payload(task["id"], study_date="2026-10-19", minutes=40), headers=consented_headers)
-        client.post("/api/study-logs", json=_log_payload(task["id"], study_date="2026-10-12", minutes=999), headers=consented_headers)
+        client.post("/api/study-logs", json=_log_payload(task["id"], study_date=_monday(), minutes=40), headers=consented_headers)
+        client.post("/api/study-logs", json=_log_payload(task["id"], study_date=_monday(1), minutes=999), headers=consented_headers)
 
         body = client.get("/api/dashboard/summary", headers=consented_headers).json()
         assert body["weekly_study_minutes"] == 40
@@ -601,8 +607,7 @@ class TestDashboardSummary:
         assert matching["record_count"] == 1
 
     def test_insight_insufficient_then_sufficient_after_enough_records(self, client: TestClient, consented_headers, goal_and_task, monkeypatch):
-        # The insight window is the last 14 days, so "today" is pinned next to the log dates (2026-10-19).
-        monkeypatch.setattr(clock, "today", lambda: date(2026, 10, 21))
+        # The insight window is the last 14 days; the logs are dated this Monday, so they are inside it.
         _, task = goal_and_task
         assert client.get("/api/dashboard/summary", headers=consented_headers).json()["insight"]["is_insufficient"] is True
 
@@ -644,7 +649,7 @@ class TestWeekBoundaryHandling:
 
     def test_period_week_excludes_last_weeks_log(self, client: TestClient, consented_headers, goal_and_task):
         _, task = goal_and_task
-        client.post("/api/study-logs", json=_log_payload(task["id"], study_date="2026-10-12"), headers=consented_headers)  # last Monday
+        client.post("/api/study-logs", json=_log_payload(task["id"], study_date=_monday(1)), headers=consented_headers)  # last Monday
         week_logs = client.get("/api/study-logs", params={"period": "week"}, headers=consented_headers).json()
         assert week_logs == []
         all_logs = client.get("/api/study-logs", params={"period": "all"}, headers=consented_headers).json()
