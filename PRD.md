@@ -253,6 +253,9 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 4. 튜터 대화마다 `GET /api/data/summary`로 인증된 사용자만의 학습 요약과 최근 회고(최대 5건)를 조회한다. 요약은 학습 목표·과제 진행·최근 학습 시간·회고의 제한된 요약만 포함하며 원문 전체 이력은 반환하지 않는다.
 5. 질문과 관련된 고정 자료를 검색하고, 데이터 요약·회고와 함께 시스템 프롬프트 맥락으로 구성한 뒤 LLM을 호출한다. 답변 완료 후 사용자 질문과 답변을 해당 대화 세션에 저장한다.
 
+### 데이터 흐름(튜터 요청)
+사용자 → Next.js 웹 → Firebase 인증 토큰이 포함된 요청 → FastAPI → 토큰 검증 및 UID 권한 확인 → `GET /api/data/summary`로 학습 요약·최근 회고 조회 → 관련 고정 자료 검색 → 요약·회고·자료를 시스템 프롬프트에 구성 → LLM 호출 → 사용자 질문·AI 답변을 conversations에 저장 → 웹 화면. 이전 대화는 세션 목록 API와 세션 상세 API로 불러온다.
+
 ### API 데이터 계약
 - 프론트엔드는 Firebase ID 토큰을 인증 헤더로 보내며, UID는 백엔드가 토큰에서 결정한다. 클라이언트가 전달한 UID를 권한 근거로 사용하지 않는다.
 - 튜터 컨텍스트용 `GET /api/data/summary`는 인증된 사용자 데이터만 집계해 `learning_summary`, `recent_reflections`를 반환한다. 최근 회고는 최대 5건이며 질문 키워드 일치 항목을 우선한다.
@@ -365,15 +368,15 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 
 ## 10. 기술 구현 기준안
 
-| 영역 | 선택 |
-|---|---|
-| Frontend | Next.js, TypeScript (Node.js LTS 버전은 착수 시 확인·고정) |
-| Backend | Python FastAPI; Firebase ID 토큰 검증·도메인 로직·Firestore 접근·AI 파이프라인 및 OpenAPI 문서 제공 |
-| 인증·DB | Firebase Authentication 익명 인증, Firestore |
-| AI | OpenAI API; 모델 ID는 환경설정으로 주입 |
-| RAG | 서버 배포물에 포함한 5~10개 자료, 시작 시 구성하는 메모리 내 벡터 인덱스 |
-| 배포 | Vercel Frontend, Render Backend |
-| 버전 관리 | GitHub |
+| 영역 | 선택 | 사용 목적 |
+|---|---|---|
+| Frontend | Next.js, TypeScript (Node.js LTS 버전은 착수 시 확인·고정) | 목표 입력, 학습 계획 편집, 오늘의 추천 과제, 대화 목록·이력·튜터 UI |
+| Backend | Python FastAPI; Firebase ID 토큰 검증·도메인 로직·Firestore 접근·AI 파이프라인 및 OpenAPI 문서 제공 | 인증 토큰 검증, 데이터 요약 API, 대화 저장·조회, AI 호출, 자료·회고 검색 |
+| 인증·DB | Firebase Authentication 익명 인증, Firestore | 사용자, 목표, 과업, 학습 기록, 회고, 대화 저장 및 익명 인증 |
+| AI | OpenAI API; 모델 ID는 환경설정으로 주입 | 학습 계획 생성과 컨텍스트 기반 튜터 응답 |
+| RAG | 서버 배포물에 포함한 5~10개 자료, 시작 시 구성하는 메모리 내 벡터 인덱스 | 작은 문서 집합에 대한 간단한 근거 검색 |
+| 배포 | Vercel Frontend, Render Backend | 외부 접속 가능한 웹 서비스 |
+| 버전 관리 | GitHub | 소스·문서·진행 이력 |
 
 선정 사유는 14일 안에 외부 배포와 사용자 테스트를 가능하게 하고 RAG·사용자별 메모리를 단일 웹 서비스 흐름에서 검증하기 위함이다. Frontend와 Backend는 REST API 계약을 경계로 독립 개발한다. Backend는 인증·UID 권한 검사, DTO 검증, 데이터 저장·집계, AI 호출과 OpenAPI 명세를 담당한다. Frontend는 화면·상태 관리, API 호출, 로딩·오류·재시도 UX를 담당하며 API 계약 변경은 양측이 함께 검토한다. 1일차에 Node.js·Python 버전, 패키지 관리자·가상환경, Git 저장소, Firebase/OpenAI/Vercel/Render 계정 접근과 로컬·배포 환경변수 이름을 점검하고 프론트·백엔드 최소 실행 골격을 구성한다. 실제 비밀값은 출력·커밋하지 않는다. ERD 및 논리 데이터 관계를 확정한 후 Firestore 컬렉션·필드·권한 규칙을 구현한다. 별도 벡터 DB, Make, CI 고도화 설정은 핵심 흐름이 완성된 뒤에만 추가 검토한다.
 
