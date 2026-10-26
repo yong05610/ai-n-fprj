@@ -38,7 +38,7 @@ flowchart LR
     P1(("P1<br/>프론트엔드<br/>(사용자 UI)"))
     P2(("P2<br/>백엔드<br/>DB 인터페이스"))
     P3(("P3<br/>백엔드<br/>AI 인터페이스"))
-    P4(("P4<br/>관리자 모듈<br/>(프론트+백엔드)"))
+    P4(("P4<br/>관리자 모듈<br/>(프론트+백엔드<br/>+수집용 AI)"))
 
     DU[["사용자·동의·피드백"]]
     DP[["학습 PLAN"]]
@@ -56,8 +56,6 @@ flowchart LR
 
     AD -->|"링크·주제 입력, 승인·반려, 사용자·피드백 조회·처리"| P4
     P4 -->|"후보 목록, 검사 결과, 통계, 사용자 현황, 피드백 목록"| AD
-    P4 -->|"AI 제안 요청(링크 제안, 분류 제안)"| P3
-    P3 -->|"검증된 AI 제안"| P4
 
     DU <-->|"동의 이력, 프로필, 피드백"| P2
     DP <-->|"학습 목표, 과제"| P2
@@ -80,7 +78,7 @@ flowchart LR
 읽는 법
 - **P1(프론트)은 저장소와 직접 만나지 않는다.** 데이터는 P2(DB), AI 기능은 P3(AI)를 거친다. **프론트가 P3 를 직접 요청**하며, **P2 가 P3 를 부르지 않는다**(P2→P3, P3→P2 흐름 없음).
 - **P3(AI)는 필요한 학습 데이터를 저장소에서 직접 읽고, 결과(대화·인사이트)를 저장소에 직접 쓴다**(코드와 같은 구조: AI API 함수가 저장소를 직접 부름).
-- **P4(관리자)는 AI 제안이 필요할 때 P3 에 요청**한다(AI 호출은 한 곳 `ai_client`).
+- **P4(관리자)는 수집용 AI(링크 제안, 분류·요약 제안)를 자기 안에 포함한다.** P3 에 요청하지 않으므로 P3↔P4 흐름은 없다. 수집용 AI 의 프롬프트·출력 스키마·규칙은 P4 가 소유하고, 공급자·재시도·검증을 담당하는 공통 AI 호출 부품(`ai_client`)은 P3 와 함께 쓴다(레벨 2 에서 `수집용 AI 호출` 내부 처리로 그림).
 - 기존 도면에는 **`resource_candidates` 와 참고자료 관리 API 7개가 없다**(Phase 8B 이전 기준). 이 초안에서 처음 넣었다.
 
 ## 4. API 배정표 (코드 `backend/main.py` 의 라우트 47개를 추출해 영역 배정, `GET /health` 는 별도)
@@ -90,7 +88,7 @@ flowchart LR
 |---|---|---|
 | P2 | DB 인터페이스 (31개 + health) | `POST /api/consent`, `GET·PATCH /api/user/profile`, `POST /api/user/delete-data`, `GET /health`, `POST /api/plan/confirm`, `GET·POST /api/goals`, `GET·PATCH·DELETE /api/goals/{id}`, `GET /api/goals/{id}/references`, `GET·POST /api/tasks`, `PATCH·DELETE /api/tasks/{id}`, `GET·POST /api/study-logs`, `PATCH·DELETE /api/study-logs/{id}`, `POST /api/timer/start·finish·cancel`, `GET /api/timer/active`, `GET /api/data/summary`, `GET /api/dashboard/summary`, `GET /api/analytics/overview`, `GET·POST /api/conversations`, `GET /api/conversations/{id}`, `GET /api/goals/{id}/insight`, `POST /api/feedback` |
 | P3 | AI 인터페이스 (5개) | `POST /api/path/ideas`, `POST /api/path/recommend`, `POST /api/plan/generate`, `POST /api/goals/{id}/insight`, `POST /api/conversations/{id}/messages` |
-| P4 | 관리자 (11개) | 참고자료: `GET /api/admin/resources/collectors`, `POST·GET /api/admin/resources/candidates`, `PATCH /api/admin/resources/candidates/{id}`, `POST /api/admin/resources/collect`, `GET /api/admin/resources/stats`, `GET /api/admin/resources/field-demand` / 사용자·피드백: `GET /api/admin/users`, `GET /api/admin/feedback`, `GET /api/admin/feedback/summary`, `PATCH /api/admin/feedback/{id}` |
+| P4 | 관리자 (11개, 수집용 AI 포함) | 참고자료: `GET /api/admin/resources/collectors`, `POST·GET /api/admin/resources/candidates`, `PATCH /api/admin/resources/candidates/{id}`, `POST /api/admin/resources/collect`, `GET /api/admin/resources/stats`, `GET /api/admin/resources/field-demand` / 사용자·피드백: `GET /api/admin/users`, `GET /api/admin/feedback`, `GET /api/admin/feedback/summary`, `PATCH /api/admin/feedback/{id}` |
 | P1 | 프론트엔드 | API 없음. 사용자 화면(동의 창, 내 정보·설정, 대시보드, 학습 경로 설정, 학습 과제 계획, 학습 실행 기록, 종합 학습 분석, AI 튜터, 서버 깨우기 화면)과 `lib/api.ts`(요청 재시도), 익명 로그인(Firebase 토큰) |
 
 경계에서 정해야 할 것(서비스기획서 9.2 와 같음): 튜터·인사이트처럼 AI 와 데이터에 걸치는 API 는 **AI 영역이 소유**하고 DB 영역이 제공하는 조회 함수를 쓴다.
@@ -99,11 +97,11 @@ flowchart LR
 - P1 = 화면 9개를 프로세스로(`P1.1` 동의 창 … `P1.9` 서버 깨우기 화면). 화면마다 어느 API(P2·P3)를 부르는지가 흐름이 된다(지금 3-3 표의 "호출하는 화면" 열을 뒤집은 것).
 - P2 = 위 31개 API 를 기능 묶음(계정·동의, 목표·과제, 기록·타이머, 요약·분석, 대화·피드백)별 그림으로. **기존 3-3-2~3-3-8 의 API 단위 그림과 저장소 정보 이름을 재사용**한다(번호만 바꿈).
 - P3 = 5개 API + 내부 처리 `AI 호출(용도별)`, `출력 검증`, `자료 검색(RAG)`, `주차 배치`.
-- P4 = 11개 API + 내부 처리 `링크 검사`, `메타데이터 읽기`, `AI 제안 요청`, 후보 상태 관리. 신규(8B) 저장소 `resource_candidates` 포함.
+- P4 = 11개 API + 내부 처리 `링크 검사`, `메타데이터 읽기`, `수집용 AI 호출`(분류 제안, 링크 제안), 후보 상태 관리. 신규(8B) 저장소 `resource_candidates` 포함.
 
 ## 6. 사용자 확인 필요
 1. 범례 변경(2): 레벨 1 터미널은 학습자·관리자, 화면은 P1 내부.
 2. **"NLM/NPM" 해석**: 논리 모델(저장소 5개 그룹)을 레벨 1 기준으로 한다는 뜻으로 이해했다. 다르면 알려 달라.
 3. 저장소 그룹 5개 이름과 묶음(위 3 표)이 적절한지.
-4. 관리자 영역 P4 에 사용자 관리·피드백 화면을 포함(서비스기획서 9.1 과 같은 가정).
+4. 관리자 영역 P4 에 사용자 관리·피드백 화면과 **수집용 AI**를 포함(서비스기획서 9.1 과 같음, 사용자 결정 2026-10-27).
 5. 번호: P1 프론트, P2 DB, P3 AI, P4 관리자.
