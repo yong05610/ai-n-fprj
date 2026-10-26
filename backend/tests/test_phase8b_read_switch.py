@@ -3,10 +3,12 @@ candidate/document storage layer. With the switch at its default nothing a learn
 
 import json
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 
+import clock
 import rag
 import resource_store
 import resources_catalog
@@ -179,7 +181,7 @@ class TestMergedMode:
         goal = client.post(
             "/api/goals",
             json={"field": "Rust 개발", "course": "소유권", "current_level_order": 1, "current_level_name": "입문",
-                  "target_level_order": 2, "target_level_name": "기초", "weekly_hours": 5, "target_date": "2027-03-31"},
+                  "target_level_order": 2, "target_level_name": "기초", "weekly_hours": 5, "target_date": (clock.today() + timedelta(days=120)).isoformat()},
             headers=consented_headers,
         ).json()
         before = client.get(f"/api/goals/{goal['id']}/references", headers=consented_headers).json()
@@ -242,7 +244,7 @@ class TestCacheAndFailure:
         goal = client.post(
             "/api/goals",
             json={"field": "Python 개발", "course": "기본문법", "current_level_order": 1, "current_level_name": "입문",
-                  "target_level_order": 2, "target_level_name": "기초", "weekly_hours": 5, "target_date": "2027-03-31"},
+                  "target_level_order": 2, "target_level_name": "기초", "weekly_hours": 5, "target_date": (clock.today() + timedelta(days=120)).isoformat()},
             headers=consented_headers,
         ).json()
         response = client.get(f"/api/goals/{goal['id']}/references", headers=consented_headers)

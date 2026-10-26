@@ -8,13 +8,14 @@ A link passes only when all of these hold; the first failure ends the check with
                multicast, IPv4-mapped/6to4/Teredo/NAT64 IPv6 are refused)
  4 connection  the TLS connection goes to the address that was checked, never to a second DNS
                answer (DNS rebinding); Host and SNI stay the original host name
- 5 limits      3 s to connect, 8 s in total, only the first 128 KB of the body is read
+ 5 limits      3 s to connect, 8 s in total (DNS waits, every hop and every read count against it),
+               only the first 128 KB of the body is read
  6 redirects   never followed automatically; at most 3 by hand and each hop repeats 1-5
  7 response    status 200 and Content-Type text/html
  8 duplicate   same normalized URL as a live candidate or a catalog document
 
-The two outside-world functions, `resolve_host` (DNS) and `fetch_head` (the request), are passed in
-by argument so that tests replace them; nothing here logs a URL, a page or a title - only codes.
+The two outside-world functions, `resolve_host` (DNS, given the time it may take) and `fetch_head`
+(the request), are passed in by argument so that tests replace them; nothing here logs a URL, a page or a title - only codes.
 """
 
 import http.client
@@ -27,10 +28,10 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass, field
 from typing import Callable, Optional
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from page_metadata import PageMetadata, extract_metadata
-from resource_urls import allowed_domains, normalize_url
+from resource_urls import allowed_domains, is_tracking_param, normalize_url
 
 logger = logging.getLogger("pacemate.resources.check")
 
@@ -84,6 +85,7 @@ class LinkCheckResult:
     ok: bool
     code: Optional[str]
     url: str  # normalized address that was checked ("" when it could not be parsed)
+    link: str = ""  # the cleaned address to keep (see ParsedUrl.link)
     final_url: Optional[str] = None  # after redirects, when different
     domain: Optional[str] = None
     source_name: Optional[str] = None
@@ -99,6 +101,7 @@ class ParsedUrl:
     target: str  # path and query as sent on the request line
     normalized: str
     absolute: str  # https://host + target, used to resolve a relative redirect
+    link: str  # the address to show and keep: no fragment, no tracking parameters, trailing '/' kept
 
 
 def parse_url(raw: str) -> ParsedUrl:
@@ -125,7 +128,12 @@ def parse_url(raw: str) -> ParsedUrl:
         raise CheckRejected(NOT_ALLOWED_DOMAIN)
     target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
     absolute = f"https://{host}{target}"
-    return ParsedUrl(host=host, target=target, normalized=normalize_url(absolute), absolute=absolute)
+    return ParsedUrl(host=host, target=target, normalized=normalize_url(absolute), absolute=absolute, link=clean_link(host, parts))
+
+
+def clean_link(host: str, parts) -> str:
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not is_tracking_param(k)])
+    return f"https://{host}{parts.path or '/'}" + (f"?{query}" if query else "")
 
 
 # --- 3: addresses ---------------------------------------------------------------------------
@@ -147,10 +155,10 @@ def is_public_ip(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
     )
 
 
-def _public_addresses(host: str, resolver: Callable[[str], list[str]]) -> list[str]:
+def _public_addresses(host: str, resolver: Callable[[str, float], list[str]], timeout: float) -> list[str]:
     """Check 3. Every address of the answer must be public; one private address refuses the host."""
     try:
-        answers = list(resolver(host))
+        answers = list(resolver(host, timeout))
     except (TimeoutError, FutureTimeout):
         raise CheckRejected(TIMEOUT)
     except Exception:
@@ -176,7 +184,11 @@ _dns_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="resource-dns")
 def resolve_host(host: str, timeout: float = CONNECT_TIMEOUT_SECONDS) -> list[str]:
     """DNS answer (all addresses) of `host`, within `timeout` seconds."""
     future = _dns_pool.submit(socket.getaddrinfo, host, 443, 0, socket.SOCK_STREAM)
-    infos = future.result(timeout=timeout)
+    try:
+        infos = future.result(timeout=timeout)
+    except FutureTimeout:
+        future.cancel()  # a lookup still waiting for a free worker is dropped, so stuck lookups do not pile up work
+        raise
     return [info[4][0] for info in infos]
 
 
@@ -307,19 +319,19 @@ def is_known_url(normalized: str) -> bool:
 def check_link(
     url: str,
     *,
-    resolver: Callable[[str], list[str]] = resolve_host,
+    resolver: Callable[[str, float], list[str]] = resolve_host,
     fetcher: Callable[..., FetchedPage] = fetch_head,
     is_duplicate: Callable[[str], bool] = is_known_url,
     clock: Callable[[], float] = time.monotonic,
 ) -> LinkCheckResult:
     """Run checks 1-8 on `url`; never raises, never logs more than the result code."""
     checks: dict[str, str] = {}
-    shown_url, domain, final_url, metadata = "", None, None, None
+    shown_url, shown_link, domain, final_url, metadata = "", "", None, None, None
     stage = "format"
     try:
         deadline = clock() + TOTAL_TIMEOUT_SECONDS
         current = parse_url(url)
-        shown_url, domain = current.normalized, current.host
+        shown_url, shown_link, domain = current.normalized, current.link, current.host
         checks.update(format="pass", domain="pass")
         stage = "duplicate"
         if is_duplicate(current.normalized):
@@ -330,7 +342,13 @@ def check_link(
         redirects = 0
         while True:
             stage = "address"
-            addresses = _public_addresses(current.host, resolver)
+            left = deadline - clock()
+            if left <= 0:
+                raise CheckRejected(TIMEOUT)
+            # the DNS wait counts against the same total as the request (and is capped like a connect)
+            addresses = _public_addresses(current.host, resolver, min(CONNECT_TIMEOUT_SECONDS, left))
+            if clock() >= deadline:
+                raise CheckRejected(TIMEOUT)
             checks["address"] = "pass"
             stage = "fetch"
             page = _fetch_from_any(current.host, addresses, current.target, deadline, clock, fetcher)
@@ -365,6 +383,7 @@ def check_link(
             ok=True,
             code=None,
             url=shown_url,
+            link=shown_link,
             final_url=final_url,
             domain=domain,
             source_name=allowed_domains()[domain],
@@ -376,4 +395,6 @@ def check_link(
     except CheckRejected as rejected:
         checks[stage] = rejected.code
         logger.info("link check rejected (code=%s, stage=%s)", rejected.code, stage)
-        return LinkCheckResult(ok=False, code=rejected.code, url=shown_url, final_url=final_url, domain=domain, checks=checks)
+        return LinkCheckResult(
+            ok=False, code=rejected.code, url=shown_url, link=shown_link, final_url=final_url, domain=domain, checks=checks
+        )

@@ -16,7 +16,7 @@ _ALLOWED_DOMAINS_PATH = os.path.join(os.path.dirname(__file__), "data", "allowed
 _TRACKING_PARAMS = frozenset({"fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "ref_src"})
 
 
-def _is_tracking(name: str) -> bool:
+def is_tracking_param(name: str) -> bool:
     lowered = name.lower()
     return lowered.startswith("utm_") or lowered in _TRACKING_PARAMS
 
@@ -34,7 +34,7 @@ def normalize_url(url: str) -> str:
         return text.lower()
     if not parts.scheme or not parts.netloc:
         return text.lower()
-    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not _is_tracking(k)])
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if not is_tracking_param(k)])
     path = parts.path.rstrip("/")
     return f"{parts.scheme.lower()}://{parts.netloc.lower()}{path}" + (f"?{query}" if query else "")
 

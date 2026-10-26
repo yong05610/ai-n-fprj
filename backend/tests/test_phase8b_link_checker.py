@@ -7,6 +7,7 @@ import http.client
 import logging
 import socket
 import ssl
+import time
 
 import pytest
 
@@ -52,9 +53,11 @@ class Net:
         self.web = web or {}
         self.dns = dns or {}
         self.resolved: list[str] = []
+        self.timeouts: list = []
         self.fetched: list[tuple[str, str, str]] = []  # (host, ip, target)
 
-    def resolve(self, host):
+    def resolve(self, host, timeout=None):
+        self.timeouts.append(timeout)
         self.resolved.append(host)
         answer = self.dns.get(host, [PUBLIC])
         if isinstance(answer, Exception):
@@ -230,7 +233,7 @@ class TestDnsRebinding:
         answers = [[PUBLIC], ["127.0.0.1"], ["169.254.169.254"]]  # a second lookup would return a private address
 
         class Rebinder(Net):
-            def resolve(self, host):
+            def resolve(self, host, timeout=None):
                 self.resolved.append(host)
                 return answers[len(self.resolved) - 1]
 
@@ -530,6 +533,64 @@ class TestLimits:
 
         assert check_link("https://docs.python.org/", resolver=net.resolve, fetcher=slow, is_duplicate=lambda n: False).code == TIMEOUT
         assert calls == [PUBLIC]
+
+
+class TestDnsTime:
+    """The DNS wait is part of the same 8 seconds as the request (it used to be added per hop)."""
+
+    class SlowDns(Net):
+        def __init__(self, clock, cost, **kw):
+            super().__init__(**kw)
+            self.clock, self.cost = clock, cost
+
+        def resolve(self, host, timeout=None):
+            self.clock.now += self.cost
+            return super().resolve(host, timeout)
+
+    def hops(self):
+        return {("docs.python.org", f"/{i}"): redirect(f"/{i + 1}") for i in range(3)} | {("docs.python.org", "/3"): page()}
+
+    def test_the_resolver_is_told_how_long_it_may_take_and_the_total_is_kept(self):
+        clock = Clock()
+        net = self.SlowDns(clock, 2.5, web=self.hops())
+        result = net.check("https://docs.python.org/0", clock=clock)
+        assert (result.ok, result.code) == (False, TIMEOUT)
+        assert net.timeouts == [3.0, 3.0, 3.0, 0.5]  # min(3 s, what is left of the 8 s)
+        assert len(net.fetched) == 3  # the fourth hop never got a request
+
+    def test_a_dns_answer_that_arrives_after_the_deadline_is_a_timeout(self):
+        clock = Clock()
+        net = self.SlowDns(clock, 9.0)
+        result = net.check("https://docs.python.org/", clock=clock)
+        assert result.code == TIMEOUT and net.fetched == []
+
+    def test_a_fast_dns_leaves_the_budget_alone(self):
+        clock = Clock()
+        net = self.SlowDns(clock, 0.1, web=self.hops())
+        assert net.check("https://docs.python.org/0", clock=clock).ok
+        assert net.timeouts == [3.0] * 4
+
+    def test_stuck_lookups_do_not_hang_the_next_one_and_the_pool_recovers(self, monkeypatch):
+        import threading
+
+        release = threading.Event()
+        stuck = [link_checker._dns_pool.submit(release.wait, 30) for _ in range(4)]  # all four workers busy
+        lookups = []
+        monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: lookups.append(a) or [(2, 1, 6, "", (PUBLIC, 443))])
+        try:
+            started = time.monotonic()
+            with pytest.raises(TimeoutError):
+                link_checker.resolve_host("docs.python.org", timeout=0.2)
+            assert time.monotonic() - started < 2.0  # it gave up; it did not wait for the stuck workers
+            assert check_link("https://docs.python.org/", resolver=lambda h, t: link_checker.resolve_host(h, 0.2),
+                              fetcher=Net().fetch, is_duplicate=lambda n: False).code == TIMEOUT
+        finally:
+            release.set()
+            for future in stuck:
+                future.result(timeout=5)
+        assert lookups == []  # the two lookups that gave up were cancelled, they did not run later
+        assert link_checker.resolve_host("docs.python.org", timeout=2.0) == [PUBLIC]  # free again
+        assert len(lookups) == 1
 
 
 # --- 7. response ----------------------------------------------------------------------------
