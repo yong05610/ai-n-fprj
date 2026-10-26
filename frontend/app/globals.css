@@ -337,3 +337,18 @@ td { color: #586277; }
 
 /* Phase 7: server wake-up notice (same band style as the mode banner, fixed at the top of the gate) */
 .server-notice { position: fixed; top: 0; left: 0; right: 0; z-index: 50; justify-content: center; }
+
+/* Admin reference library (Phase 8B) */
+.resource-card { margin-bottom: 12px; }
+.resource-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
+.resource-title { font-size: 12px; overflow-wrap: anywhere; }
+.resource-url { margin: 3px 0 0; font-size: 9px; overflow-wrap: anywhere; }
+.resource-url a { color: var(--blue); }
+.resource-pills { display: flex; gap: 5px; flex-wrap: wrap; }
+.resource-desc { font-size: 10px; color: #555e73; line-height: 1.6; margin: 8px 0 4px; overflow-wrap: anywhere; }
+.resource-suggestion { margin: 8px 0; padding: 8px 10px; border-radius: 9px; background: #f6f7ff; }
+.resource-suggestion p { margin: 2px 0; overflow-wrap: anywhere; }
+.resource-tags { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; }
+.resource-checks { margin: 6px 0 0; }
+.resource-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.resource-form { margin-top: 10px; }

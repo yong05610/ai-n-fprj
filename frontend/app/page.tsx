@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminFeedbackScreen } from "@/components/AdminFeedbackScreen";
+import { AdminLibraryScreen } from "@/components/AdminLibraryScreen";
 import { AdminUsersScreen } from "@/components/AdminUsersScreen";
 import { AnalysisScreen } from "@/components/AnalysisScreen";
 import { useAuth } from "@/components/AuthProvider";
@@ -15,7 +16,7 @@ import { SettingsScreen } from "@/components/SettingsScreen";
 import { TutorScreen } from "@/components/TutorScreen";
 import { WeeklyPlanScreen } from "@/components/WeeklyPlanScreen";
 import { apiRequest } from "@/lib/api";
-import { type View, buildHash, parseHash } from "@/lib/viewHash";
+import { type View, buildHash, mustLeaveAdminView, parseHash } from "@/lib/viewHash";
 import { todayKSTLabel } from "@/lib/week";
 
 /**
@@ -37,13 +38,13 @@ const USER_NAV: NavEntry[] = [
   { view: "settings", icon: "⚙", label: "내 정보·설정" },
 ];
 
-// Phase 5E: the whole group is shown only to admins. Two entries are live, the other four
+// Phase 5E: the whole group is shown only to admins. Three entries are live, the other three
 // stay disabled with "준비 중" so they never look like working features.
 const ADMIN_NAV: NavEntry[] = [
   { view: null, icon: "▣", label: "운영 현황" },
   { view: "admin-users", icon: "♙", label: "사용자 관리" },
   { view: null, icon: "✧", label: "AI 생성 이력" },
-  { view: null, icon: "▧", label: "참고자료 관리" },
+  { view: "admin-library", icon: "▧", label: "참고자료 관리" },
   { view: "admin-feedback", icon: "♡", label: "사용자 피드백" },
   { view: null, icon: "⚙", label: "서비스 설정" },
 ];
@@ -108,7 +109,7 @@ export default function Home() {
   }, [status, session]);
 
   useEffect(() => {
-    if (isAdmin === false && view !== null && view.startsWith("admin-")) {
+    if (mustLeaveAdminView(isAdmin, view)) {
       setView("dashboard");
       window.history.replaceState(null, "", buildHash("dashboard"));
     }
@@ -264,6 +265,7 @@ export default function Home() {
               {current === "settings" && <SettingsScreen />}
               {current === "admin-users" && isAdmin === true && <AdminUsersScreen />}
               {current === "admin-feedback" && isAdmin === true && <AdminFeedbackScreen />}
+              {current === "admin-library" && isAdmin === true && <AdminLibraryScreen />}
             </div>
           )}
         </main>
