@@ -29,7 +29,7 @@
 | CR-003 | 2026-10-25 | 영어로 입력하면 AI 추천이 영어로 나오는 문제 수정(프롬프트에 한국어 출력 지시) | PM 지시(화면 캡처 확인). **사용자 승인 2026-10-26: "일단 한국어로 한정"**(AI 출력은 한국어만, 이후 다국어는 별도 변경) | 백엔드 `prompts.py` | **검증(배포대기)** — 개발 f014c4d(로컬), PM 승인(직무 예시·과정 추천) | pytest 1264건, 실제 OpenAI 12회 중 영어 응답 0회(수정 전에는 호출마다 절반이 영어). **계획 생성은 PM 미검증**, 배포 환경 미검증, 새 공급자는 CR-006 때 재확인 | docs/ops_fix_instructions_korean_output.md, docs/ops_fix_report_korean_output.md, docs/ops_verification_korean_output.md |
 | CR-004 | 2026-10-25 | **참고자료 수집·승인(관리자)**: 수집기 2종(직접 링크, AI 주제 제안), 자동 링크 검사(SSRF 방어), AI 제안(프롬프트 주입 방어), 승인·반려, 읽기 경로 스위치(`RESOURCE_READ_SOURCE`, 기본 file), 분야 수요 집계(기본 꺼짐) — 내부 이름 Phase 8B | 사용자 결정 | PRD FR-08, 서비스기획서 5.4, ERD 규칙, 새 컬렉션 `resource_candidates`, 새 환경변수, 관리자 화면 | 검증(배포대기) | 백엔드·API는 PM 승인(종단 시험 38건, SSRF 시험 88건, 테스트 1251건). **관리자 화면은 PM 미확인(사용자 확인 필요), Render 소요 시간·Firestore 실연동·보안 규칙 배포·모바일 미검증**, 실제 OpenAI 3회는 개발팀 보고 | docs/phase8b_design.md, docs/phase8b_dev_prompt.md, docs/phase8b_report_ab.md, docs/phase8b_report.md, docs/phase8b_report_fix.md, docs/phase8b_verification_ab.md, docs/phase8b_verification.md |
 | CR-005 | 2026-10-26 | **계정 승격(기기를 바꿔도 이어 쓰기)**: 사용자가 정한 암호만(방식 E, 안전장치 필수: 16자 이상 권장, 흔한 암호 거부, 느린 해시와 비밀값, IP별·전체 시도 제한) | 사용자 결정(PM 은 B 또는 D 를 권장했고 위험은 문서에 기록) | 새 인증 흐름, 새 컬렉션(`credentials` 안), 동의 문구, 사용자 데이터 삭제 | 설계(구현은 **설문 이후**) | 미검증. 암호 규칙(16자 vs 8자) **사용자 확인 대기**, 법적 확인 미완 | docs/auth_upgrade_design.md |
-| CR-006 | 2026-10-26 | **AI 공급자 확장**: 기관 발급 GPT(Azure OpenAI 등)와 Gemini 키로 접속, 공급자 장애 시 자동 대체, 기능별 순서(튜터 전용 키 분리 포함) — 내부 이름 Phase 8C | 사용자 결정(자동 대체 선택) | `ai_client.py`, 환경변수, 동의 문구(AI 제공자·해외 처리), 비용·시간 예산 | 승인대기(설계 초안) | 미검증. **기관 키 사용 조건(외부 테스터 허용 여부), 기관 GPT 세부, Gemini 키 종류, 동의 문구 확인 대기** | docs/phase8c_ai_providers.md |
+| CR-006 | 2026-10-26 | **AI 공급자 확장**: 기관 발급 OpenAI·Gemini 일반 키로 접속(기관 키 먼저, 실패 시 정식 키), 공급자 장애 시 자동 대체, 기능별 순서(튜터 전용 키 분리 포함) — 내부 이름 Phase 8C | 사용자 결정(자동 대체 선택) | `ai_client.py`, 환경변수, 동의 문구(AI 제공자·해외 처리), 비용·시간 예산 | 설계 확정, 개발 지시 대기(2026-10-26: 기관 키는 일반 OpenAI·Gemini 키, 외부 테스터 사용 가능은 사용자 확인, Azure 전용 구현 불필요) | 미검증. 기관 키 모델 허용·한도, Gemini 쓸 때의 동의 문구(사용자는 불필요 의견, PM 은 v1.2 권장) 결정 대기 | docs/phase8c_ai_providers.md |
 | CR-007 | 2026-10-26 | **튜터 전용 OpenAI 키 분리** | 사용자 요청 | — | 흡수(CR-006) | — | docs/ops_fix_instructions_tutor_key.md(대체됨) |
 | CR-008 | 2026-10-26 | **동의 문구 v1.2**(개별 변경에 걸린 공통 선행 조건): ① 분야별 통계 집계 안내(CR-004 의 분야 수요를 켜기 전), ② AI 제공자·해외 처리 안내(CR-006 새 공급자를 순서에 넣기 전), ③ 계정 승격 안내(CR-005) | PM 정리(사용자 승인 필요) | 프론트 동의 모달, `CURRENT_TERMS_VERSION`(올리면 **기존 전원 재동의**), 법적 확인 | 요청 | 미검증. 문구 초안과 사용자 승인 대기, 법적 확인 미완. 테스터 초대 전에 **한 번에** 올리는 것이 부담이 적다 | docs/phase8b_verification.md(동의 문구 확인 결과), docs/auth_upgrade_design.md, docs/phase8c_ai_providers.md §5 |
 
@@ -43,8 +43,8 @@
 |---|---|---|
 | 1 | push·배포 시점 | CR-004 |
 | 2 | 암호 규칙: 16자 이상(PM 권장) vs 8자 | CR-005 |
-| 3 | 기관 키 사용 조건과 접속 정보 확인(안내문) | CR-006 |
-| 4 | 동의 문구 v1.2 승인 | CR-008 |
+| 3 | 기관 키 한도·기간·허용 모델 확인, `OPENAI_API2_KEY`/`GEMINI_API2_KEY` 입력 | CR-006 |
+| 4 | 동의 문구 v1.2 승인(Gemini 를 쓰기 전. 사용자는 불필요 의견, PM 은 한 줄 권장) | CR-008 |
 | 5 | 시험 수집의 처음 분야 | CR-004 |
 
 ## 6. 새 변경을 추가하는 방법
