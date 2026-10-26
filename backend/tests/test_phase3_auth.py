@@ -1,5 +1,8 @@
 """Phase 3 (AUTH): consent gate, token-derived UID, ownership, goal/task CRUD, data deletion."""
 
+from datetime import timedelta
+
+import clock
 from fastapi.testclient import TestClient
 
 from tests.conftest import auth_headers
@@ -13,7 +16,7 @@ GOAL = {
     "target_level_order": 3,
     "target_level_name": "실무 기초",
     "weekly_hours": 7,
-    "target_date": "2026-12-31",
+    "target_date": (clock.today() + timedelta(days=120)).isoformat(),  # relative: a fixed date stops being "in the future"
 }
 
 
