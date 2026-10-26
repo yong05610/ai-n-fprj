@@ -1,0 +1,138 @@
+[
+  {
+    "domain": "docs.python.org",
+    "source_name": "Python 공식 문서"
+  },
+  {
+    "domain": "developer.mozilla.org",
+    "source_name": "MDN Web Docs (Mozilla)"
+  },
+  {
+    "domain": "www.w3schools.com",
+    "source_name": "W3Schools"
+  },
+  {
+    "domain": "git-scm.com",
+    "source_name": "Git 공식 문서 (git-scm.com)"
+  },
+  {
+    "domain": "nextjs.org",
+    "source_name": "Next.js 공식 문서"
+  },
+  {
+    "domain": "fastapi.tiangolo.com",
+    "source_name": "FastAPI 공식 문서"
+  },
+  {
+    "domain": "ko.javascript.info",
+    "source_name": "javascript.info"
+  },
+  {
+    "domain": "web.dev",
+    "source_name": "Google web.dev"
+  },
+  {
+    "domain": "www.typescriptlang.org",
+    "source_name": "TypeScript 공식 문서"
+  },
+  {
+    "domain": "ko.react.dev",
+    "source_name": "React 공식 문서"
+  },
+  {
+    "domain": "vuejs.org",
+    "source_name": "Vue.js 공식 문서"
+  },
+  {
+    "domain": "tailwindcss.com",
+    "source_name": "Tailwind CSS 공식 문서"
+  },
+  {
+    "domain": "www.theodinproject.com",
+    "source_name": "The Odin Project"
+  },
+  {
+    "domain": "roadmap.sh",
+    "source_name": "roadmap.sh"
+  },
+  {
+    "domain": "nodejs.org",
+    "source_name": "Node.js 공식"
+  },
+  {
+    "domain": "expressjs.com",
+    "source_name": "Express 공식 문서"
+  },
+  {
+    "domain": "dev.java",
+    "source_name": "Dev.java (Oracle)"
+  },
+  {
+    "domain": "spring.io",
+    "source_name": "Spring 공식"
+  },
+  {
+    "domain": "docs.docker.com",
+    "source_name": "Docker Docs"
+  },
+  {
+    "domain": "www.postgresql.org",
+    "source_name": "PostgreSQL 공식 문서"
+  },
+  {
+    "domain": "sqlbolt.com",
+    "source_name": "SQLBolt"
+  },
+  {
+    "domain": "go.dev",
+    "source_name": "Go 공식"
+  },
+  {
+    "domain": "kotlinlang.org",
+    "source_name": "Kotlin 공식 문서"
+  },
+  {
+    "domain": "learn.microsoft.com",
+    "source_name": "Microsoft Learn"
+  },
+  {
+    "domain": "pandas.pydata.org",
+    "source_name": "pandas 공식 문서"
+  },
+  {
+    "domain": "numpy.org",
+    "source_name": "NumPy 공식 문서"
+  },
+  {
+    "domain": "scikit-learn.org",
+    "source_name": "scikit-learn 공식 문서"
+  },
+  {
+    "domain": "developers.google.com",
+    "source_name": "Google for Developers"
+  },
+  {
+    "domain": "www.opentutorials.org",
+    "source_name": "생활코딩 (opentutorials.org)"
+  },
+  {
+    "domain": "cs50.harvard.edu",
+    "source_name": "Harvard CS50"
+  },
+  {
+    "domain": "visualgo.net",
+    "source_name": "VisuAlgo"
+  },
+  {
+    "domain": "docs.github.com",
+    "source_name": "GitHub Docs"
+  },
+  {
+    "domain": "www.bbc.co.uk",
+    "source_name": "BBC"
+  },
+  {
+    "domain": "learningenglish.voanews.com",
+    "source_name": "Voice of America"
+  }
+]

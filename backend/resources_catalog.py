@@ -7,10 +7,16 @@ it); `chunks` is reserved for Phase 6's RAG index and unused here.
 """
 
 import json
+import logging
 import os
 import re
+import threading
+import time
 from functools import lru_cache
+from typing import Optional
 from urllib.parse import quote
+
+from resource_urls import normalize_url
 
 
 _CATALOG_PATH = os.path.join(os.path.dirname(__file__), "data", "rag_documents.json")
@@ -25,10 +31,102 @@ _TOKEN_PATTERN = re.compile(r"[a-z0-9]+|[가-힣]+")
 _MIN_MATCH_LENGTH = 3
 
 
+# RESOURCE_READ_SOURCE (Phase 8B): "file" (default) reads only the reviewed file, exactly as before;
+# "file+approved" also reads the admin-approved documents of Firestore `learning_documents`.
+READ_SOURCE_FILE = "file"
+READ_SOURCE_MERGED = "file+approved"
+APPROVED_CACHE_SECONDS = 60
+APPROVED_FAILURE_CACHE_SECONDS = 10  # a failed read is not retried on every request
+
+_approved_logger = logging.getLogger("pacemate.resources")
+_approved_lock = threading.Lock()
+_approved_cache: Optional[tuple[float, list[dict]]] = None  # (expires at, merged catalog)
+_monotonic = time.monotonic  # replaced in tests
+
+
+def read_source() -> str:
+    """Anything but exactly "file+approved" means "file": a typo never turns the new path on."""
+    value = os.getenv("RESOURCE_READ_SOURCE", READ_SOURCE_FILE).strip().lower()
+    return READ_SOURCE_MERGED if value == READ_SOURCE_MERGED else READ_SOURCE_FILE
+
+
 @lru_cache(maxsize=1)
-def load_catalog() -> list[dict]:
+def _load_file_catalog() -> list[dict]:
     with open(_CATALOG_PATH, "r", encoding="utf-8") as f:
         return [doc for doc in json.load(f) if doc.get("verified")]
+
+
+_APPROVED_TEXT_FIELDS = ("id", "title", "category", "source_name", "url")
+
+
+def _usable_approved_document(doc: dict) -> Optional[dict]:
+    """An approved document in the catalog's shape, or None when it is malformed.
+
+    Approved material is link-only whatever the stored record says: it never becomes RAG evidence.
+    """
+    if doc.get("verified") is not True:
+        return None
+    if not all(isinstance(doc.get(k), str) and doc[k].strip() for k in _APPROVED_TEXT_FIELDS):
+        return None
+    tags = doc.get("tags")
+    if not isinstance(tags, list) or not tags or not all(isinstance(t, str) for t in tags):
+        return None
+    if not doc["url"].startswith("https://"):
+        return None
+    return {
+        "id": doc["id"],
+        "title": doc["title"],
+        "category": doc["category"],
+        "source_name": doc["source_name"],
+        "url": doc["url"],
+        "tags": tags,
+        "license": doc.get("license") or "링크만 제공",
+        "verified": True,
+        "verified_at": doc.get("verified_at"),
+        "link_only": True,
+        "chunks": [],
+    }
+
+
+def _merge_approved(files: list[dict]) -> list[dict]:
+    from resource_store import list_approved_documents  # not needed (nor imported) in "file" mode
+
+    taken_urls = {normalize_url(d["url"]) for d in files}
+    taken_ids = {d["id"] for d in files}
+    merged = list(files)
+    for raw in sorted(list_approved_documents(), key=lambda d: str(d.get("id"))):
+        doc = _usable_approved_document(raw)
+        if doc is None or doc["id"] in taken_ids or normalize_url(doc["url"]) in taken_urls:
+            continue  # the file's document wins for the same URL
+        taken_ids.add(doc["id"])
+        taken_urls.add(normalize_url(doc["url"]))
+        merged.append(doc)
+    return merged
+
+
+def invalidate_approved_cache() -> None:
+    """Called right after an approval so the new link shows up without waiting for the cache."""
+    global _approved_cache
+    with _approved_lock:
+        _approved_cache = None
+
+
+def load_catalog() -> list[dict]:
+    files = _load_file_catalog()
+    if read_source() != READ_SOURCE_MERGED:
+        return files
+    global _approved_cache
+    with _approved_lock:
+        now = _monotonic()
+        if _approved_cache is not None and now < _approved_cache[0]:
+            return _approved_cache[1]
+        try:
+            catalog, ttl = _merge_approved(files), APPROVED_CACHE_SECONDS
+        except Exception as exc:  # the learner never sees an error because of the optional source
+            _approved_logger.warning("approved resources unavailable (%s); using the reviewed file only", type(exc).__name__)
+            catalog, ttl = files, APPROVED_FAILURE_CACHE_SECONDS
+        _approved_cache = (now + ttl, catalog)
+        return catalog
 
 
 def _category_parts(doc: dict) -> tuple[str, str]:
