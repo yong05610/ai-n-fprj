@@ -211,5 +211,5 @@ erDiagram
 - `learning_documents`(Firestore): 승인된 자료만 넣는다. **후보를 이 컬렉션에 넣지 않는다.** Firestore 보안 규칙이 이 컬렉션을 누구나 읽게 두기 때문이다(`firebase/firestore.rules`). `resource_candidates` 는 규칙의 "그 밖의 컬렉션"에 해당해 클라이언트 읽기도 막힌다.
 - 읽기 경로는 환경변수 스위치로 정하며 **기본값은 파일**이다. 스위치를 바꾸기 전에는 사용자에게 보이는 자료가 달라지지 않는다.
 - 분야별 집계(관리자 화면)는 저장하지 않고 요청마다 계산하는 읽기 전용 값이다(UID, 입력 원문 없음, 최소 사용자 수 미만 분야 숨김). 별도 컬렉션을 만들지 않는다.
-- 후보에는 ERD 도형에 없는 보조 필드가 있다(설계 docs/phase8b_design.md §3-5): `description`(메타데이터 설명, 잘린 값), `approved_document_id`, `client_request_id`. 처리자(`reviewed_by`)와 승인자(`approved_by`)는 관리자 UID 가 아니라 문자열 `"admin"`/`"system"` 이다.
+- 후보에는 ERD 도형에 없는 보조 필드가 있다(설계 docs/phase8b_design.md §3-5, 구현 검증 docs/phase8b_verification.md): `description`(메타데이터 설명, 잘린 값), `approved_document_id`, `client_request_id`, `collector_run_id`(한 번의 수집 실행 묶음), `ai_status`(ok|failed|skipped|none), `admin_field`·`admin_course`(관리자가 준 분야·과정 힌트). 처리자(`reviewed_by`)와 승인자(`approved_by`)는 관리자 UID 가 아니라 문자열 `"admin"`/`"system"` 이다.
 - 수집기는 후보 링크만 만들고 후보에 `collector_type` 을 기록한다. 새 수집기를 추가해도 컬렉션 구조는 바꾸지 않는다.
