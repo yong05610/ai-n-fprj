@@ -232,6 +232,7 @@ class TestCollectors:
     def test_a_registered_collector_that_is_not_listed_is_still_off(self, client, admin, world, ai):
         class Extra(Collector):
             type, label = "extra_feed", "임시"
+            takes_topic = True
 
             def collect(self, params, ctx):
                 raise AssertionError("must not run")
@@ -757,6 +758,92 @@ class TestApproval:
         assert len(documents_in_store()) == 2 and resource_store.get_document(taken)["title"] == "남의 문서"
 
 
+# --- F1: "/" in field or course ------------------------------------------------------------
+
+class TestSlashInFieldAndCourse:
+    """The document category is written "field / course" and split at the first "/", so a "/" inside either part
+    would move the boundary (CI/CD / 파이프라인 reads as field "CI", course "CD / 파이프라인")."""
+
+    @pytest.mark.parametrize("changed", ["field", "course"])
+    @pytest.mark.parametrize("value", ["CI/CD", "빌드/배포", "/", "a / b"])
+    def test_an_ai_suggestion_with_a_slash_is_rejected_and_retried(self, client, admin, world, ai, changed, value):
+        world.add("docs.python.org", "/3/library/os.html")
+        ai.handler = lambda s, p, n: good_suggestion(p, **{changed: value}) if n == 1 else good_suggestion(p)
+        c = add_link(client, admin).json()["candidates"][0]
+        assert len(ai.suggest_calls()) == 2 and "/" not in c["ai_suggestion"]["field"] + c["ai_suggestion"]["course"]
+        assert "validation_feedback" in ai.calls[1][1]
+
+    def test_an_ai_that_keeps_using_a_slash_leaves_no_suggestion(self, client, admin, world, ai):
+        world.add("docs.python.org", "/3/library/os.html")
+        ai.handler = lambda s, p, n: good_suggestion(p, field="CI/CD")
+        c = add_link(client, admin).json()["candidates"][0]
+        assert c["status"] == "pending" and c["ai_suggestion"] is None and c["ai_status"] == "failed" and len(ai.suggest_calls()) == 3
+
+    @pytest.mark.parametrize("edits, field", [({"field": "CI/CD"}, "field"), ({"course": "빌드/배포"}, "course"), ({"field": "a/b", "course": "c"}, "field")])
+    def test_an_edit_with_a_slash_is_refused_and_nothing_is_written(self, client, admin, world, ai, edits, field):
+        c = pending_candidate(client, admin, world)
+        r = act(client, admin, c["id"], action="approve", edits=edits)
+        assert r.status_code == 422 and r.json()["detail"]["details"]["field"] == field and "/" in r.json()["detail"]["message"]
+        assert documents_in_store() == [] and get_store().get("resource_candidates", c["id"])["status"] == "pending"
+
+    def test_other_edit_fields_may_still_contain_a_slash(self, client, admin, world, ai):
+        c = pending_candidate(client, admin, world)
+        assert act(client, admin, c["id"], action="approve", edits={"title": "입출력 / 파일 다루기", "summary": "읽기/쓰기"}).status_code == 200
+
+    def test_the_category_of_an_approved_document_always_splits_cleanly(self, client, admin, world, ai):
+        c = pending_candidate(client, admin, world)
+        act(client, admin, c["id"], action="approve", edits={"field": "CI·CD", "course": "파이프라인"})
+        category = documents_in_store()[0]["category"]
+        assert category == "CI·CD / 파이프라인" and category.count("/") == 1
+
+    @pytest.mark.parametrize("path, body", [
+        ("/api/admin/resources/candidates", {"url": LINK, "field": "CI/CD"}),
+        ("/api/admin/resources/candidates", {"url": LINK, "course": "a/b"}),
+        ("/api/admin/resources/collect", {"field": "CI/CD", "course": "x", "count": 1}),
+        ("/api/admin/resources/collect", {"field": "x", "course": "a/b", "count": 1}),
+    ])
+    def test_a_slash_in_the_admin_hints_is_a_422_before_anything_runs(self, client, admin, world, ai, path, body):
+        r = client.post(path, json=body, headers=admin)
+        assert r.status_code == 422 and ai.calls == [] and world.resolved == [] and candidates_in_store() == []
+
+
+# --- F2: /collect only runs collectors that take a field and a course -----------------------
+
+class TestCollectEndpointCollectors:
+    @pytest.mark.parametrize("extra", [{}, {"field": "빈 주소"}])
+    def test_direct_link_through_collect_is_a_422_and_stores_nothing(self, client, admin, world, ai, extra):
+        r = collect(client, admin, collector="direct_link", count=1, **extra)
+        assert r.status_code == 422 and r.json()["detail"]["code"] == "VALIDATION_ERROR" and r.json()["detail"]["details"]["field"] == "collector"
+        assert candidates_in_store() == [] and world.resolved == [] and ai.calls == []
+        used = {i["type"]: i["used_today"] for i in client.get("/api/admin/resources/collectors", headers=admin).json()["items"]}
+        assert used["direct_link"] == 0  # the daily limit is not touched
+
+    def test_ai_topic_is_still_accepted_and_an_unknown_name_is_still_404(self, client, admin, world, ai):
+        ai.handler = topic_and_suggest(["https://evil.example.com/a"])
+        assert collect(client, admin, count=1).status_code == 201
+        assert collect(client, admin, collector="rss_feed").status_code == 404
+
+    def test_a_collector_that_does_not_take_a_topic_is_refused_even_when_registered_and_on(self, client, admin, world, ai, monkeypatch):
+        monkeypatch.setenv("COLLECTORS_ENABLED", "direct_link,ai_topic,test_url_only")
+
+        class UrlOnly(Collector):
+            type, label = "test_url_only", "주소 전용"
+
+            def collect(self, params, ctx):
+                raise AssertionError("must not run")
+
+        resource_collectors.register(UrlOnly())
+        try:
+            assert collect(client, admin, collector="test_url_only").status_code == 422
+        finally:
+            resource_collectors.unregister("test_url_only")
+        assert candidates_in_store() == []
+
+    def test_direct_link_with_a_blank_address_on_its_own_endpoint_is_still_recorded_as_a_rejection(self, client, admin, world, ai):
+        c = add_link(client, admin, url="   ").json()["candidates"][0]
+        assert c["status"] == "rejected" and c["reject_reason"] == "auto:bad_url"
+
+
 # --- lists ----------------------------------------------------------------------------------
 
 class TestLists:
@@ -840,6 +927,7 @@ class TestStats:
 
 class FeedCollector(Collector):
     type, label = "test_feed", "시험용 피드"
+    takes_topic = True
 
     def __init__(self, links):
         self.links = links
@@ -887,6 +975,7 @@ class TestNewCollectorUsesTheSameSteps:
 
         class Bad(Collector):
             type, label = "test_bad", "잘못된 수집기"
+            takes_topic = True
 
             def collect(self, params, ctx):
                 return [{"url": "https://docs.python.org/3/library/os.html", "status": "approved"}]

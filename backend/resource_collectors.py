@@ -52,6 +52,9 @@ class CollectorError(Exception):
 class Collector(ABC):
     type: str
     label: str
+    # True when the collector is run from /collect with a field, a course and a count (ai_topic).
+    # A collector that needs something else (direct_link needs an address) has its own endpoint.
+    takes_topic: bool = False
 
     @abstractmethod
     def collect(self, params: dict[str, Any], ctx: CollectorContext) -> list[CandidateLink]:
@@ -72,6 +75,7 @@ class AITopicCollector(Collector):
 
     type = "ai_topic"
     label = "AI 주제 제안"
+    takes_topic = True
 
     def collect(self, params: dict[str, Any], ctx: CollectorContext) -> list[CandidateLink]:
         if ctx.ai is None:

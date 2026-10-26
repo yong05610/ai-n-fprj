@@ -118,6 +118,9 @@ def _feedback(reason: str, message: str) -> AIRetryFeedback:
 
 def validate_suggestion(suggestion: AIResourceSuggestion, admin_field: str = "", admin_course: str = "") -> None:
     """Rules the server enforces on the AI's proposal; a violation is rejected, never patched."""
+    if "/" in suggestion.field or "/" in suggestion.course:
+        # the document category is "field / course" and is split at the first "/"
+        raise _feedback("slash_in_field_or_course", "field 와 course 에는 '/' 를 쓰지 마세요.")
     texts = [suggestion.field, suggestion.course, suggestion.level_label, suggestion.summary, *suggestion.tags]
     if any(_has_markup_or_url(t) for t in texts):
         raise _feedback("url_or_markup", "어떤 값에도 URL 이나 HTML 태그를 쓰지 마세요.")
@@ -271,7 +274,7 @@ def run_collection(
 
 # --- approval and rejection -----------------------------------------------------------------
 
-def _clean_edit(name: str, value: Any, limit: int, required: bool = True) -> str:
+def _clean_edit(name: str, value: Any, limit: int, required: bool = True, allow_slash: bool = True) -> str:
     if not isinstance(value, str):
         raise ResourceEditError(name, f"{name} 값이 올바르지 않습니다.")
     text = " ".join(value.split())
@@ -281,6 +284,8 @@ def _clean_edit(name: str, value: Any, limit: int, required: bool = True) -> str
         raise ResourceEditError(name, f"{name} 은(는) {limit}자 이하여야 합니다.")
     if _has_markup_or_url(text):
         raise ResourceEditError(name, f"{name} 에는 URL 이나 HTML 태그를 쓸 수 없습니다.")
+    if not allow_slash and "/" in text:
+        raise ResourceEditError(name, f"{name} 에는 '/' 를 쓸 수 없습니다. (분야 / 과정 표기를 나누는 글자입니다)")
     return text
 
 
@@ -311,8 +316,8 @@ def build_document_fields(candidate: dict[str, Any], edits: Optional[dict[str, A
     values = {**defaults, **{k: v for k, v in edits.items() if v is not None}}
     return {
         "title": _clean_edit("title", values["title"], TITLE_MAX),
-        "field": _clean_edit("field", values["field"], FIELD_MAX),
-        "course": _clean_edit("course", values["course"], COURSE_MAX),
+        "field": _clean_edit("field", values["field"], FIELD_MAX, allow_slash=False),
+        "course": _clean_edit("course", values["course"], COURSE_MAX, allow_slash=False),
         "level_label": _clean_edit("level_label", values["level_label"], LEVEL_MAX, required=False),
         "tags": _clean_tags(values["tags"]),
         "summary": _clean_edit("summary", values["summary"], SUMMARY_MAX, required=False),

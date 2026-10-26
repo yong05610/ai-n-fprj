@@ -807,6 +807,13 @@ class FeedbackStatusUpdate(BaseModel):
 
 # --- 11. Admin (Phase 8B): reference material collection and approval ---
 
+def _reject_slash(value):
+    """The reference category is written "field / course" and split at the first "/", so neither part may contain one."""
+    if value is not None and "/" in value:
+        raise ValueError("분야와 과정에는 '/' 를 쓸 수 없습니다.")
+    return value
+
+
 class AdminResourceCollectorItem(BaseModel):
     type: str
     label: str
@@ -830,15 +837,25 @@ class AdminResourceLinkRequest(BaseModel):
     note: Optional[str] = Field(None, max_length=100, description="메모(선택)")
     client_request_id: Optional[str] = Field(None, max_length=100, description="멱등 재시도 키")
 
+    @field_validator("field", "course")
+    @classmethod
+    def _no_slash(cls, value: Optional[str]) -> Optional[str]:
+        return _reject_slash(value)
+
 
 class AdminResourceCollectRequest(BaseModel):
-    """ai_topic 수집: 분야·과정·개수."""
+    """분야·과정·개수로 실행하는 수집기(ai_topic)."""
 
     collector: str = Field("ai_topic", min_length=1, max_length=40)
     field: str = Field(..., min_length=1, max_length=40)
     course: str = Field(..., min_length=1, max_length=60)
     count: int = Field(3, ge=1, le=5, description="요청할 링크 수 (1~5)")
     client_request_id: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("field", "course")
+    @classmethod
+    def _no_slash(cls, value: str) -> str:
+        return _reject_slash(value)
 
 
 class AdminResourceSuggestion(BaseModel):

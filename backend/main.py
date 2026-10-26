@@ -2535,6 +2535,10 @@ def admin_resource_collect(
     ai: AIClient = Depends(get_ai_client),
 ):
     params = {"field": payload.field.strip(), "course": payload.course.strip(), "count": payload.count}
+    collector = resource_collectors.get_collector(payload.collector)
+    if collector is not None and not collector.takes_topic:
+        # e.g. direct_link needs an address and has its own endpoint: nothing is run or stored here
+        raise api_error(422, "VALIDATION_ERROR", "이 수집기는 분야·과정으로 실행할 수 없습니다.", {"field": "collector"})
     return _run_resource_collection(
         db, ai, response, payload.collector, params, params["field"], params["course"], payload.client_request_id, payload.count
     )
