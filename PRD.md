@@ -235,7 +235,7 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 
 ### AI 사용처
 1. 자유 입력한 학습 분야와 목표를 세부 과정 및 분야별 수준 목록으로 구조화한다.
-2. 사용자가 선택한 과정·현재 수준·목표 수준과 주간 시간 제약을 주간 과업 계획으로 변환한다.
+2. 사용자가 선택한 과정·현재 수준·목표 수준과 주간 시간 제약을 전체 학습 과제 목록으로 변환한다(주차 배치는 서버, FR-02).
 3. 실행 기록과 회고를 요약해 개인 진행 인사이트를 생성한다.
 4. 튜터 대화마다 `GET /api/data/summary`로 인증된 사용자만의 학습 요약과 최근 회고(최대 5건)를 조회한다. 요약은 학습 목표·과제 진행·최근 학습 시간·회고의 제한된 요약만 포함하며 원문 전체 이력은 반환하지 않는다.
 5. 질문과 관련된 고정 자료를 검색하고, 데이터 요약·회고와 함께 시스템 프롬프트 맥락으로 구성한 뒤 LLM을 호출한다. 답변 완료 후 사용자 질문과 답변을 해당 대화 세션에 저장한다.
@@ -249,8 +249,8 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 
 ### 출력 검증
 - 과정·수준 응답은 과정 ID·이름·설명과 순서가 지정된 수준 ID·이름·설명으로 구성된 JSON으로 생성한다. 수준 이름은 분야에 맞게 만들고 순서는 화면에 번호 대신 내부 정렬값으로 보관한다.
-- 계획 응답은 주간 시작·종료일과 과업 배열로 구성한다. 각 과업은 제목, 설명, 예상 학습 시간(분), 선택적 추천 요일을 포함한다. 추천 요일은 계획 편의를 위한 제안이며 필수 예정일이 아니다.
-- 백엔드는 응답 스키마, 선택된 수준의 순서, 주간 시작·종료 범위, 주간 예상 시간 총량과 필수 필드를 검증하고 DB ID 및 기본 상태를 부여한다. 주간 경계는 월요일부터 일요일까지로 계산한다.
+- 계획 응답은 과제 배열(제목, 설명, 예상 학습 시간(분))과 조언 제목·내용으로 구성한다. 주차와 추천 요일은 AI 가 정하지 않고 서버가 배치·제안한다(FR-02). 추천 요일은 계획 편의를 위한 제안이며 필수 예정일이 아니다.
+- 백엔드는 응답 스키마, 선택된 수준의 순서, 과제 수(3~60), 제목 중복, 총 예상 시간(가용 시간 이하)과 필수 필드를 검증하고 task ID, 주차 배치, 추천 요일, 기본 상태를 부여한다. 주간 경계는 월요일부터 일요일까지로 계산한다.
 - 등록 자료가 없는 분야의 AI 계획은 생성할 수 있으나, RAG 근거가 확보된 것처럼 표현하지 않는다. 자료가 없으면 자료 미확보를 표시하고 사용자에게 확인 가능한 자료나 검색 키워드를 제안한다.
 - 오류 시 제한 횟수 내 재시도하고, 실패하면 입력 보존과 재시도 UI를 제공한다. AI API 키·모델 설정은 배포 전 확인하고, 로그에서는 민감정보를 제외한 오류 유형을 확인할 수 있어야 한다.
 - AI 생성 계획과 답변에 “AI가 생성한 내용이며 정확성을 확인해 주세요”를 표시한다.
@@ -276,6 +276,7 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 | study_logs | task_id, study_date, minutes, activity, started_at(선택), ended_at(선택), created_at, updated_at | UID 필드 필수 |
 | reflections | study_log_id, content, tags, created_at, updated_at | UID 필드 필수 |
 | conversations | UID, title, messages: [{ role, content, timestamp }], created_at, updated_at | UID 필드 필수; 본인만 읽기·변경 가능 |
+| feedback (FR-07) | usability(1~5), ai_usefulness(1~5), screen, comment(선택), status(new/seen/candidate/done), created_at, updated_at | **UID 없음**(식별 정보 저장 안 함, 삭제 요청으로 지워지지 않음), 관리자만 |
 | resource_candidates (FR-08) | url, source_domain, collector_type, collector_note, title, ai_suggestion, check_results, status(pending/approved/rejected), reviewed_by, reviewed_at, reject_reason | UID 없음, 관리자만, 서비스에 비노출 |
 | learning_documents (FR-08, 현재는 파일) | title, source_name, url, category, tags, summary, verified, approved_by, approved_at | 공용 읽기 전용, UID 없음, 승인된 것만 |
 
@@ -389,7 +390,7 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 - **후속 1 (MVP 안정화 후):** AI 튜터에 Function Calling 기반 도구 선택 흐름을 추가한다. 질문에 따라 서버가 본인 회고 조회 또는 고정 학습자료 검색 도구를 실행하고 결과를 모델에 돌려준다. 이 단계에서 Agent·Function Calling·RAG의 실행 구조를 학습·검증하며, 도구 호출은 읽기 전용·사용자 UID 서버 검증·호출 횟수 제한으로 통제한다.
 - **후속 2:** AI가 사용자별로 생성한 과정·수준의 관리자 검수와 공용 표준화(수요 확인 후), 일정 재조정 AI Agent, Make 리마인더, 퀴즈
 - **후속 3:** 뽀모도로·탭 복귀 안내, 학습 히트맵·통계
-- **후속 3:** 검증 자료 확대·업로드(관리자 수집·승인 최소판은 FR-08, 단계별 확대는 docs/resource_curation_roadmap.md), 계정 연동(docs/auth_upgrade_design.md), 멀티모달 학습
+- **후속 4:** 검증 자료 확대·업로드(관리자 수집·승인 최소판은 FR-08, 단계별 확대는 docs/resource_curation_roadmap.md), 계정 연동(docs/auth_upgrade_design.md), 멀티모달 학습
 - **장기 검토:** 스터디 그룹, 유료 모델, 교육기관 기능
 
 추가 기능은 MVP 테스트의 실제 수요와 팀의 개발 여건을 확인한 뒤 우선순위를 결정한다.
