@@ -28,6 +28,9 @@ from deploy_config import assert_safe_deploy_config
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import insight_rules
 import rag
+import resource_collectors
+import resource_pipeline
+import resource_store
 import schedule
 import tutor
 from prompts import (
@@ -92,6 +95,15 @@ from schemas import (
     FeedbackReceipt,
     AdminFeedbackItem,
     AdminFeedbackSummary,
+    AdminResourceCandidate,
+    AdminResourceCandidateAction,
+    AdminResourceCandidateListResponse,
+    AdminResourceCollectRequest,
+    AdminResourceCollectResponse,
+    AdminResourceCollectorItem,
+    AdminResourceCollectorsResponse,
+    AdminResourceLinkRequest,
+    AdminResourceStatsResponse,
     FeedbackStatusUpdate,
     ProfileUpdateRequest,
     DataDeleteResponse,
@@ -2414,6 +2426,180 @@ def admin_update_feedback(
     if doc is None:
         raise not_found()
     return db.update("feedback", feedback_id, {"status": payload.status, "updated_at": _now_iso()})
+
+
+# 9a. Reference material collection and approval (Phase 8B, admin only)
+RESOURCE_CANDIDATES_PAGE_SIZE = 50
+
+
+def _candidate_item(candidate: dict[str, Any]) -> AdminResourceCandidate:
+    return AdminResourceCandidate.model_validate(candidate)
+
+
+def _collect_response(candidates: list[dict[str, Any]], duplicates: int) -> AdminResourceCollectResponse:
+    return AdminResourceCollectResponse(
+        candidates=[_candidate_item(c) for c in candidates],
+        pending_count=sum(1 for c in candidates if c["status"] == "pending"),
+        auto_rejected_count=sum(1 for c in candidates if c["status"] == "rejected"),
+        duplicate_count=duplicates,
+    )
+
+
+def _resource_edit_error(exc: resource_pipeline.ResourceEditError) -> HTTPException:
+    return api_error(422, "VALIDATION_ERROR", str(exc), {"field": exc.field})
+
+
+def _run_resource_collection(
+    db, ai: AIClient, response: Response, collector_type: str, params: dict[str, Any],
+    admin_field: str, admin_course: str, request_id: Optional[str], requested: int,
+) -> AdminResourceCollectResponse:
+    """Shared by every collect endpoint: replay of a finished request, refusals, collector, common steps."""
+    if request_id:
+        prior = resource_store.find_candidates_by_request_id(request_id, db)
+        if prior:
+            response.status_code = status.HTTP_200_OK
+            return _collect_response(prior, 0)
+    try:
+        outcome = resource_pipeline.run_collection(
+            db, ai, collector_type, params, admin_field, admin_course, request_id, requested
+        )
+    except resource_pipeline.CollectionRefused as refused:
+        if refused.kind == "unknown":
+            raise api_error(status.HTTP_404_NOT_FOUND, "COLLECTOR_NOT_FOUND", "수집기를 찾을 수 없습니다.")
+        if refused.kind == "disabled":
+            raise api_error(status.HTTP_409_CONFLICT, "COLLECTOR_DISABLED", "꺼진 수집기입니다.")
+        raise api_error(status.HTTP_429_TOO_MANY_REQUESTS, "COLLECTOR_LIMIT", "오늘의 수집 한도에 도달했습니다.", refused.details)
+    except (AIUnavailableError, AITimeoutError, AISchemaError) as exc:
+        raise _ai_error_response(exc)
+    except resource_collectors.CollectorError:
+        raise api_error(status.HTTP_502_BAD_GATEWAY, "COLLECTOR_ERROR", "수집기가 결과를 만들지 못했습니다.")
+    response.status_code = status.HTTP_201_CREATED if outcome.candidates else status.HTTP_200_OK
+    return _collect_response(outcome.candidates, outcome.duplicates)
+
+
+@app.get(
+    "/api/admin/resources/collectors",
+    response_model=AdminResourceCollectorsResponse,
+    tags=["admin"],
+    summary="[관리자] 수집기 목록(켜짐 여부, 하루 상한, 오늘 사용량)",
+)
+def admin_resource_collectors(admin_uid: str = Depends(require_admin_uid), db=Depends(get_db)):
+    items = []
+    for collector_type in resource_collectors.registered_types():
+        collector = resource_collectors.get_collector(collector_type)
+        items.append(
+            AdminResourceCollectorItem(
+                type=collector_type,
+                label=collector.label,
+                enabled=resource_collectors.is_enabled(collector_type),
+                **resource_pipeline.usage(collector_type, db),
+            )
+        )
+    return AdminResourceCollectorsResponse(items=items)
+
+
+@app.post(
+    "/api/admin/resources/candidates",
+    response_model=AdminResourceCollectResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["admin"],
+    summary="[관리자] 링크 직접 입력(direct_link): 검사 → 메타데이터 → AI 제안 → 검토 대기 후보",
+)
+def admin_resource_add_link(
+    payload: AdminResourceLinkRequest,
+    response: Response,
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+    ai: AIClient = Depends(get_ai_client),
+):
+    return _run_resource_collection(
+        db, ai, response, "direct_link", {"url": payload.url, "note": payload.note or ""},
+        (payload.field or "").strip(), (payload.course or "").strip(), payload.client_request_id, 1,
+    )
+
+
+@app.post(
+    "/api/admin/resources/collect",
+    response_model=AdminResourceCollectResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["admin"],
+    summary="[관리자] 수집기로 후보 수집(기본 ai_topic: 분야·과정·개수). 걸러진 건수를 함께 돌려준다",
+)
+def admin_resource_collect(
+    payload: AdminResourceCollectRequest,
+    response: Response,
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+    ai: AIClient = Depends(get_ai_client),
+):
+    params = {"field": payload.field.strip(), "course": payload.course.strip(), "count": payload.count}
+    return _run_resource_collection(
+        db, ai, response, payload.collector, params, params["field"], params["course"], payload.client_request_id, payload.count
+    )
+
+
+@app.get(
+    "/api/admin/resources/candidates",
+    response_model=AdminResourceCandidateListResponse,
+    tags=["admin"],
+    summary="[관리자] 후보 목록(최신순, 50건 페이지)",
+)
+def admin_resource_list_candidates(
+    status_filter: str = Query("pending", alias="status", pattern="^(pending|approved|rejected|all)$"),
+    collector: Optional[str] = Query(None, max_length=40),
+    page: int = Query(1, ge=1),
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+):
+    rows = resource_store.list_candidates(None if status_filter == "all" else status_filter, collector or None, db)
+    start = (page - 1) * RESOURCE_CANDIDATES_PAGE_SIZE
+    return AdminResourceCandidateListResponse(
+        items=[_candidate_item(c) for c in rows[start : start + RESOURCE_CANDIDATES_PAGE_SIZE]],
+        total=len(rows),
+        page=page,
+        page_size=RESOURCE_CANDIDATES_PAGE_SIZE,
+    )
+
+
+@app.patch(
+    "/api/admin/resources/candidates/{candidate_id}",
+    response_model=AdminResourceCandidate,
+    tags=["admin"],
+    summary="[관리자] 후보 승인(수정 후 승인 포함) 또는 반려. 같은 처리를 다시 보내면 200, 반대 처리는 409",
+)
+def admin_resource_candidate_action(
+    candidate_id: str,
+    payload: AdminResourceCandidateAction,
+    admin_uid: str = Depends(require_admin_uid),
+    db=Depends(get_db),
+):
+    candidate = resource_store.get_candidate(candidate_id, db)
+    if candidate is None:
+        raise not_found()
+    target = "approved" if payload.action == "approve" else "rejected"
+    if candidate["status"] == target:
+        return _candidate_item(candidate)
+    if candidate["status"] != "pending":
+        raise api_error(status.HTTP_409_CONFLICT, "CANDIDATE_ALREADY_PROCESSED", "이미 다른 방식으로 처리된 후보입니다.")
+    try:
+        if payload.action == "approve":
+            edits = payload.edits.model_dump(exclude_unset=True) if payload.edits else None
+            updated = resource_pipeline.approve_candidate(db, candidate, edits)
+        else:
+            updated = resource_pipeline.reject_candidate(db, candidate, resource_pipeline.clean_reject_reason(payload.reject_reason))
+    except resource_pipeline.ResourceEditError as exc:
+        raise _resource_edit_error(exc)
+    return _candidate_item(updated)
+
+
+@app.get(
+    "/api/admin/resources/stats",
+    response_model=AdminResourceStatsResponse,
+    tags=["admin"],
+    summary="[관리자] 수집기별 후보·승인·반려·자동 반려 사유별 건수, 승인율, 등록→승인 소요 시간 중앙값",
+)
+def admin_resource_stats(admin_uid: str = Depends(require_admin_uid), db=Depends(get_db)):
+    return AdminResourceStatsResponse.model_validate(resource_pipeline.collect_stats(db))
 
 
 # 9. User Profile & Data Deletion

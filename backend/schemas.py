@@ -805,6 +805,124 @@ class FeedbackStatusUpdate(BaseModel):
     status: Literal["seen", "candidate", "done"] = Field(..., description="new 로 되돌리는 값은 허용하지 않는다")
 
 
+# --- 11. Admin (Phase 8B): reference material collection and approval ---
+
+class AdminResourceCollectorItem(BaseModel):
+    type: str
+    label: str
+    enabled: bool = Field(..., description="COLLECTORS_ENABLED 에 있으면 true. 꺼진 수집기는 호출하면 409")
+    daily_limit: int = Field(..., description="수집기 하나가 하루(Asia/Seoul)에 만들 수 있는 후보 수(자동 반려 포함)")
+    used_today: int
+    daily_run_limit: Optional[int] = Field(None, description="ai_topic 만: 하루 실행 횟수 상한")
+    runs_today: Optional[int] = None
+
+
+class AdminResourceCollectorsResponse(BaseModel):
+    items: List[AdminResourceCollectorItem]
+
+
+class AdminResourceLinkRequest(BaseModel):
+    """direct_link 수집: 링크 1개와 선택 입력."""
+
+    url: str = Field(..., min_length=1, max_length=4000, description="검토할 링크. 형식·도메인은 서버가 검사한다")
+    field: Optional[str] = Field(None, max_length=40, description="분야(선택). 주면 AI 제안이 이 값을 바꾸지 못한다")
+    course: Optional[str] = Field(None, max_length=60, description="과정(선택)")
+    note: Optional[str] = Field(None, max_length=100, description="메모(선택)")
+    client_request_id: Optional[str] = Field(None, max_length=100, description="멱등 재시도 키")
+
+
+class AdminResourceCollectRequest(BaseModel):
+    """ai_topic 수집: 분야·과정·개수."""
+
+    collector: str = Field("ai_topic", min_length=1, max_length=40)
+    field: str = Field(..., min_length=1, max_length=40)
+    course: str = Field(..., min_length=1, max_length=60)
+    count: int = Field(3, ge=1, le=5, description="요청할 링크 수 (1~5)")
+    client_request_id: Optional[str] = Field(None, max_length=100)
+
+
+class AdminResourceSuggestion(BaseModel):
+    field: str
+    course: str
+    level_label: str
+    tags: List[str]
+    summary: str
+    is_learning_resource: bool
+
+
+class AdminResourceCandidate(BaseModel):
+    id: str
+    url: str
+    source_domain: str
+    collector_type: str
+    collector_note: str = ""
+    title: str = ""
+    description: str = ""
+    ai_suggestion: Optional[AdminResourceSuggestion] = None
+    ai_status: Literal["ok", "failed", "skipped", "none"] = "none"
+    check_results: dict[str, str] = Field(default_factory=dict, description="검사 단계별 pass 또는 실패 코드")
+    status: Literal["pending", "approved", "rejected"]
+    reviewed_by: Optional[Literal["admin", "system"]] = None
+    reviewed_at: Optional[str] = None
+    reject_reason: Optional[str] = Field(None, description="자동 반려는 auto:<코드>, 관리자 반려는 입력한 사유")
+    approved_document_id: Optional[str] = None
+    admin_field: str = ""
+    admin_course: str = ""
+    created_at: str
+
+
+class AdminResourceCollectResponse(BaseModel):
+    candidates: List[AdminResourceCandidate]
+    pending_count: int
+    auto_rejected_count: int
+    duplicate_count: int = Field(..., description="이미 있는 링크라 저장하지 않은 건수")
+
+
+class AdminResourceCandidateListResponse(BaseModel):
+    items: List[AdminResourceCandidate]
+    total: int
+    page: int
+    page_size: int
+
+
+class AdminResourceEdits(BaseModel):
+    """수정 후 승인: 보낸 항목만 AI 제안·메타데이터 값을 대신한다."""
+
+    # The real limits (title 200, field 40, course 60, level 30, summary 120, 3~8 tags of 20) are checked
+    # by the server with a message that names the field; these caps only bound the request size.
+    title: Optional[str] = Field(None, max_length=1000)
+    field: Optional[str] = Field(None, max_length=1000)
+    course: Optional[str] = Field(None, max_length=1000)
+    level_label: Optional[str] = Field(None, max_length=1000)
+    tags: Optional[List[str]] = Field(None, max_length=50)
+    summary: Optional[str] = Field(None, max_length=2000)
+
+
+class AdminResourceCandidateAction(BaseModel):
+    action: Literal["approve", "reject"]
+    edits: Optional[AdminResourceEdits] = None
+    reject_reason: Optional[str] = Field(None, max_length=200, description="반려일 때 필수")
+
+
+class AdminResourceStatsEntry(BaseModel):
+    collector_type: Optional[str] = None
+    label: Optional[str] = None
+    total: int
+    pending: int
+    approved: int
+    rejected_by_admin: int
+    auto_rejected: int
+    auto_rejected_reasons: dict[str, int]
+    approval_rate: Optional[float] = Field(None, description="승인 / (승인 + 모든 반려). 처리된 후보가 없으면 null")
+    reviewed_approval_rate: Optional[float] = Field(None, description="승인 / (승인 + 관리자 반려)")
+    median_seconds_to_approve: Optional[float] = Field(None, description="등록 → 승인 소요 시간의 중앙값(초)")
+
+
+class AdminResourceStatsResponse(BaseModel):
+    overall: AdminResourceStatsEntry
+    collectors: List[AdminResourceStatsEntry]
+
+
 class DataDeleteResponse(BaseModel):
     status: str = "deleted"
     message: str = "사용자의 모든 학습 데이터 및 동의 기록이 성공적으로 삭제되었습니다."

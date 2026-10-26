@@ -393,6 +393,8 @@ def check_link(
         logger.info("link check passed (redirects=%d)", redirects)
         return result
     except CheckRejected as rejected:
+        if stage == "format" and rejected.code == NOT_ALLOWED_DOMAIN:
+            checks["format"], stage = "pass", "domain"  # one parser covers checks 1 and 2; say which one failed
         checks[stage] = rejected.code
         logger.info("link check rejected (code=%s, stage=%s)", rejected.code, stage)
         return LinkCheckResult(

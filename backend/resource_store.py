@@ -69,6 +69,12 @@ def find_candidate_by_request_id(client_request_id: str, db=None) -> Optional[di
     return rows[0] if rows else None
 
 
+def find_candidates_by_request_id(client_request_id: str, db=None) -> list[dict[str, Any]]:
+    """Every candidate one request created (a collection run makes several), oldest first."""
+    rows = (db or get_store()).find(CANDIDATES_COLLECTION, client_request_id=client_request_id)
+    return sorted(rows, key=lambda c: (c.get("created_at", ""), c["id"]))
+
+
 def find_live_candidate_by_url(url: str, db=None) -> Optional[dict[str, Any]]:
     """A pending or approved candidate with the same normalized URL (rejected ones do not count)."""
     wanted = normalize_url(url)
@@ -84,6 +90,12 @@ def count_candidates_created_on(day: date, collector_type: Optional[str] = None,
     filters = {"collector_type": collector_type} if collector_type else {}
     rows = (db or get_store()).find(CANDIDATES_COLLECTION, **filters)
     return sum(1 for c in rows if c.get("created_at") and clock.date_from_utc_iso(c["created_at"]) == day)
+
+
+def count_runs_created_on(day: date, collector_type: str, db=None) -> int:
+    """Collection runs of one collector on a Asia/Seoul day, counted by the runs that stored a candidate."""
+    rows = (db or get_store()).find(CANDIDATES_COLLECTION, collector_type=collector_type)
+    return len({c.get("collector_run_id") for c in rows if c.get("created_at") and c.get("collector_run_id") and clock.date_from_utc_iso(c["created_at"]) == day})
 
 
 # --- approved documents ---------------------------------------------------------------------
