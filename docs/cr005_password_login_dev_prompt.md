@@ -1,5 +1,13 @@
 # CR-005 개발 지시서 — 암호로 다른 기기에서 이어 쓰기
 
+> **[필수] 완료 조건 — 이것이 없으면 작업이 끝난 것이 아니다**
+> 1. 보고서 파일 **`docs/cr005_password_login_report.md`** 를 §7 의 항목대로 작성한다. 채팅 답변만으로는 보고로 인정하지 않는다.
+> 2. 코드와 보고서를 **로컬 커밋**한다(push 는 하지 않는다).
+> 3. 채팅에는 **이 한 줄 형식만** 남긴다: `CR-005 완료(또는 미완료: 이유) / pytest N건, npm test N건 통과 / 보고서 docs/cr005_password_login_report.md`
+> 4. 다른 건(예: 이전의 한국어 출력 수정)을 보고하지 않는다. 이 지시서의 작업만 보고한다.
+>
+> **[이어서 할 때] 2026-10-28 PM 확인:** CR-005 코드가 이미 작업 폴더에 **커밋되지 않은 채** 있다(2026-10-27 16:14~16:22 작성, 29개 파일: `backend/password_auth.py`, `backend/tests/test_cr005_password_login.py`, `frontend/components/PasswordCard.tsx`, `PasswordForms.tsx`, `frontend/lib/passwordLogin.ts` 등). **처음부터 다시 만들지 말고** `git status`, `git diff` 로 이어받아 §5 시험과 §6 실제 확인을 마치고 위 완료 조건을 채운다. `README.md` 와 `서비스기획서.md` 에도 수정이 있다. 서비스기획서는 설계 문서라 개발팀이 고치지 않는다(CLAUDE.md) — 무엇을 왜 고쳤는지 보고서에 적고, 되돌릴지는 PM 이 정한다.
+
 작성: 검증/PM, 2026-10-27. 근거: `docs/auth_upgrade_design.md` §E(방식 E)와 **§11(2026-10-27 사용자 결정)** 을 먼저 읽는다. 이 지시서와 설계가 충돌하면 **§11 → 이 지시서 → §E** 순으로 따르고 보고서에 알린다. 변경 기록은 `docs/change_management.md` CR-005.
 
 **진행 규칙:** 전부 구현한 뒤 `docs/cr005_password_login_report.md` 로 보고하고 **멈춘다.** 채팅에는 한 줄 요약(완료 여부, 테스트 수, 파일 경로)만 남긴다. **커밋까지만 하고 push 하지 않는다**(PM 보안 검증 후 사용자가 시간을 정한다). 사용자 테스트(TASK Phase 8)는 이 기능이 배포된 뒤 시작한다.
