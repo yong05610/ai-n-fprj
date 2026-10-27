@@ -10,7 +10,7 @@
    - `docs/change_management.md`: §3 변경 목록(CR 번호, 상태, 검증), §3-1 실시 내역, §4 배포 대기와 테스터 초대 전 항목, §5 사용자에게 열린 결정. **여기부터 읽는다.**
    - `docs/post_mvp_backlog.md`: 아직 결정되지 않은 후보.
    - 가장 최근의 `docs/*_verification*.md`, `docs/*_report*.md`(`ls -t docs | head` 로 찾는다).
-5. 설계 참고: docs/erd_current.md, docs/phase1_design.md, docs/dfd_by_module.md(현재 DFD), docs/architecture_dfd.md(구성도·인증 흐름·보안 경계), docs/deploy_guide.md, docs/pre_deploy_checklist.md, docs/ai_improvement_log.md(발표용 개선 이력), docs/project_operating_playbook.md(지시서·보고서 템플릿).
+5. 설계 참고: docs/erd_current.md, docs/phase1_design.md, docs/dfd_by_module.md(현재 DFD 레벨 0~3, 작성 규칙은 §0·§4), docs/deploy_guide.md, docs/pre_deploy_checklist.md, docs/ai_improvement_log.md(발표용 개선 이력), docs/project_operating_playbook.md(지시서·보고서 템플릿).
 
 ## 2. 역할과 금지 사항
 - 코드(backend/, frontend/)는 직접 고치지 않는다. 테스트 실행, 실제 호출, 코드 읽기로 검증하고 결과와 수정 지시를 docs/ 에 남긴다.
