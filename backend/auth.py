@@ -106,6 +106,23 @@ def get_current_uid(credentials: Optional[HTTPAuthorizationCredentials] = Depend
     return _verify_firebase_token(token)
 
 
+def create_login_token(uid: str) -> str:
+    """Custom token for a UID found by password login. Dev mode returns the dev bearer token itself.
+    The frontend signs in with it; from then on the UID again comes only from the verified ID token."""
+    if auth_mode() == "dev":
+        return f"{DEV_TOKEN_PREFIX}{uid}"
+    if not firebase_configured():
+        raise api_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "AUTH_NOT_CONFIGURED",
+            "인증 서버 설정이 완료되지 않았습니다. 잠시 후 다시 시도해 주세요.",
+        )
+    from firebase_admin import auth as fb_auth
+
+    token = fb_auth.create_custom_token(uid, app=get_firebase_app())
+    return token.decode("ascii") if isinstance(token, bytes) else str(token)
+
+
 def delete_auth_user(uid: str) -> None:
     """Remove the anonymous Firebase account after a data deletion request."""
     if auth_mode() == "dev" or not firebase_configured():

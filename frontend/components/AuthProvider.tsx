@@ -4,7 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 
 import { ApiError, apiRequest } from "@/lib/api";
 import { clearConsent, consentPayload, hasStoredConsent, storeConsent } from "@/lib/consent";
-import { type Session, endSession, restoreSession, startAnonymousSession } from "@/lib/session";
+import { loginWithPasswordFlow } from "@/lib/passwordLogin";
+import { type Session, endSession, restoreSession, signInWithPasswordToken, startAnonymousSession } from "@/lib/session";
 import { clearWizardDraft } from "@/lib/wizardStorage";
 
 export type AuthStatus = "checking" | "needs-consent" | "declined" | "starting" | "ready" | "error";
@@ -17,6 +18,10 @@ type AuthContextValue = {
   decline: () => void;
   reopenConsent: () => void;
   deleteAllData: () => Promise<void>;
+  /** CR-005: sign in with a registered password. Throws ApiError for 401/429 so the form can show the sentence. */
+  loginWithPassword: (password: string) => Promise<void>;
+  /** CR-005: leave this device's session (for a shared PC). The record stays; the password gets back in. */
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -99,8 +104,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setStatus("needs-consent");
   }, [session]);
 
+  const loginWithPassword = useCallback(async (password: string) => {
+    // No anonymous UID is created on this path. The password is only passed along, never stored.
+    const result = await loginWithPasswordFlow<Session>(password, {
+      requestToken: async (value) =>
+        (await apiRequest<{ custom_token: string }>("/api/auth/password/login", { method: "POST", body: { password: value } })).custom_token,
+      signInWithToken: signInWithPasswordToken,
+      consentIsCurrent: async (signedIn) => {
+        try {
+          await apiRequest("/api/user/profile", { token: await signedIn.getToken() });
+          return true;
+        } catch (error) {
+          if (error instanceof ApiError && error.code === "CONSENT_REQUIRED") return false;
+          throw error;
+        }
+      },
+      clearLocalDraft: clearWizardDraft,
+      markConsentStored: storeConsent,
+    });
+    setSession(result.session);
+    setErrorMessage(null);
+    // A different terms version asks for consent again (accept() reuses this signed-in session).
+    setStatus(result.consent === "current" ? "ready" : "needs-consent");
+  }, []);
+
+  const logout = useCallback(async () => {
+    await endSession().catch(() => undefined);
+    clearConsent();
+    clearWizardDraft();
+    setSession(null);
+    setStatus("needs-consent");
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ status, session, errorMessage, accept, decline, reopenConsent, deleteAllData }}>
+    <AuthContext.Provider
+      value={{ status, session, errorMessage, accept, decline, reopenConsent, deleteAllData, loginWithPassword, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

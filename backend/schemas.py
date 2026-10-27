@@ -736,11 +736,35 @@ class UserProfileResponse(BaseModel):
     active_goal_id: Optional[str] = None
     consent_version: Optional[str] = None
     is_admin: bool = Field(False, description="ADMIN_UIDS 에 포함된 계정이면 true. 읽기 전용이며 어떤 요청으로도 바뀌지 않는다")
+    password_enabled: bool = Field(False, description="다른 기기에서 이어 쓰기용 암호가 등록돼 있으면 true (CR-005). 암호·키는 담지 않는다")
+    password_set_at: Optional[str] = Field(None, description="암호를 등록(변경)한 시각 (UTC ISO-8601). 없으면 null")
     created_at: str
 
 
 class ProfileUpdateRequest(BaseModel):
     active_goal_id: Optional[str] = None
+
+
+# --- 9b. Password login (CR-005) ---
+# Error codes: PASSWORD_RULE (422, 길이·문자 종류), PASSWORD_UNAVAILABLE (409, 흔한 암호와 겹침을 구분하지 않는 같은 문장),
+# LOGIN_FAILED (401), TOO_MANY_ATTEMPTS (429). 꺼져 있으면 모두 404.
+
+class PasswordSetRequest(BaseModel):
+    password: str = Field(..., max_length=1024, description="새 암호 (8~64자, 영문·숫자·특수문자 포함, 공백 없음). 서버는 저장하지 않는다")
+    client_request_id: str = Field(..., min_length=1, max_length=100, description="멱등 키. 같은 값으로 재요청하면 같은 결과")
+
+
+class PasswordStatusResponse(BaseModel):
+    password_enabled: bool
+    password_set_at: Optional[str] = None
+
+
+class PasswordLoginRequest(BaseModel):
+    password: str = Field(..., max_length=1024, description="등록한 암호. 규칙에 맞지 않아도 같은 401 로 답한다")
+
+
+class PasswordLoginResponse(BaseModel):
+    custom_token: str = Field(..., description="Firebase 사용자 지정 토큰 (dev 모드는 dev-<uid>). 프론트가 signInWithCustomToken 으로 로그인한다")
 
 
 # --- 10. Admin (Phase 5E): users and feedback ---

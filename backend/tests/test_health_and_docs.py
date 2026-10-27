@@ -7,7 +7,7 @@ def test_health_check(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     # the tests run with AUTH_MODE=dev STORE_BACKEND=memory (conftest); the modes are part of /health
-    assert data == {"status": "ok", "service": "pacemate-api", "auth_mode": "dev", "store_backend": "memory"}
+    assert data == {"status": "ok", "service": "pacemate-api", "auth_mode": "dev", "store_backend": "memory", "password_login_enabled": False}
 
 
 def test_openapi_json(client: TestClient):

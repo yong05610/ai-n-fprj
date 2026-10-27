@@ -3,6 +3,7 @@
 import { AccountIdCard } from "@/components/AccountIdCard";
 import { DeleteDataSection } from "@/components/DeleteDataSection";
 import { FeedbackCard } from "@/components/FeedbackCard";
+import { PasswordCard } from "@/components/PasswordCard";
 
 /**
  * 내 정보·설정 (Phase 5C, minimal). Only what the consent notice promises is here: the data
@@ -23,6 +24,7 @@ export function SettingsScreen() {
         <DeleteDataSection />
         <AccountIdCard />
       </div>
+      <PasswordCard />
       <FeedbackCard />
     </>
   );

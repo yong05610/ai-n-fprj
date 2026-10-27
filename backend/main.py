@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, List
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Response, status
+from fastapi import FastAPI, HTTPException, Depends, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,11 +23,12 @@ from ai_client import (
     plan_timeout_seconds,
 )
 from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
-from auth import assert_safe_auth_config, auth_mode, delete_auth_user, get_current_uid
+from auth import assert_safe_auth_config, auth_mode, create_login_token, delete_auth_user, get_current_uid
 from deploy_config import assert_safe_deploy_config
 from errors import api_error, bad_request, forbidden, not_found, validation_exception_handler
 import field_demand
 import insight_rules
+import password_auth
 import rag
 import resource_collectors
 import resource_pipeline
@@ -111,6 +112,10 @@ from schemas import (
     DataDeleteResponse,
     ConsentCreateRequest,
     ConsentResponse,
+    PasswordLoginRequest,
+    PasswordLoginResponse,
+    PasswordSetRequest,
+    PasswordStatusResponse,
 )
 from store import USER_OWNED_COLLECTIONS, assert_safe_store_config, get_store, store_backend
 
@@ -119,6 +124,7 @@ CURRENT_TERMS_VERSION = "v1.1"
 assert_safe_auth_config()
 assert_safe_store_config()
 assert_safe_deploy_config()
+password_auth.assert_safe_password_config()
 
 
 def running_modes() -> tuple[str, str]:
@@ -198,9 +204,15 @@ app.add_middleware(
 
 
 @app.get("/health", tags=["health"], summary="서비스 헬스체크 (실행 모드 포함, 인증 불필요)")
-async def health() -> dict[str, str]:
+async def health() -> dict[str, Any]:
     mode_auth, mode_store = running_modes()
-    return {"status": "ok", "service": "pacemate-api", "auth_mode": mode_auth, "store_backend": mode_store}
+    return {
+        "status": "ok",
+        "service": "pacemate-api",
+        "auth_mode": mode_auth,
+        "store_backend": mode_store,
+        "password_login_enabled": password_auth.enabled(),
+    }
 
 
 # --- Common helpers & dependencies ---
@@ -2624,6 +2636,111 @@ def admin_resource_field_demand(admin_uid: str = Depends(require_admin_uid), db=
     return AdminFieldDemandResponse(min_users=field_demand.min_users(), items=rows)
 
 
+# 10. Password login (CR-005). Off unless PASSWORD_LOGIN_ENABLED=true (then every route here is a 404).
+_password_log = logging.getLogger("pacemate.password")
+
+
+def _require_password_login() -> None:
+    if not password_auth.enabled():
+        raise not_found()
+
+
+def _password_unavailable() -> HTTPException:
+    # One sentence for "a common password" and "someone already uses it": the answer must not tell which.
+    return api_error(status.HTTP_409_CONFLICT, "PASSWORD_UNAVAILABLE", password_auth.UNAVAILABLE_MESSAGE)
+
+
+def _too_many_attempts() -> HTTPException:
+    return api_error(status.HTTP_429_TOO_MANY_REQUESTS, "TOO_MANY_ATTEMPTS", password_auth.TOO_MANY_MESSAGE)
+
+
+@app.post(
+    "/api/auth/password",
+    response_model=PasswordStatusResponse,
+    tags=["auth"],
+    summary="다른 기기에서 이어 쓰기용 암호 등록·변경 (PASSWORD_LOGIN_ENABLED=true 일 때만, 꺼져 있으면 404)",
+)
+def set_password(
+    payload: PasswordSetRequest, request: Request, uid: str = Depends(require_consented_uid), db=Depends(get_db)
+):
+    _require_password_login()
+    if not password_auth.limits.register_allowed(uid, password_auth.client_ip(request)):
+        raise _too_many_attempts()
+    problems = password_auth.rule_problems(payload.password)
+    if problems:
+        raise api_error(422, "PASSWORD_RULE", " ".join(problems))
+    if password_auth.is_common(payload.password):
+        raise _password_unavailable()
+    key = password_auth.make_key(payload.password)
+    existing = db.get("credentials", key)
+    if existing and existing.get("uid") != uid:
+        raise _password_unavailable()
+    user = db.get("users", uid) or {}
+    if existing:
+        # Same UID, same password: a retry (same client_request_id) or the user typed the current password again. Nothing changes.
+        if user.get("password_enabled"):
+            return PasswordStatusResponse(password_enabled=True, password_set_at=user.get("password_set_at"))
+    now = _now_iso()
+    db.set("credentials", key, {"uid": uid, "created_at": now})
+    confirmed = db.get("credentials", key)
+    if not confirmed or confirmed.get("uid") != uid:
+        raise _password_unavailable()  # another UID wrote the same key at the same moment
+    for old in db.find("credentials", uid=uid):
+        if old["id"] != key:
+            db.delete("credentials", old["id"])
+    db.update("users", uid, {"password_enabled": True, "password_set_at": now})
+    return PasswordStatusResponse(password_enabled=True, password_set_at=now)
+
+
+@app.delete(
+    "/api/auth/password",
+    response_model=PasswordStatusResponse,
+    tags=["auth"],
+    summary="암호 로그인 끄기 (이 UID 의 키 삭제. 없어도 200)",
+)
+def remove_password(uid: str = Depends(require_consented_uid), db=Depends(get_db)):
+    _require_password_login()
+    db.delete_where("credentials", uid=uid)
+    db.update("users", uid, {"password_enabled": False, "password_set_at": None})
+    return PasswordStatusResponse(password_enabled=False, password_set_at=None)
+
+
+@app.post(
+    "/api/auth/password/login",
+    response_model=PasswordLoginResponse,
+    tags=["auth"],
+    summary="암호로 로그인해 Firebase 사용자 지정 토큰을 받는다 (토큰 없이 호출. 꺼져 있으면 404)",
+)
+def password_login(payload: PasswordLoginRequest, request: Request, db=Depends(get_db)):
+    _require_password_login()
+    ip = password_auth.client_ip(request)
+    if password_auth.limits.login_blocked(ip):
+        raise _too_many_attempts()
+    # The hash is computed for every attempt, valid or not, so the time says nothing. A password that
+    # breaks the rules cannot be registered; it is hashed (cut to the maximum length) and refused like any wrong one.
+    follows_rules = not password_auth.rule_problems(payload.password)
+    key = password_auth.make_key(payload.password if follows_rules else payload.password[: password_auth.MAX_LENGTH])
+    credential = db.get("credentials", key) if follows_rules else None
+    user = db.get("users", credential["uid"]) if credential else None
+    if not credential or not user:
+        paused = password_auth.limits.record_login_failure(ip)
+        if paused:
+            _password_log.warning("password login paused: failed attempts in the window=%d", password_auth.limits.total_failures_in_window())
+        password_auth.fixed_failure_delay()
+        raise api_error(status.HTTP_401_UNAUTHORIZED, "LOGIN_FAILED", password_auth.LOGIN_FAILED_MESSAGE)
+    try:
+        token = create_login_token(credential["uid"])
+    except HTTPException:
+        raise
+    except Exception:
+        raise api_error(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "AUTH_UNAVAILABLE",
+            "인증 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        )
+    return PasswordLoginResponse(custom_token=token)
+
+
 # 9. User Profile & Data Deletion
 def _profile(user: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -2632,6 +2749,8 @@ def _profile(user: dict[str, Any]) -> dict[str, Any]:
         "active_goal_id": user.get("active_goal_id"),
         "consent_version": user.get("consent_version"),
         "is_admin": _is_admin(user["uid"]),  # derived from ADMIN_UIDS, never stored or settable
+        "password_enabled": bool(user.get("password_enabled")),
+        "password_set_at": user.get("password_set_at"),
         "created_at": user["created_at"],
     }
 
@@ -2656,6 +2775,7 @@ def update_profile(payload: ProfileUpdateRequest, uid: str = Depends(require_con
 def delete_user_data(uid: str = Depends(get_current_uid), db=Depends(get_db)):
     for collection in USER_OWNED_COLLECTIONS:
         db.delete_where(collection, user_id=uid)
+    db.delete_where("credentials", uid=uid)  # CR-005: the password key goes with the data (not user-owned: its id is a hash)
     db.delete("users", uid)
     try:
         delete_auth_user(uid)

@@ -7,7 +7,9 @@
  *   which the backend accepts only when it also runs with AUTH_MODE=dev.
  */
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { type Auth, type User, getAuth, signInAnonymously, signOut } from "firebase/auth";
+import { type Auth, type User, getAuth, signInAnonymously, signInWithCustomToken, signOut } from "firebase/auth";
+
+import { devUidFromToken } from "@/lib/passwordLogin";
 
 export type Session = {
   uid: string;
@@ -57,6 +59,21 @@ export async function startAnonymousSession(): Promise<Session> {
     return devSession(uid);
   }
   const credential = await signInAnonymously(firebaseAuth());
+  return fromFirebaseUser(credential.user);
+}
+
+/**
+ * Signs in with the custom token the server issued after a password login (CR-005). It never creates an
+ * anonymous UID: the UID is the one the server found. Dev mode: the token is "dev-<uid>".
+ */
+export async function signInWithPasswordToken(customToken: string): Promise<Session> {
+  if (isDevMode) {
+    const uid = devUidFromToken(customToken);
+    if (!uid) throw new Error("로그인 응답이 올바르지 않아요. 다시 시도해 주세요.");
+    localStorage.setItem(DEV_UID_KEY, uid);
+    return devSession(uid);
+  }
+  const credential = await signInWithCustomToken(firebaseAuth(), customToken);
   return fromFirebaseUser(credential.user);
 }
 

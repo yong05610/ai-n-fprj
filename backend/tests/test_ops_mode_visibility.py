@@ -42,7 +42,7 @@ class TestHealth:
         body = client.get("/health").json()
         assert (body["auth_mode"], body["store_backend"]) == expected
         assert body["status"] == "ok" and body["service"] == "pacemate-api"
-        assert set(body) == {"status", "service", "auth_mode", "store_backend"}
+        assert set(body) == {"status", "service", "auth_mode", "store_backend", "password_login_enabled"}
 
     def test_no_authentication_is_needed(self, client: TestClient):
         assert client.get("/health").status_code == 200  # no Authorization header

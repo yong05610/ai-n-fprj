@@ -17,6 +17,11 @@ export function parseHealth(data: unknown): HealthModes | null {
   return { auth_mode, store_backend };
 }
 
+/** CR-005: whether the server offers password login. Anything but a literal true means off. */
+export function parsePasswordLoginFlag(data: unknown): boolean {
+  return typeof data === "object" && data !== null && (data as Record<string, unknown>).password_login_enabled === true;
+}
+
 /** The lines of the band; an empty list means the band is not shown at all. */
 export function modeBannerLines(health: HealthState, frontendDev: boolean): string[] {
   const lines: string[] = [];

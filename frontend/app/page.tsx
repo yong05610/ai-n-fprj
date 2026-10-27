@@ -8,6 +8,7 @@ import { AdminUsersScreen } from "@/components/AdminUsersScreen";
 import { AnalysisScreen } from "@/components/AnalysisScreen";
 import { useAuth } from "@/components/AuthProvider";
 import { ConsentModal } from "@/components/ConsentModal";
+import { usePasswordLoginEnabled } from "@/components/ServerGate";
 import { Dashboard } from "@/components/Dashboard";
 import { ExecutionScreen } from "@/components/ExecutionScreen";
 import { LearningPathWizard } from "@/components/LearningPathWizard";
@@ -74,7 +75,8 @@ function NavButton({ entry, current, onGo }: { entry: NavEntry; current: View; o
 }
 
 export default function Home() {
-  const { status, session, errorMessage, accept, decline, reopenConsent } = useAuth();
+  const { status, session, errorMessage, accept, decline, reopenConsent, loginWithPassword } = useAuth();
+  const passwordLoginEnabled = usePasswordLoginEnabled();
   const [view, setView] = useState<View | null>(null);
   // null = not known yet. Only the server decides (profile.is_admin); the admin group stays
   // hidden until it says true, and an admin hash for a non-admin is sent back to the dashboard.
@@ -163,6 +165,7 @@ export default function Home() {
           errorMessage={status === "error" ? errorMessage : null}
           onAccept={accept}
           onDecline={decline}
+          onPasswordLogin={passwordLoginEnabled ? loginWithPassword : undefined}
         />
       </main>
     );

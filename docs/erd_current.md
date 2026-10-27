@@ -163,7 +163,8 @@ erDiagram
 
 - 사용자 소유 문서는 모두 `user_id`를 가지며, 값은 토큰에서 검증된 UID만 사용한다.
 - 삭제 전파: 목표 삭제 → 과제·기록·회고 삭제, 과제 삭제 → 기록·회고 삭제, 기록 삭제는 과제에 전파하지 않는다.
-- 사용자 데이터 삭제 요청 시 `goals`, `tasks`, `study_logs`, `reflections`, `conversations`, `consent_records`, `users/{uid}`를 삭제한다.
+- 사용자 데이터 삭제 요청 시 `goals`, `tasks`, `study_logs`, `reflections`, `conversations`, `consent_records`, `users/{uid}`를 삭제한다. 이어서 `credentials` 에서 이 UID 의 문서도 지운다(CR-005).
+- `credentials`(CR-005, 암호로 이어 쓰기, 기본 꺼짐): 문서 ID = 암호에서 서버가 계산한 키(scrypt + 서버 비밀값 `AUTH_PEPPER`, 암호 원문 없음), 필드 `{uid, created_at}`. `USER_OWNED_COLLECTIONS` 에 넣지 않는다(ID 가 해시라 `user_id` 소유 조회 대상이 아님). `firestore.rules` 에서 누구도 읽기·쓰기 불가. `users` 문서에는 `password_enabled`(불리언), `password_set_at` 만 두고 키·해시는 두지 않는다. **도형(ERD)은 PM 이 검증 후 반영.**
 - 과정 목록과 과정별 수준표(AI 제안)는 저장하지 않는 임시 데이터이며, 사용자가 확정한 결과만 `goals`에 저장된다.
 
 ## 3. 합의 사항 (Phase 3 검증 결과 반영, docs/phase3_review_instructions.md)

@@ -329,9 +329,12 @@ erDiagram
 | `GET` | `/api/conversations/{conversation_id}` | 특정 대화 세션 전체 메시지 이력 조회 (assistant 메시지의 `sources`: doc_id, title, source_name, url; `search_keywords`(저장), `search_links[{label,url}]`·`related_links[{title,source_name,url}]`(저장하지 않고 응답 때 서버가 생성, Phase 6C)) | `conversations` |
 | `POST` | `/api/conversations/{conversation_id}/messages` | **튜터 질의 전송 및 응답 수신 (튜터 호출 엔드포인트 단일화).** 요청 `{content(1~1000자), client_request_id}`, 응답 `{user_message, assistant_message, conversation_title, refused}`. 같은 `client_request_id` 재요청은 중복 저장 없이 200. AI 1회 호출(학습 관련 판정 + 답변 + 사용 자료 + 출처 없을 때 `search_keywords` 0~3개(URL 금지, 서버 검증)), 응답 assistant_message 에 `search_keywords`, `search_links`, `related_links`(출처 있을 때 현재 학습과 매칭되는 링크 자료 최대 2건) 포함, 실패 시 저장 없음(502/503/504), 대화 200메시지 초과 409 `CONVERSATION_FULL` | `conversations` |
 | `GET` | `/api/resources` | 사전 검토된 읽기 전용 참고자료 목록 검색·조회 | `resources` |
-| `GET` | `/api/user/profile` | 익명 사용자 프로필 조회. `is_admin`(ADMIN_UIDS 에 포함되면 true, 읽기 전용) 포함 | `user` |
+| `GET` | `/api/user/profile` | 익명 사용자 프로필 조회. `is_admin`(ADMIN_UIDS 에 포함되면 true, 읽기 전용), `password_enabled`(불리언), `password_set_at`(CR-005, 암호·키는 담지 않음) 포함 | `user` |
 | `PATCH` | `/api/user/profile` | 사용자 프로필 수정. `active_goal_id` 변경(학습 전환)은 본인 소유이고 status=active 인 목표만 허용 | `user` |
-| `POST` | `/api/user/delete-data` | 내 학습 데이터 전체 삭제 요청 (익명 피드백 `feedback` 은 UID 와 연결이 없어 남는다) | `user` |
+| `POST` | `/api/user/delete-data` | 내 학습 데이터 전체 삭제 요청 (익명 피드백 `feedback` 은 UID 와 연결이 없어 남는다). 이 UID 의 암호 키 문서(`credentials`)도 함께 지운다 | `user` |
+| `POST` | `/api/auth/password` | **(CR-005, `PASSWORD_LOGIN_ENABLED=true` 일 때만, 꺼져 있으면 404)** 다른 기기에서 이어 쓰기용 암호 등록·변경 `{password, client_request_id}` → `{password_enabled, password_set_at}`. 동의 필요. 규칙(8~64자, 영문·숫자·특수문자, 공백 없음, ASCII) 위반 422 `PASSWORD_RULE`, 흔한 암호이거나 다른 사용자가 쓰는 암호 409 `PASSWORD_UNAVAILABLE`(같은 문장), UID 5회/시간·IP 10회/시간 초과 429 `TOO_MANY_ATTEMPTS`. 같은 요청 재시도는 같은 결과 | `auth` |
+| `DELETE` | `/api/auth/password` | **(CR-005)** 암호 로그인 끄기: 이 UID 의 키 문서 삭제, `password_enabled=false`. 없어도 200 | `auth` |
+| `POST` | `/api/auth/password/login` | **(CR-005, 토큰 없이 호출)** `{password}` → `{custom_token}`(Firebase 사용자 지정 토큰, dev 모드는 `dev-<uid>`). 틀리거나 규칙에 안 맞으면 401 `LOGIN_FAILED`(실패 시 고정 지연), IP 당 실패 5회/10분 초과 시 그 IP 10분, 전체 실패 30회/10분 초과 시 전체 15분 429 `TOO_MANY_ATTEMPTS` | `auth` |
 | `POST` | `/api/feedback` | 테스트 피드백 제출 `{usability, ai_usefulness, screen, comment?, client_request_id}`. 사용자 정보 없이 저장, 같은 `client_request_id` 재요청은 200, 사용자당 10건 초과 429 `FEEDBACK_LIMIT_REACHED` | `feedback` |
 | `GET` | `/api/admin/users` | **[관리자]** 사용자 목록 `?status=all\|active\|dormant&page=`(50건, 최근 활동순). 마스킹된 ID, 유형, 동의, 진행 중 학습 수, 최근 활동, 상태. 비관리자 403 | `admin` |
 | `GET` | `/api/admin/feedback` | **[관리자]** 피드백 목록 `?status=all\|new\|seen\|candidate\|done&limit=`(최신순, 최대 200) | `admin` |

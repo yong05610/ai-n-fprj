@@ -152,7 +152,7 @@ class TestImportTime:
 
     def test_health_on_render_reports_only_firebase_and_firestore(self):
         out = _run("import main, asyncio, json; print(json.dumps(asyncio.run(main.health())))", **RENDER_OK)
-        assert json.loads(out.stdout.strip().splitlines()[-1]) == {"status": "ok", "service": "pacemate-api", "auth_mode": "firebase", "store_backend": "firestore"}
+        assert json.loads(out.stdout.strip().splitlines()[-1]) == {"status": "ok", "service": "pacemate-api", "auth_mode": "firebase", "store_backend": "firestore", "password_login_enabled": False}
 
     def test_a_local_run_without_render_ignores_the_new_checks(self):
         out = _run(DOCS_PROBE, AUTH_MODE="dev", STORE_BACKEND="memory", CORS_ORIGINS="*")

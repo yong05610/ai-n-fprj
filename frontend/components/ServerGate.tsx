@@ -11,7 +11,7 @@ import {
   nextAttemptDelayMs,
 } from "@/lib/coldStart";
 import { API_CONFIG_MESSAGES } from "@/lib/deployConfig";
-import { type HealthModes, parseHealth } from "@/lib/modeBanner";
+import { type HealthModes, parseHealth, parsePasswordLoginFlag } from "@/lib/modeBanner";
 
 /** The two mode names the server answered with at start-up (null when the body was not recognised). */
 const HealthContext = createContext<HealthModes | null>(null);
@@ -20,7 +20,14 @@ export function useServerModes(): HealthModes | null {
   return useContext(HealthContext);
 }
 
-type Answer = { modes: HealthModes | null } | null;
+/** CR-005: the server decides whether the password-login card and links exist (no extra frontend setting). */
+const PasswordLoginContext = createContext<boolean>(false);
+
+export function usePasswordLoginEnabled(): boolean {
+  return useContext(PasswordLoginContext);
+}
+
+type Answer = { modes: HealthModes | null; passwordLogin: boolean } | null;
 
 /**
  * Wakes the server before the app starts: GET /health first, retried at 2s, 4s, 8s intervals for up
@@ -52,8 +59,8 @@ export function ServerGate({ children }: { children: React.ReactNode }) {
       try {
         const response = await fetch(`${API_BASE_URL}/health`, { signal: controller.signal });
         if (response.ok) {
-          const modes = parseHealth(await response.json().catch(() => null));
-          if (!cancelled) setAnswer({ modes });
+          const body = await response.json().catch(() => null);
+          if (!cancelled) setAnswer({ modes: parseHealth(body), passwordLogin: parsePasswordLoginFlag(body) });
           return;
         }
       } catch {
@@ -95,7 +102,13 @@ export function ServerGate({ children }: { children: React.ReactNode }) {
   }
 
   const view = gaveUp ? "failed" : coldStartView(elapsed, answer !== null);
-  if (view === "ready") return <HealthContext.Provider value={answer?.modes ?? null}>{children}</HealthContext.Provider>;
+  if (view === "ready") {
+    return (
+      <HealthContext.Provider value={answer?.modes ?? null}>
+        <PasswordLoginContext.Provider value={answer?.passwordLogin ?? false}>{children}</PasswordLoginContext.Provider>
+      </HealthContext.Provider>
+    );
+  }
 
   return (
     <>

@@ -14,6 +14,12 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // CR-005: password keys (document id = key, fields uid and created_at). Nobody reads or writes them
+    // from a client; only the backend (Admin SDK) does. Stated explicitly although the default is closed.
+    match /credentials/{docId} {
+      allow read, write: if false;
+    }
+
     match /{collection}/{docId} {
       allow read: if collection in ['goals', 'tasks', 'study_logs', 'reflections', 'conversations', 'consent_records']
                   && isOwner();

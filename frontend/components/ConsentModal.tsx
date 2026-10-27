@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { PasswordLoginForm } from "@/components/PasswordForms";
 import { TERMS_VERSION } from "@/lib/consent";
 
 type Props = {
@@ -9,10 +10,28 @@ type Props = {
   errorMessage: string | null;
   onAccept: () => void;
   onDecline: () => void;
+  /** CR-005: present only when the server has password login on. Signs in with a registered password. */
+  onPasswordLogin?: (password: string) => Promise<void>;
 };
 
-export function ConsentModal({ busy, errorMessage, onAccept, onDecline }: Props) {
+export function ConsentModal({ busy, errorMessage, onAccept, onDecline, onPasswordLogin }: Props) {
   const [checked, setChecked] = useState(false);
+  const [passwordMode, setPasswordMode] = useState(false);
+
+  if (passwordMode && onPasswordLogin) {
+    return (
+      <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="password-login-title">
+        <section className="modal">
+          <p className="eyebrow">WELCOME BACK</p>
+          <h2 id="password-login-title">이미 암호를 등록했어요</h2>
+          <p>
+            다른 기기에서 등록한 암호를 입력하면 같은 학습 기록으로 들어와요. 이 과정에서는 새 익명 계정을 만들지 않아요.
+          </p>
+          <PasswordLoginForm onSubmit={onPasswordLogin} onCancel={() => setPasswordMode(false)} />
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="consent-title">
@@ -65,6 +84,13 @@ export function ConsentModal({ busy, errorMessage, onAccept, onDecline }: Props)
             {busy ? "시작하는 중…" : errorMessage ? "다시 시도" : "동의하고 시작하기"}
           </button>
         </div>
+        {onPasswordLogin && (
+          <p className="small" style={{ marginTop: 12 }}>
+            <button type="button" className="link-btn" id="password-login-link" onClick={() => setPasswordMode(true)} disabled={busy}>
+              이미 암호를 등록했어요(사용자 인증)
+            </button>
+          </p>
+        )}
       </section>
     </div>
   );

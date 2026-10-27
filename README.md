@@ -112,6 +112,7 @@ npm run build
 - 프론트는 Vercel, 백엔드는 Render, 인증·DB 는 Firebase(모든 값은 같은 Firebase 프로젝트). 절차와 환경변수: `docs/deploy_guide.md`, 배포 전 점검: `docs/pre_deploy_checklist.md`.
 - 배포 환경(`RENDER` 변수 있음)에서는 dev 모드, 메모리 저장소, 안전하지 않은 `CORS_ORIGINS`(`*`, localhost, http, 끝의 `/`), 비어 있는 `FIREBASE_SERVICE_ACCOUNT_JSON`·`OPENAI_API_KEY` 이면 **서버가 시작을 거부**합니다. 메시지에는 규칙·변수 이름만 나오고 값은 나오지 않습니다. `API_DOCS_ENABLED=false` 로 `/docs` 를 끌 수 있습니다.
 - 참고자료 관련 스위치는 모두 기본 꺼짐입니다: `RESOURCE_READ_SOURCE=file`(기본, 검토 파일만) / `file+approved`(관리자 승인 자료도 읽음), `COLLECTORS_ENABLED`(`direct_link`, `ai_topic`), `FIELD_STATS_ENABLED`. 허용 도메인은 `backend/data/allowed_domains.json`.
+- 암호로 다른 기기에서 이어 쓰기(CR-005)는 기본 꺼짐입니다: `PASSWORD_LOGIN_ENABLED=true` 와 `AUTH_PEPPER`(32자 이상, 없으면 서버가 시작을 거부). 켜는 방법은 `docs/deploy_guide.md` §8. 서버의 `/health` 가 켜졌는지 알려 주므로 프론트 설정은 필요 없습니다.
 
 ## 9. 결과
 - **배포:** 프론트(Vercel)와 백엔드(Render)에 배포했고, Firebase 실연동(익명 인증, Firestore 저장, UID 격리)을 확인했습니다.
