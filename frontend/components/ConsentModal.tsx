@@ -40,6 +40,16 @@ export function ConsentModal({ busy, errorMessage, onAccept, onDecline, onPasswo
         <h2 id="consent-title">PaceMate 학습 서비스 이용 안내</h2>
         <p>서비스를 시작하기 전, 아래 내용을 확인해 주세요.</p>
 
+        {onPasswordLogin && (
+          <div className="returning-box">
+            <p className="returning-title">다른 기기에서 암호를 등록했나요?</p>
+            <p className="returning-text">등록한 암호로 로그인하면 같은 학습 기록으로 들어가요.</p>
+            <button type="button" className="btn secondary" id="password-login-link" onClick={() => setPasswordMode(true)} disabled={busy}>
+              암호로 로그인
+            </button>
+          </div>
+        )}
+
         <h3>수집하는 정보</h3>
         <ul>
           <li>이름·이메일 등 개인 식별 정보는 수집하지 않습니다.</li>
@@ -84,13 +94,6 @@ export function ConsentModal({ busy, errorMessage, onAccept, onDecline, onPasswo
             {busy ? "시작하는 중…" : errorMessage ? "다시 시도" : "동의하고 시작하기"}
           </button>
         </div>
-        {onPasswordLogin && (
-          <p className="small" style={{ marginTop: 12 }}>
-            <button type="button" className="link-btn" id="password-login-link" onClick={() => setPasswordMode(true)} disabled={busy}>
-              이미 암호를 등록했어요(사용자 인증)
-            </button>
-          </p>
-        )}
       </section>
     </div>
   );

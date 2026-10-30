@@ -233,8 +233,23 @@ test("the consent window offers the login link only when the server has it on", 
   const off = renderToStaticMarkup(createElement(ConsentModal, props));
   assert.ok(!off.includes("이미 암호를 등록했어요"));
   const on = renderToStaticMarkup(createElement(ConsentModal, { ...props, onPasswordLogin: noopAsync }));
-  assert.ok(on.includes("이미 암호를 등록했어요(사용자 인증)"));
+  assert.ok(on.includes("다른 기기에서 암호를 등록했나요?") && on.includes("암호로 로그인"));
   assert.ok(on.includes("동의하고 시작하기"), "the consent flow itself is unchanged");
+});
+
+test("the login entry sits above the consent text and button, as a normal button", () => {
+  const props = { busy: false, errorMessage: null, onAccept: noop, onDecline: noop };
+  const on = renderToStaticMarkup(createElement(ConsentModal, { ...props, onPasswordLogin: noopAsync }));
+  const entry = on.indexOf('id="password-login-link"');
+  assert.ok(entry > 0);
+  assert.ok(entry > on.indexOf("아래 내용을 확인해 주세요"));
+  assert.ok(entry < on.indexOf("수집하는 정보"));
+  assert.ok(entry < on.indexOf("동의하고 시작하기"));
+  assert.match(on, /<button[^>]*class="btn secondary"[^>]*id="password-login-link"/);
+  assert.ok(!on.includes("link-btn"), "no link-style entry left");
+  const busy = renderToStaticMarkup(createElement(ConsentModal, { ...props, busy: true, onPasswordLogin: noopAsync }));
+  assert.match(busy, /id="password-login-link"[^>]*disabled/);
+  assert.ok(!renderToStaticMarkup(createElement(ConsentModal, props)).includes("password-login-link"));
 });
 
 test("the consent text and the terms version are unchanged", () => {
