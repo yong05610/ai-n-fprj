@@ -83,9 +83,10 @@ PaceMate는 독학 학습자가 원하는 학습 분야를 자유롭게 입력�
 - 오늘 과업, 완료 수, 전체 진행률 표시
 - AI 생성 안내, 개인정보 고지, 사용자 데이터 삭제 요청 절차
 - 공개 배포, 최소 5명 사용자 테스트, 피드백 개선
+- **(추가 범위, 2026-10-27 사용자 결정)** 다른 기기에서 암호로 이어 쓰기(FR-09)
 
 ### MVP 제외
-Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재조정 Agent, Make 리마인더, 퀴즈·오답노트, 뽀모도로·탭 감지, 히트맵, 사용자 간 비교, 사용자 화면의 외부 실시간 검색, 대량 큐레이션(관리자 수집·승인 최소판은 FR-08 로 예외), 복수 로그인 방식, 멀티모달 입력, 커뮤니티·결제·기관 기능. 단순 학습 시작·종료 타이머는 실행 기록의 일부로 MVP에 포함한다.
+Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재조정 Agent, Make 리마인더, 퀴즈·오답노트, 뽀모도로·탭 감지, 히트맵, 사용자 간 비교, 사용자 화면의 외부 실시간 검색, 대량 큐레이션(관리자 수집·승인 최소판은 FR-08 로 예외), 이메일·소셜 로그인(암호 이어 쓰기는 FR-09 로 예외), 멀티모달 입력, 커뮤니티·결제·기관 기능. 단순 학습 시작·종료 타이머는 실행 기록의 일부로 MVP에 포함한다.
 
 제외 항목은 후속 후보이며 14일 MVP의 완료 기준이 아니다.
 
@@ -242,6 +243,23 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 - 읽기 경로 스위치 기본값이 "파일"이며, 스위치를 바꾸지 않으면 기존 튜터·계획 화면의 자료 결과가 달라지지 않는다.
 - 기존 테스트가 모두 통과한다.
 
+
+### FR-09 다른 기기에서 이어 쓰기 (암호, 추가 범위, 2026-10-27 사용자 결정)
+익명으로 시작한 학습 기록을 다른 PC·휴대폰에서도 이어 쓰도록, 아이디·이메일 없이 **암호만으로** 같은 UID 에 다시 들어가는 방법을 제공한다. 설계와 결정 근거는 docs/auth_upgrade_design.md §11, 변경 기록은 docs/change_management.md CR-005.
+- **등록:** 동의한 사용자가 [내 정보·설정]의 "다른 기기에서 이어 쓰기"에서 암호와 암호 확인을 입력한다. 규칙은 8~64자, 영문·숫자·특수문자 모두 포함, 공백 없음. 로그인된 상태에서는 예전 암호 없이 암호를 바꾸거나 끌 수 있다.
+- **로그인:** 다른 기기의 첫 화면(동의 안내 위쪽)이나 [내 정보·설정]에서 암호만 입력한다. 서버가 암호에서 키를 계산해 찾은 UID 로 Firebase 커스텀 토큰을 발급하고, 화면은 그 토큰으로 로그인한다. 이 경로에서는 새 익명 계정을 만들지 않는다.
+- **저장:** 암호 원문은 저장하지 않는다. 키 = scrypt(암호, 서버 비밀값 `AUTH_PEPPER`)이며 `credentials/{키}` 에 `{uid, created_at}` 만 둔다. `users` 에는 사용 여부와 설정 시각만 둔다. 암호만으로 주인을 찾는 구조라 서로 다른 사용자가 같은 암호를 쓸 수 없다.
+- **안전장치:** 흔한 암호(공개 목록 4,000개와 패턴) 거부, 다른 사람이 쓰는 암호와 흔한 암호를 같은 응답으로 거절(정보 노출 방지), 실패 시 IP별 10분 5회·전체 10분 30회 제한과 일시 차단, 실패 응답 지연, 등록 횟수 제한. 로그에 암호와 키를 남기지 않는다.
+- **운영:** 기능 스위치 `PASSWORD_LOGIN_ENABLED`(기본 꺼짐)와 `AUTH_PEPPER`(32자 이상, 없으면 서버 시작 거부, 바꾸면 모든 암호 무효). `/health` 가 켜짐 여부를 알려 화면이 입구를 보이거나 숨긴다. "암호 찾기"는 없다(잊으면 로그인된 기기에서 변경, 모든 기기에서 로그아웃된 채 잊으면 복구 불가를 안내).
+- 사용자 데이터 삭제 요청은 이 UID 의 `credentials` 문서도 지운다.
+
+**수용 기준**
+- 기기 A 에서 등록한 암호로 기기 B 에서 로그인하면 같은 학습 기록(같은 UID)이 보인다.
+- 다른 사용자가 쓰는 암호와 흔한 암호의 등록 거절 응답이 서로 구별되지 않는다.
+- 같은 곳에서 계속 틀리면 일정 시간 로그인이 막힌다.
+- 저장소와 로그 어디에도 암호 원문이 없고, 클라이언트는 `credentials` 를 읽거나 쓸 수 없다.
+- 기능을 끄면 새 API 와 화면 입구가 모두 사라지고 기존 익명 흐름은 그대로다.
+
 ---
 
 ## 5. AI 처리와 데이터 계약
@@ -293,6 +311,8 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 | reflections | study_log_id, content, tags, created_at, updated_at | UID 필드 필수 |
 | conversations | UID, title, messages: [{ role, content, timestamp }], created_at, updated_at | UID 필드 필수; 본인만 읽기·변경 가능 |
 | feedback (FR-07) | usability(1~5), ai_usefulness(1~5), screen, comment(선택), status(new/seen/candidate/done), created_at, updated_at | **UID 없음**(식별 정보 저장 안 함, 삭제 요청으로 지워지지 않음), 관리자만 |
+| insights (FR-06) | goal_id, summary, difficulty, next_action, generated_at, record_count, reflection_count | UID 필드 필수, 학습당 1건(새로 만들면 덮어씀) |
+| credentials (FR-09) | 문서 ID = 암호에서 계산한 키, uid, created_at | 클라이언트 읽기·쓰기 불가(백엔드만), 삭제 요청 시 함께 삭제 |
 | resource_candidates (FR-08) | url, source_domain, collector_type, collector_note, title, ai_suggestion, check_results, status(pending/approved/rejected), reviewed_by, reviewed_at, reject_reason | UID 없음, 관리자만, 서비스에 비노출 |
 | learning_documents (FR-08, 현재는 파일) | title, source_name, url, category, tags, summary, verified, approved_by, approved_at | 공용 읽기 전용, UID 없음, 승인된 것만 |
 
@@ -408,6 +428,6 @@ Function Calling 기반 튜터 Agent(회고·자료 도구 선택), 일정 재�
 ## 12. 향후 계획
 후속 계획의 방향과 우선순위는 서비스기획서 10 이 소유한다. 여기에는 구현에 필요한 통제와 관련 설계 문서만 둔다.
 - **Function Calling 기반 튜터(후속 1):** 질문에 따라 서버가 본인 회고 조회 또는 고정 학습자료 검색 도구를 실행하고 결과를 모델에 돌려준다. 도구 호출은 읽기 전용, 사용자 UID 서버 검증, 호출 횟수 제한으로 통제한다.
-- **관련 설계 문서:** 계정 연동 docs/auth_upgrade_design.md, 참고자료 확대 docs/resource_curation_roadmap.md, MVP 이후 변경 기록 docs/change_management.md.
+- **관련 설계 문서:** 암호 이어 쓰기와 이메일·소셜 로그인 검토 docs/auth_upgrade_design.md, 참고자료 확대 docs/resource_curation_roadmap.md, MVP 이후 변경 기록 docs/change_management.md.
 
 추가 기능은 MVP 테스트의 실제 수요와 팀의 개발 여건을 확인한 뒤 우선순위를 결정한다.
