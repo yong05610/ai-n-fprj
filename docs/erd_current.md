@@ -16,6 +16,8 @@ erDiagram
     study_logs ||--o| reflections : "1:0..1"
     users ||--o{ consent_records : "1:N"
     users ||--o{ conversations : "1:N"
+    goals ||--o| insights : "1:0..1"
+    users ||--o| credentials : "1:0..1 (CR-005)"
 
     users {
         string uid PK "문서ID = Firebase UID"
@@ -26,6 +28,8 @@ erDiagram
         string created_at
         string last_active_at "동의·프로필 수정, 그리고 인증·동의된 요청 중 마지막 갱신 10분 뒤에만 갱신 (Phase 5E)"
         int feedback_submitted_count "피드백 제출 횟수 상한(10)용 카운터, 피드백 문서와 연결되지 않음 (Phase 5E)"
+        bool password_enabled "암호 이어 쓰기 등록 여부 (CR-005)"
+        string password_set_at "암호 등록·변경 시각, 끄면 없음 (CR-005)"
     }
     consent_records {
         string id PK
@@ -154,6 +158,11 @@ erDiagram
         string created_at
         string updated_at
     }
+    credentials {
+        string id PK "문서 ID = scrypt(암호, AUTH_PEPPER) 키, 암호 원문 없음 (CR-005)"
+        string uid FK "이 키로 로그인할 사용자"
+        string created_at
+    }
 ```
 
 `learning_documents`는 공용 읽기 전용이며 다른 엔티티와 관계선이 없다. (설계 ERD의 `learning_documents → tasks` 관계는 구현에 없다.)
@@ -164,7 +173,7 @@ erDiagram
 - 사용자 소유 문서는 모두 `user_id`를 가지며, 값은 토큰에서 검증된 UID만 사용한다.
 - 삭제 전파: 목표 삭제 → 과제·기록·회고 삭제, 과제 삭제 → 기록·회고 삭제, 기록 삭제는 과제에 전파하지 않는다.
 - 사용자 데이터 삭제 요청 시 `goals`, `tasks`, `study_logs`, `reflections`, `conversations`, `consent_records`, `users/{uid}`를 삭제한다. 이어서 `credentials` 에서 이 UID 의 문서도 지운다(CR-005).
-- `credentials`(CR-005, 암호로 이어 쓰기, 기본 꺼짐): 문서 ID = 암호에서 서버가 계산한 키(scrypt + 서버 비밀값 `AUTH_PEPPER`, 암호 원문 없음), 필드 `{uid, created_at}`. `USER_OWNED_COLLECTIONS` 에 넣지 않는다(ID 가 해시라 `user_id` 소유 조회 대상이 아님). `firestore.rules` 에서 누구도 읽기·쓰기 불가. `users` 문서에는 `password_enabled`(불리언), `password_set_at` 만 두고 키·해시는 두지 않는다. **도형(ERD)은 PM 이 검증 후 반영.**
+- `credentials`(CR-005, 암호로 이어 쓰기, 기본 꺼짐, PRD FR-09): 문서 ID = 암호에서 서버가 계산한 키(scrypt + 서버 비밀값 `AUTH_PEPPER`, 암호 원문 없음), 필드 `{uid, created_at}`. `USER_OWNED_COLLECTIONS` 에 넣지 않는다(ID 가 해시라 `user_id` 소유 조회 대상이 아님). `firestore.rules` 에서 누구도 읽기·쓰기 불가. `users` 문서에는 `password_enabled`(불리언), `password_set_at` 만 두고 키·해시는 두지 않는다. 도형 반영 2026-11-09(PM, 배포 확인 후): `users 1:0..1 credentials`, 필드명이 `user_id` 가 아니라 `uid` 다.
 - 과정 목록과 과정별 수준표(AI 제안)는 저장하지 않는 임시 데이터이며, 사용자가 확정한 결과만 `goals`에 저장된다.
 
 ## 3. 합의 사항 (Phase 3 검증 결과 반영, docs/phase3_review_instructions.md)
