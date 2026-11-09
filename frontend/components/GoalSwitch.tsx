@@ -1,6 +1,6 @@
 "use client";
 
-export type GoalOption = { id: string; course: string; start_date: string; target_date: string; status: string };
+export type GoalOption = { id: string; course: string; start_date: string; target_date: string; status: string; weekly_hours?: number };
 
 /**
  * Small "현재 학습" switcher shown on the plan/execution screens only (docs/multi_goal_design.md F).

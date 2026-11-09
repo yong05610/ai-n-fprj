@@ -270,6 +270,7 @@ class TaskResponse(BaseModel):
     # are always consistent with the current logs but cost one aggregation per request.
     record_count: int = 0
     total_minutes: int = 0
+    in_current_week: Optional[bool] = Field(None, description="(CR-014) GET /api/tasks 에서만 채움: 이번 주(Asia/Seoul 월~일)에 배치된 과제인가. 대시보드와 같은 schedule.tasks_in_week 규칙. 없으면 null(선택 필드)")
 
 
 # --- 4b. Plan Confirmation (FR-02 Step 2 save; resolves "열린 결정 1") ---

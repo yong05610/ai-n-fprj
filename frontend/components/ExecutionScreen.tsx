@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { type GoalOption, GoalSwitch } from "@/components/GoalSwitch";
+import { NO_WEEK_TASKS, goalStat, taskDescription, visibleTasks, weeklyTargetMinutes } from "@/lib/executionView";
 import { InsightCard } from "@/components/InsightCard";
 import { ApiError, apiRequest, apiRequestWithHeaders } from "@/lib/api";
 import { taskToSelectForTimer, timerLocation } from "@/lib/timerSelection";
@@ -14,8 +15,10 @@ type TaskItem = {
   id: string;
   title: string;
   estimated_minutes: number;
+  description?: string;
   suggested_weekday: Weekday;
   status: string;
+  in_current_week?: boolean | null;
   record_count: number;
   total_minutes: number;
 };
@@ -321,8 +324,10 @@ export function ExecutionScreen() {
   const weeklyMinutes = (logs ?? []).reduce((sum, l) => sum + l.minutes, 0);
   const recordCount = (logs ?? []).length;
   const activeTaskCount = (tasks ?? []).filter((t) => t.status !== "completed").length;
-  const weeklyTargetMinutes = (tasks ?? []).reduce((sum, t) => sum + t.estimated_minutes, 0) || 1;
-  const weeklyPercent = Math.min(100, Math.round((weeklyMinutes / weeklyTargetMinutes) * 100));
+  // CR-014: the weekly target is the active learning's weekly_hours x 60 (as on the dashboard), not the sum of all tasks.
+  const activeGoal = goals.find((g) => g.id === activeGoalId);
+  const stat = goalStat(period, weeklyMinutes, weeklyTargetMinutes(activeGoal?.weekly_hours));
+  const shownTasks = visibleTasks(tasks ?? [], period, logsByTask);
 
   const timerRunsHere = timer?.active && timer.task_id === selectedTaskId;
   const timerRunsElsewhere = timer?.active && timer.task_id !== selectedTaskId;
@@ -428,7 +433,7 @@ export function ExecutionScreen() {
             <strong>
               {weeklyMinutes} <small>분</small>
             </strong>
-            <small>{period === "week" ? `주 목표 ${weeklyTargetMinutes}분` : "전체 기간"}</small>
+            <small>{stat.targetLine}</small>
           </div>
           <span className="stat-icon">◷</span>
         </article>
@@ -456,11 +461,9 @@ export function ExecutionScreen() {
           <div>
             <label>주간 목표 달성</label>
             <strong>
-              {weeklyPercent} <small>%</small>
+              {stat.percentText} {stat.percentText !== "–" && <small>%</small>}
             </strong>
-            <small>
-              {weeklyMinutes}분 / {weeklyTargetMinutes}분
-            </small>
+            <small>{stat.detailText}</small>
           </div>
           <span className="stat-icon">◎</span>
         </article>
@@ -487,13 +490,15 @@ export function ExecutionScreen() {
           )}
           {logsTruncated && <p className="small muted">최근 200건만 표시됩니다.</p>}
           <div className="activity-list">
-          {tasks.map((task) => (
+          {shownTasks.length === 0 && <p className="small muted">{NO_WEEK_TASKS}</p>}
+          {shownTasks.map((task) => (
             <article key={task.id} className="task-record-group">
               <div className="task-record-head">
                 <div>
                   <h3>{task.title}</h3>
+                  {taskDescription(task.description) && <p className="small muted task-desc">{task.description}</p>}
                   <div className="task-record-meta">
-                    계획 {task.estimated_minutes}분 · 누적 {task.total_minutes}분 · 기록 {task.record_count}건
+                    계획 {task.estimated_minutes}분 · 실제 {task.total_minutes}분 · 기록 {task.record_count}건
                   </div>
                 </div>
                 <div className="task-record-controls">

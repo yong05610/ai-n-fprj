@@ -309,7 +309,7 @@ erDiagram
 | `GET` | `/api/goals/{goal_id}/references` | 학습에 연결된 검토 참고자료(읽기 전용). 응답 `{references[{title, category, source_name, url, is_verified}], references_notice, search_links[{label, url}]}`. 매칭은 plan/generate 와 같은 규칙(Phase 6C: 분야 토큰이 자료 tags·category 에 하나 이상 일치해야 후보, 점수 = tags 일치 + category 일치, 일반어 제외, 최대 5건; 분야가 하나도 안 맞으면 과정 토큰만으로 다시 점수를 내되 tags 의 도메인 단어가 정확히 일치해야 함). `search_links` 는 서버가 고정 템플릿(구글·공식 문서·유튜브 검색, 퍼센트 인코딩, 최대 3개)으로 만든 검토 전 외부 링크이며 항상 존재(`source_name` 은 `ResourceReferenceItem` 의 선택 필드). 타 UID 403, 없는 id 404 | `goals` |
 | `PATCH` | `/api/goals/{goal_id}` | 목표 수정 | `goals` |
 | `DELETE` | `/api/goals/{goal_id}` | 목표 삭제 | `goals` |
-| `GET` | `/api/tasks` | 과제 목록 조회 (`goal_id`, `plan_week_start`(과제가 시작하는 주) 필터). 응답에 `timeline_start_minutes`(Phase 5F, 저장값이 없는 기존 과제는 같은 목표의 과제를 order_index 순으로 누적해 계산) | `tasks` |
+| `GET` | `/api/tasks` | 과제 목록 조회 (`goal_id`, `plan_week_start`(과제가 시작하는 주) 필터). 응답에 `timeline_start_minutes`(Phase 5F, 저장값이 없는 기존 과제는 같은 목표의 과제를 order_index 순으로 누적해 계산), `in_current_week`(CR-014, 선택 필드: 이번 주 Asia/Seoul 월~일에 배치된 과제인가. 대시보드와 같은 `schedule.tasks_in_week` 규칙으로 서버가 계산, 저장 안 함. 필터를 써도 그 목표의 전체 과제 타임라인으로 판단) | `tasks` |
 | `POST` | `/api/tasks` | 과제 생성 (단건 또는 다건). Phase 5F: 그 목표의 전체 과제 합계 ≤ 가용 분을 검증하고 타임라인 끝(또는 지정 주의 시작 중 늦은 쪽)에 둔다. `PATCH` 로 분을 바꿔도 다른 과제를 다시 배치하지 않는다(일정 고정) | `tasks` |
 | `PATCH` | `/api/tasks/{task_id}` | 과제 상태(완료 토글) 또는 추천 요일 수정 | `tasks` |
 | `DELETE` | `/api/tasks/{task_id}` | 과제 삭제 | `tasks` |

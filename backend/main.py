@@ -1108,7 +1108,28 @@ def list_tasks(
     for log in db.find("study_logs", user_id=uid):
         count, minutes = stats.get(log["task_id"], (0, 0))
         stats[log["task_id"]] = (count + 1, minutes + log["minutes"])
-    return [_with_task_stats(t, *stats.get(t["id"], (0, 0)), starts.get(t["id"])) for t in sorted_tasks]
+    in_week_ids = _this_week_task_ids(db, uid, sorted_tasks)
+    return [
+        {**_with_task_stats(t, *stats.get(t["id"], (0, 0)), starts.get(t["id"])), "in_current_week": t["id"] in in_week_ids}
+        for t in sorted_tasks
+    ]
+
+
+def _this_week_task_ids(db, uid: str, tasks: list[dict[str, Any]]) -> set[str]:
+    """(CR-014) Ids of the given tasks that have scheduled minutes in this week (Asia/Seoul, Mon-Sun).
+
+    Same rule as the dashboard: schedule.tasks_in_week over ALL tasks of the learning (a task can span
+    weeks, so a filtered list is not enough to place it on the timeline)."""
+    week_start = clock.week_monday(clock.today())
+    ids: set[str] = set()
+    for goal_id in {t["goal_id"] for t in tasks}:
+        goal = db.get("goals", goal_id)
+        if goal is None or goal.get("user_id") != uid:
+            continue
+        goal_tasks = db.find("tasks", user_id=uid, goal_id=goal_id)
+        in_week = schedule.tasks_in_week(goal_tasks, clock.week_monday(_goal_start_date(goal)), goal["weekly_hours"] * 60, week_start)
+        ids.update(r["task"]["id"] for r in in_week)
+    return ids
 
 
 @app.post("/api/tasks", response_model=TaskResponse, status_code=status.HTTP_201_CREATED, tags=["tasks"], summary="학습 과제 생성")
