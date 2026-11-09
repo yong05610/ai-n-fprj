@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { GoalSwitch } from "@/components/GoalSwitch";
+import { LevelCombo } from "@/components/LevelCombo";
 import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
 import {
@@ -32,6 +33,16 @@ import {
   periodWeeks,
   placeTasks,
 } from "@/lib/schedule";
+import {
+  adjustTarget,
+  editDescription,
+  editName,
+  levelProblem,
+  pickLevel,
+  selectionFrom,
+  targetOptions,
+  type LevelSelection,
+} from "@/lib/levelSelection";
 import { clearWizardDraft, loadWizardDraft, saveWizardDraft } from "@/lib/wizardStorage";
 import { mondayOfDateString, todayKSTDateString } from "@/lib/week";
 import { startDateError } from "@/lib/wizardDates";
@@ -152,10 +163,27 @@ export function LearningPathWizard({
     [recommendation, courseId],
   );
   const targetLevelOptions = useMemo(
-    () => selectedCourse?.levels.filter((l) => currentOrder == null || l.order > currentOrder) ?? [],
+    () => targetOptions(selectedCourse?.levels ?? [], currentOrder),
     [selectedCourse, currentOrder],
   );
   const onlyOneLevelInCourse = Boolean(selectedCourse && selectedCourse.levels.length < 2);
+  // CR-012 (2nd): each level is one combo box. The order is the one of the last level picked from the list.
+  const currentSel: LevelSelection = { order: currentOrder, name: currentLevelName, description: currentLevelDesc };
+  const targetSel: LevelSelection = { order: targetOrder, name: targetLevelName, description: targetLevelDesc };
+  const currentProblem = selectedCourse ? levelProblem(currentSel) : null;
+  const targetProblem = selectedCourse && !onlyOneLevelInCourse ? levelProblem(targetSel) : null;
+
+  function applyCurrent(sel: LevelSelection) {
+    setCurrentOrder(sel.order);
+    setCurrentLevelName(sel.name);
+    setCurrentLevelDesc(sel.description);
+  }
+
+  function applyTarget(sel: LevelSelection) {
+    setTargetOrder(sel.order);
+    setTargetLevelName(sel.name);
+    setTargetLevelDesc(sel.description);
+  }
 
   function pickCourse(course: CourseItem) {
     setCourseId(course.id);
@@ -163,32 +191,20 @@ export function LearningPathWizard({
     setCourseDescription(course.description);
     const first = course.levels[0];
     const second = course.levels.find((l) => first && l.order > first.order) ?? first;
-    setCurrentOrder(first?.order ?? null);
-    setCurrentLevelName(first?.name ?? "");
-    setCurrentLevelDesc(first?.description ?? "");
-    setTargetOrder(second?.order ?? null);
-    setTargetLevelName(second?.name ?? "");
-    setTargetLevelDesc(second?.description ?? "");
+    applyCurrent(selectionFrom(first));
+    applyTarget(selectionFrom(second));
   }
 
   function pickCurrentLevel(order: number) {
-    setCurrentOrder(order);
-    const lvl = selectedCourse?.levels.find((l) => l.order === order);
-    setCurrentLevelName(lvl?.name ?? "");
-    setCurrentLevelDesc(lvl?.description ?? "");
-    if (targetOrder != null && targetOrder <= order) {
-      const next = selectedCourse?.levels.find((l) => l.order > order) ?? null;
-      setTargetOrder(next?.order ?? null);
-      setTargetLevelName(next?.name ?? "");
-      setTargetLevelDesc(next?.description ?? "");
-    }
+    const levels = selectedCourse?.levels ?? [];
+    const picked = pickLevel(levels, order);
+    applyCurrent(picked);
+    const adjusted = adjustTarget(levels, picked, targetSel);
+    if (adjusted !== targetSel) applyTarget(adjusted);
   }
 
   function pickTargetLevel(order: number) {
-    setTargetOrder(order);
-    const lvl = selectedCourse?.levels.find((l) => l.order === order);
-    setTargetLevelName(lvl?.name ?? "");
-    setTargetLevelDesc(lvl?.description ?? "");
+    applyTarget(pickLevel(selectedCourse?.levels ?? [], order));
   }
 
   async function fetchIdeas() {
@@ -305,7 +321,7 @@ export function LearningPathWizard({
 
   async function generatePlan() {
     if (!session || !recommendation || !selectedCourse || currentOrder == null || targetOrder == null || !targetDate) return;
-    if (dateError) return;
+    if (dateError || currentProblem || targetProblem) return;
     setPlanStatus("loading");
     setPlanError(null);
     try {
@@ -597,8 +613,11 @@ export function LearningPathWizard({
           onClick={fetchIdeas}
           disabled={!field.trim() || ideasStatus === "loading" || pathStatus === "loading"}
         >
-          {ideasStatus === "loading" ? "예시 찾는 중…" : ideas ? "✦ 예시 다시 보기" : "✦ 이 분야의 대표 직무·목표 예시 보기"}
+          {ideasStatus === "loading" ? "추천 찾는 중…" : "✦ 목표 추천"}
         </button>
+        <p className="small muted" style={{ margin: "4px 0 0" }}>
+          이 분야에서 많이 목표로 삼는 직무를 추천해요.
+        </p>
         {ideasStatus === "error" && (
           <p className="error" role="alert">
             {ideasError}
@@ -634,7 +653,7 @@ export function LearningPathWizard({
           />
         </div>
         <button className="btn small" onClick={recommend} disabled={!field.trim() || pathStatus === "loading"}>
-          {pathStatus === "loading" ? "추천 받는 중…" : recommendation ? "✦ 다시 추천받기" : "✦ AI 세부 과정·수준 추천"}
+          {pathStatus === "loading" ? "추천 받는 중…" : recommendation ? "✦ 과정 다시 추천받기" : "✦ 과정 추천받기"}
         </button>
         {pathStatus === "error" && (
           <p className="error" role="alert">
@@ -674,60 +693,45 @@ export function LearningPathWizard({
 
             {selectedCourse && (
               <div className="field">
-                <label>3. 현재 수준과 목표 수준 (이름·설명 수정 가능)</label>
-                <p className="small muted">수준 번호는 표시하지 않으며, 목표 수준은 현재 수준보다 높은 항목만 선택할 수 있습니다.</p>
+                <label>3. 현재 수준과 목표 수준</label>
+                <p className="small muted">
+                  AI가 제안한 수준에서 현재와 도달 목표를 고르고, 필요하면 같은 칸에서 이름을 바로 고쳐 쓰세요. 수준 번호는 표시하지 않습니다.
+                </p>
                 {onlyOneLevelInCourse && (
                   <p className="error" role="alert">
                     이 과정은 수준이 1개뿐이라 목표 수준을 선택할 수 없습니다. 다른 과정을 선택하거나 다시 추천받으세요.
                   </p>
                 )}
                 <div className="field-grid" style={{ marginTop: 10 }}>
-                  <div className="field">
-                    <label htmlFor="current-level">현재 수준</label>
-                    <select id="current-level" value={currentOrder ?? ""} onChange={(e) => pickCurrentLevel(Number(e.target.value))}>
-                      {selectedCourse.levels.map((l) => (
-                        <option key={l.order} value={l.order}>
-                          {l.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="field">
-                    <label htmlFor="target-level">도달 목표 수준</label>
-                    <select
-                      id="target-level"
-                      value={targetOrder ?? ""}
-                      onChange={(e) => pickTargetLevel(Number(e.target.value))}
-                      disabled={targetLevelOptions.length === 0}
-                    >
-                      {targetLevelOptions.map((l) => (
-                        <option key={l.order} value={l.order}>
-                          {l.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  <LevelCombo
+                    id="current-level"
+                    label="현재 수준"
+                    options={selectedCourse.levels}
+                    selectedOrder={currentOrder}
+                    name={currentLevelName}
+                    description={currentLevelDesc}
+                    onNameChange={(name) => applyCurrent(editName(currentSel, name))}
+                    onPick={pickCurrentLevel}
+                    onDescriptionChange={(d) => applyCurrent(editDescription(currentSel, d))}
+                    problem={currentProblem}
+                  />
+                  <LevelCombo
+                    id="target-level"
+                    label="도달 목표 수준"
+                    options={targetLevelOptions}
+                    selectedOrder={targetOrder}
+                    name={targetLevelName}
+                    description={targetLevelDesc}
+                    onNameChange={(name) => applyTarget(editName(targetSel, name))}
+                    onPick={pickTargetLevel}
+                    onDescriptionChange={(d) => applyTarget(editDescription(targetSel, d))}
+                    disabled={targetLevelOptions.length === 0}
+                    problem={targetProblem}
+                  />
                 </div>
-                <div className="field-grid">
-                  <div className="field">
-                    <label htmlFor="current-level-name">현재 수준 이름</label>
-                    <input id="current-level-name" value={currentLevelName} onChange={(e) => setCurrentLevelName(e.target.value)} autoComplete="off" />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="target-level-name">목표 수준 이름</label>
-                    <input id="target-level-name" value={targetLevelName} onChange={(e) => setTargetLevelName(e.target.value)} autoComplete="off" />
-                  </div>
-                </div>
-                <div className="field-grid">
-                  <div className="field">
-                    <label htmlFor="current-level-desc">현재 수준 설명</label>
-                    <textarea id="current-level-desc" value={currentLevelDesc} onChange={(e) => setCurrentLevelDesc(e.target.value)} />
-                  </div>
-                  <div className="field">
-                    <label htmlFor="target-level-desc">목표 수준 설명</label>
-                    <textarea id="target-level-desc" value={targetLevelDesc} onChange={(e) => setTargetLevelDesc(e.target.value)} />
-                  </div>
-                </div>
+                <p className="small muted">
+                  현재: {currentLevelName.trim() || "-"} · 목표: {targetLevelName.trim() || "-"}
+                </p>
               </div>
             )}
 
@@ -787,6 +791,8 @@ export function LearningPathWizard({
                 !startDate ||
                 Boolean(dateError) ||
                 onlyOneLevelInCourse ||
+                Boolean(currentProblem) ||
+                Boolean(targetProblem) ||
                 planStatus === "loading"
               }
             >
@@ -888,13 +894,18 @@ export function LearningPathWizard({
                     const note = spanNote(item.weeksSpanned);
                     return (
                       <div key={`${g.index}-${i}`} className="task-edit-row">
-                        <input
-                          value={t.title}
-                          onChange={(e) => updateTask(i, { title: e.target.value })}
-                          placeholder="과업 제목"
-                          autoComplete="off"
-                          aria-invalid={duplicateIndexes.has(i)}
-                        />
+                        <div className="task-edit-head">
+                          <span className="task-no" aria-label={`과제 ${i + 1}번`}>
+                            {i + 1}
+                          </span>
+                          <input
+                            value={t.title}
+                            onChange={(e) => updateTask(i, { title: e.target.value })}
+                            placeholder="과업 제목"
+                            autoComplete="off"
+                            aria-invalid={duplicateIndexes.has(i)}
+                          />
+                        </div>
                         {duplicateIndexes.has(i) && (
                           <p className="error" role="alert">
                             같은 제목의 과제가 이미 있어요. 제목을 서로 다르게 바꿔 주세요.
@@ -927,7 +938,7 @@ export function LearningPathWizard({
                           </select>
                         </div>
                         {note && <p className="small muted">{note}</p>}
-                        <button type="button" className="btn secondary small" onClick={() => removeTask(i)}>
+                        <button type="button" className="link-btn task-remove" onClick={() => removeTask(i)}>
                           과업 삭제
                         </button>
                       </div>

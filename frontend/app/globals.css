@@ -235,6 +235,22 @@ ul { margin: 0; padding-left: 18px; color: #586277; line-height: 1.7; font-size:
 .task-edit-row { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 8px; display: grid; gap: 6px; }
 .task-edit-row input, .task-edit-row textarea, .task-edit-row select { width: 100%; border: 1px solid #e2e5ed; background: #fff; border-radius: 9px; padding: 8px 10px; color: var(--ink); font-size: 11px; }
 .task-edit-row textarea { min-height: 52px; resize: vertical; }
+/* CR-012 (2nd): one editable combo box per level; the list always shows every option */
+.combo { position: relative; }
+.combo input { padding-right: 30px; }
+.combo-toggle { position: absolute; top: 0; right: 0; height: 100%; width: 28px; border: 0; background: none; color: var(--muted); font-size: 11px; cursor: pointer; }
+.combo-toggle:disabled { cursor: default; opacity: .5; }
+.combo-list { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 3px); margin: 0; padding: 4px; list-style: none; background: #fff; border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow); max-height: 220px; overflow-y: auto; }
+.combo-option { padding: 7px 9px; border-radius: 7px; font-size: 11px; color: var(--ink); cursor: pointer; }
+.combo-option.active { background: var(--lav); }
+.combo-option.selected { font-weight: 800; color: var(--blue); }
+.level-desc summary { font-size: 9px; color: var(--blue); font-weight: 800; cursor: pointer; margin-top: 4px; }
+.level-desc textarea { margin-top: 5px; }
+/* CR-012 (2nd): the preview tasks are easy to tell apart: a tinted title line with the task number, a clearer border, a small delete link */
+.task-edit-row { border-color: #d9dcec; margin-bottom: 12px; }
+.task-edit-head { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; align-items: center; background: var(--lav); border-radius: 8px; padding: 6px 8px 6px 6px; }
+.task-no { width: 22px; height: 22px; border-radius: 50%; background: var(--blue); color: #fff; font-size: 10px; font-weight: 800; display: grid; place-items: center; }
+.task-remove { justify-self: end; color: var(--muted); font-weight: 600; font-size: 10px; }
 
 @media (max-width: 1050px) {
   .shell { grid-template-columns: 218px minmax(0, 1fr); }
