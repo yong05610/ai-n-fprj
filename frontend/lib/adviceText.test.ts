@@ -5,11 +5,19 @@ import test from "node:test";
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-test("the advice style keeps line breaks and does not touch size or layout", () => {
+test("the advice style keeps line breaks and does not touch margin or layout", () => {
   const css = read("../app/globals.css");
   const rule = css.split("\n").find((l) => l.startsWith(".advice-text"));
   assert.ok(rule && rule.includes("white-space: pre-line"));
-  assert.ok(!/font-size|margin|padding|display/.test(rule.split("/*")[0]), "no size or layout change");
+  assert.ok(!/margin|padding|display/.test(rule.split("/*")[0]), "no margin or layout change");
+});
+
+test("the advice body is 12px with line height 1.6 in both places (CR-013 fix 2)", () => {
+  const css = read("../app/globals.css");
+  const rule = css.split("\n").find((l) => /^\.advice-text, \.coach p\.advice-text/.test(l));
+  assert.ok(rule && /font-size: 12px/.test(rule) && /line-height: 1\.6/.test(rule));
+  // the preview's `.coach p` (10px) must not win: the selector above is more specific
+  assert.ok(/\.coach p \{ font-size: 10px/.test(css));
 });
 
 test("the plan preview and the plan screen show the advice with that style", () => {
