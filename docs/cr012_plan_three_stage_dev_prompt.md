@@ -2,6 +2,8 @@
 
 작성: PM, 2026-11-09. 대상: 개발팀. 근거: 사용자 결정(2026-11-09, `docs/change_management.md` CR-012), 테스트 `docs/plan_prompt_test_2026-11-09.md`(1~3차), 설계 `docs/plan_prompt_v2_draft.md` §6~7.
 
+> **2차 작업(2026-11-09 추가):** 1차(§1~4, 커밋 075cee4)는 PM 검증을 마쳤다(`docs/cr012_verification.md`). 2차는 **§4-2(학습 경로 화면의 작은 변경)만** 한다. 1차 코드는 건드리지 않는다. 2차 보고서는 `docs/cr012_2_report.md`, 채팅 한 줄은 `CR-012 2차 완료 / pytest N건, npm test N건 통과 / 보고서 docs/cr012_2_report.md / 커밋 <해시>`.
+
 ## [필수] 완료 조건
 1. 보고서를 `docs/cr012_report.md` 로 저장한다.
 2. 작업을 **로컬 커밋**한다(push 하지 않음). 이 작업의 파일만 넣는다.
