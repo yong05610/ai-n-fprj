@@ -32,3 +32,10 @@
 - **고칠 것:** `.advice-text` 를 **12px, 줄 간격 1.6**(설명 글 `.description` 과 같은 크기)으로. 사용자가 말한 최소(오류 문구 11px)보다 한 단계 크게 한 이유: 긴 글이라 짧은 오류 문구보다 읽기 부담이 크다. 두 곳 모두 적용: 계획 미리보기의 조언(보라색 상자 안, 흰 글자 유지)과 학습 과제 계획 화면의 조언(`small` 클래스를 빼거나 `.advice-text` 가 이기게). 조언 제목, "AI 생성 · 참고용" 같은 다른 작은 글자는 그대로.
 - 목업: PM 이 `.advice-text` 를 12px·1.6 으로 반영(2026-11-09).
 - 시험 1건(CSS 값), 360px 에서 가로 스크롤 없음 확인.
+
+## 수정 2 확인 (PM, 2026-11-10) — 승인
+- 커밋 5ed9bfe: `frontend/app/globals.css` +2줄 `.advice-text, .coach p.advice-text { font-size: 12px; line-height: 1.6; }`, 시험 1건.
+- 선택자 우선순위 직접 확인: `.small`(79행, 10px)은 `.advice-text` 와 우선순위가 같고 파일 앞에 있어 뒤의 규칙(349행)이 이긴다. `.coach p`(112행, 10px)는 `.coach p.advice-text` 가 더 구체적이라 이긴다. `.muted` 는 색만 바꾼다. 두 화면의 마크업(`LearningPathWizard.tsx:960`, `WeeklyPlanScreen.tsx:457`)에 `advice-text` 가 있다.
+- PM 실행: **npm test 237건 통과**(백엔드 변경 없음, pytest 1370은 개발 보고 기준). 목업 `.advice-text` 12px·1.6 과 일치.
+- 미확인: 실제 AI 조언이 들어간 화면을 눈으로 본 확인, 휴대폰 → 배포 후 사용자 확인.
+
