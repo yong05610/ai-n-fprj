@@ -122,14 +122,13 @@ npm run build
 - **한계와 이후 계획:** MVP 에서 제외한 Function Calling 튜터 Agent, 리마인더 자동화, 멀티모달 등은 서비스기획서 10장과 `docs/post_mvp_backlog.md` 에 있습니다.
 
 ## 10. 문서 안내
-| 문서 | 내용 |
+**전체 문서 지도: [docs/README.md](docs/README.md)** (기준 문서, 진행 중인 변경, 설계, AI 개선 이력, 배포·운영, 사용자 테스트, 지난 기록)
+
+| 먼저 볼 문서 | 내용 |
 |---|---|
 | `mission.md` | 과제 요구사항과 평가 기준 |
-| `서비스기획서.md` | 무엇을 왜 만드는가(문제, 대상, 범위, 역할) |
-| `PRD.md` | 기능 요구사항과 수용 기준(FR-01~09), 비기능, 기술 기준 |
-| `TASK.md` | 14일 MVP 작업 계획과 이력(2026-11-09 종료) |
-| `docs/change_management.md` | MVP 이후 변경·개선 기록(CR 번호), 사용자 테스트 반영도 여기서 관리 |
-| `docs/tester_guide.md`, `docs/user_test_survey.md` | 사용자 테스트 안내문과 설문 문항 |
+| `서비스기획서.md`, `PRD.md` | 무엇을 왜 만드는가, 기능 요구사항과 수용 기준(FR-01~09) |
+| `docs/change_management.md` | MVP 이후 변경·개선 기록(CR 번호), 사용자 테스트 반영 |
 | `docs/ai_improvement_log.md` | AI 개선 이력 |
 | `mockup/index.html` | 표준 화면 목업 |
 
