@@ -19,7 +19,7 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import lru_cache
-from typing import Callable, Optional, Type, TypeVar
+from typing import Callable, Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel, ValidationError
 
@@ -77,15 +77,21 @@ def ai_max_output_tokens() -> int:
     return int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1500"))
 
 
-# Per-call overrides (Phase 5F: a whole-course plan is a much longer answer than the other calls).
-# A context variable keeps `_raw_complete(system_prompt, user_payload)` unchanged for every client
-# and fake; only OpenAIClient reads it.
-_call_limits: ContextVar[Optional[tuple[Optional[float], Optional[int]]]] = ContextVar("ai_call_limits", default=None)
+# Per-call overrides (Phase 5F: a whole-course plan is a much longer answer than the other calls;
+# CR-012: the plan calls also use their own model). A context variable keeps
+# `_raw_complete(system_prompt, user_payload)` unchanged for every client and fake; only OpenAIClient
+# reads it. `timeout_seconds` may be a function so the plan flow can hand every attempt the time that is
+# left of its overall budget.
+_call_limits: ContextVar[Optional[tuple]] = ContextVar("ai_call_limits", default=None)
 
 
 @contextmanager
-def call_limits(timeout_seconds: Optional[float] = None, max_output_tokens: Optional[int] = None):
-    token = _call_limits.set((timeout_seconds, max_output_tokens))
+def call_limits(
+    timeout_seconds: Union[float, Callable[[], float], None] = None,
+    max_output_tokens: Optional[int] = None,
+    model: Optional[str] = None,
+):
+    token = _call_limits.set((timeout_seconds, max_output_tokens, model))
     try:
         yield
     finally:
@@ -100,6 +106,11 @@ def plan_max_output_tokens() -> int:
     return int(os.getenv("OPENAI_PLAN_MAX_OUTPUT_TOKENS", "8000"))
 
 
+def plan_model() -> str:
+    """CR-012: the model of the three plan-generation calls only (tutor, insight, path... keep OPENAI_MODEL)."""
+    return os.getenv("OPENAI_PLAN_MODEL") or "gpt-5.4-mini"
+
+
 class AIClient(ABC):
     @abstractmethod
     def _raw_complete(self, system_prompt: str, user_payload: dict) -> str:
@@ -110,6 +121,36 @@ class AIClient(ABC):
         can't connect, auth/rate-limit errors).
         """
 
+    def _raw_text(self, system_prompt: str, user_payload: dict) -> str:
+        """CR-012: one free-text provider call (no JSON mode). Same error contract as `_raw_complete`.
+        Not abstract: only the clients that serve the plan flow implement it."""
+        raise AIUnavailableError("이 AI 클라이언트는 자유 글 호출을 지원하지 않습니다.")
+
+    def generate_text(
+        self,
+        system_prompt: str,
+        user_payload: dict,
+        max_attempts: int = 2,
+        should_continue: Optional[Callable[[], bool]] = None,
+    ) -> str:
+        """Free text, not JSON. A timeout is retried (up to `max_attempts` in all); an empty answer (for a
+        reasoning model usually a cut-off one) is a failure, never retried. Nothing is validated or logged."""
+        last_error: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            if attempt > 1 and should_continue is not None and not should_continue():
+                break
+            try:
+                text = self._raw_text(system_prompt, user_payload)
+            except AIRetryableError as exc:
+                last_error = exc
+                continue
+            if not (text or "").strip():
+                logger.warning("ai_call_failed kind=empty")
+                raise AISchemaError("AI 응답이 비어 있습니다.")
+            return text
+        logger.warning("ai_call_failed kind=timeout")
+        raise AITimeoutError("AI 응답이 시간 안에 완료되지 않았습니다.") from last_error
+
     def generate(
         self,
         system_prompt: str,
@@ -117,13 +158,18 @@ class AIClient(ABC):
         response_model: Type[T],
         validator: Optional[Callable[[T], None]] = None,
         on_reject: Optional[Callable[[Exception, int], None]] = None,
+        should_continue: Optional[Callable[[], bool]] = None,
     ) -> T:
         """`on_reject(error, attempt)` is called for every attempt that is thrown away (1-based);
-        it receives the exception only so the caller can log a category, never any content."""
+        it receives the exception only so the caller can log a category, never any content.
+        `should_continue()` (CR-012, optional) is asked before every retry; False stops with a timeout error."""
         last_error: Optional[Exception] = None
         last_kind = "timeout"
         payload = dict(user_payload)
         for attempt in range(1, MAX_RETRIES + 2):
+            if attempt > 1 and should_continue is not None and not should_continue():
+                logger.warning("ai_call_failed kind=timeout")
+                raise AITimeoutError("AI 응답이 시간 안에 완료되지 않았습니다.") from last_error
             try:
                 raw = self._raw_complete(system_prompt, payload)
             except AIRetryableError as exc:
@@ -166,19 +212,28 @@ class OpenAIClient(AIClient):
         self._connection_error = APIConnectionError
 
     def _raw_complete(self, system_prompt: str, user_payload: dict) -> str:
-        timeout, max_tokens = _call_limits.get() or (None, None)
+        return self._call(system_prompt, user_payload, json_mode=True)
+
+    def _raw_text(self, system_prompt: str, user_payload: dict) -> str:
+        return self._call(system_prompt, user_payload, json_mode=False)
+
+    def _call(self, system_prompt: str, user_payload: dict, json_mode: bool) -> str:
+        timeout, max_tokens, model = _call_limits.get() or (None, None, None)
+        if callable(timeout):
+            timeout = timeout()
         client = self._client.with_options(timeout=timeout) if timeout else self._client
+        extra = {"response_format": {"type": "json_object"}} if json_mode else {}
         try:
             completion = client.chat.completions.create(
-                model=ai_model(),
+                model=model or ai_model(),
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
                 ],
-                response_format={"type": "json_object"},
                 # max_completion_tokens (not the deprecated max_tokens) is required by
                 # newer models (e.g. reasoning models) and still accepted by older ones.
                 max_completion_tokens=max_tokens or ai_max_output_tokens(),
+                **extra,
             )
         except self._timeout_error as exc:
             raise AIRetryableError("provider call timed out") from exc
@@ -207,6 +262,11 @@ class _LazyOpenAIClient(AIClient):
         if self._inner is None:
             self._inner = OpenAIClient()
         return self._inner._raw_complete(system_prompt, user_payload)
+
+    def _raw_text(self, system_prompt: str, user_payload: dict) -> str:
+        if self._inner is None:
+            self._inner = OpenAIClient()
+        return self._inner._raw_text(system_prompt, user_payload)
 
 
 @lru_cache(maxsize=1)

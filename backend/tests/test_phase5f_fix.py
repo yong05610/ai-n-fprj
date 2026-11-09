@@ -128,7 +128,9 @@ class TestCoverageAndHints:
 
 
 class TestPrompt:
-    def test_the_prompt_asks_for_a_realistic_amount_without_padding_and_names_the_hint_fields(self):
-        for needle in ("suggested_task_count_range", "suggested_total_range_minutes", "period_days", "세분화", "프로젝트", "억지로 늘려 채우지 않고", "같은 과제를 반복하지 않는다", "권고일 뿐"):
+    def test_the_prompt_keeps_the_hard_limits_and_asks_for_no_padding(self):
+        # CR-012 replaced the single-call wording (the hint fields still reach the model in the user JSON, see
+        # test_the_model_gets_the_ranges_computed_by_the_server); the hard limits and "no padding" remain.
+        for needle in ("max_total_minutes", "가용 시간을 채우려고 늘리지 않는다", "제목이 서로 다르고", "previous_total_minutes"):
             assert needle in PLAN_GENERATE_SYSTEM_PROMPT
         assert "3개 이상 60개 이하" in PLAN_GENERATE_SYSTEM_PROMPT  # the hard limits remain

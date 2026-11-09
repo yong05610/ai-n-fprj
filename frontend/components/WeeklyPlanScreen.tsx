@@ -395,7 +395,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
             {hasAdvice ? (
               <>
                 <p className="advice-title">{goal.advice_title}</p>
-                <p className="small muted" style={{ whiteSpace: "pre-wrap" }}>
+                <p className="small muted advice-text">
                   {goal.advice_content}
                 </p>
                 <p className="small muted">AI 생성 · 참고용</p>

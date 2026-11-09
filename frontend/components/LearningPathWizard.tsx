@@ -946,7 +946,7 @@ export function LearningPathWizard({
             <div className="coach">
               <p className="kicker">AI INSIGHT</p>
               <h3>{draft.advice.title}</h3>
-              <p>{draft.advice.content}</p>
+              <p className="advice-text">{draft.advice.content}</p>
             </div>
           )}
 

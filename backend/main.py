@@ -17,10 +17,7 @@ from ai_client import (
     AISchemaError,
     AITimeoutError,
     AIUnavailableError,
-    call_limits,
     get_ai_client,
-    plan_max_output_tokens,
-    plan_timeout_seconds,
 )
 from ai_schemas import AIInsight, AIInsightBasic, AIPathRecommendation, AIPlanDraft, AIRoleIdeas, AITutorAnswer
 from auth import assert_safe_auth_config, auth_mode, create_login_token, delete_auth_user, get_current_uid
@@ -29,6 +26,7 @@ from errors import api_error, bad_request, forbidden, not_found, validation_exce
 import field_demand
 import insight_rules
 import password_auth
+import plan_ai
 import rag
 import resource_collectors
 import resource_pipeline
@@ -849,14 +847,8 @@ def generate_plan(
         "suggested_total_range_minutes": schedule.suggested_total_range_minutes(max_total_minutes),
     }
     try:
-        # A whole-course answer is long: this call alone gets a longer timeout and output budget.
-        with call_limits(plan_timeout_seconds(), plan_max_output_tokens()):
-            draft = ai.generate(
-                PLAN_GENERATE_SYSTEM_PROMPT,
-                user_payload,
-                AIPlanDraft,
-                validator=lambda parsed: _validate_ai_plan(parsed, max_total_minutes),
-            )
+        # CR-012: field guideline -> design opinion -> JSON, one time budget (plan_ai.py).
+        draft = plan_ai.generate_plan_draft(ai, user_payload, lambda parsed: _validate_ai_plan(parsed, max_total_minutes))
     except (AITimeoutError, AISchemaError, AIUnavailableError) as exc:
         raise _ai_error_response(exc)
 

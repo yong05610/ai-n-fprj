@@ -79,6 +79,12 @@ class FakeAIClient(AIClient):
             raise self._raises.pop(0)
         return self._raws.pop(0)
 
+    def _raw_text(self, system_prompt: str, user_payload: dict) -> str:
+        """CR-012: the two free-text stages of plan generation. Kept apart from `calls` and
+        `payloads_seen`, which keep describing the JSON call (stage 2) these tests are about."""
+        self.__dict__.setdefault("text_payloads", []).append((system_prompt, user_payload))
+        return "테스트용 학습 설계 글"
+
 
 def _raw(obj: dict) -> str:
     return json.dumps(obj, ensure_ascii=False)
