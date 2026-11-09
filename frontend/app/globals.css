@@ -205,6 +205,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .goal-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 2px; border-bottom: 1px solid #f0f1f5; }
 .goal-row:last-child { border: 0; }
 .goal-row .bar { margin: 0; }
+/* CR-013: a learning row of the overview is pressable (values of the mockup's .goal-row.clickable) */
+.goal-row.clickable { cursor: pointer; border: 1px solid transparent; border-radius: 11px; padding: 10px 8px; transition: background .15s, border-color .15s, transform .15s, box-shadow .15s; }
+.goal-row.clickable:focus-visible, .goal-row.clickable:active { background: #f3f5ff; border-color: #c9d1ff; transform: translateY(-2px); box-shadow: 0 6px 14px #4c62dc1f; outline: none; }
+@media (hover: hover) { .goal-row.clickable:hover { background: #f3f5ff; border-color: #c9d1ff; transform: translateY(-2px); box-shadow: 0 6px 14px #4c62dc1f; } }
+@media (prefers-reduced-motion: reduce) { .goal-row.clickable { transition: none; } .goal-row.clickable:hover, .goal-row.clickable:focus-visible, .goal-row.clickable:active { transform: none; } }
+/* CR-013: the plan screen's save status is a small text, not a button */
+.plan-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+.save-status { font-size: 10px; color: #248160; font-weight: 800; white-space: nowrap; }
+.save-status.error { color: #c65361; }
+@media (max-width: 720px) { .plan-actions { justify-content: flex-start; } .heading .plan-actions .btn { width: auto; } }
 
 /* Existing components, re-scaled to the mockup */
 .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; }

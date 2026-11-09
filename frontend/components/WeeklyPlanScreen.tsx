@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
+import { DeleteGoalDialog } from "@/components/DeleteGoalDialog";
 import { GoalSwitch } from "@/components/GoalSwitch";
 import { useGoalSwitch } from "@/components/useGoalSwitch";
 import { ApiError, apiRequest } from "@/lib/api";
+import { DELETE_FAILED, deleteCounts, runGoalDelete } from "@/lib/goalDelete";
 import { LatestWinsSaver, type SaveState } from "@/lib/latestWins";
 import { continuedLabel, weeklyPlanHeaderText } from "@/lib/planText";
+import { saveStatusView } from "@/lib/saveStatus";
 import { availableMinutes, lastScheduledWeekIndex, planWeekMondays, tasksInWeek, weekCount, weekIndexOf } from "@/lib/schedule";
 import { SEARCH_LINKS_HEADING, SEARCH_LINKS_WARNING, type SearchLink, sourceLine, visibleSearchLinks } from "@/lib/searchLinks";
 import { mondayOfDateString, mondayOfThisWeekKST } from "@/lib/week";
@@ -74,6 +77,10 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
   const [save, setSave] = useState<SaveState>({ status: "idle", failedKeys: [] });
   const [reloadKey, setReloadKey] = useState(0);
   const saverRef = useRef<LatestWinsSaver<Weekday> | null>(null);
+  // CR-013: delete this learning (confirmation window, then DELETE /api/goals/{id}).
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // The saver is created once; it only needs the session token at send time.
   const sessionRef = useRef(session);
@@ -175,16 +182,67 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
     </>
   );
 
-  const saveButton = (
-    <button
-      type="button"
-      className="btn secondary"
-      onClick={() => saverRef.current!.retry()}
-      disabled={save.status !== "error"}
-      aria-live="polite"
-    >
-      {save.status === "saving" ? "저장 중…" : save.status === "error" ? "저장하지 못했어요. 다시 시도" : "계획 저장됨 ✓"}
-    </button>
+  async function confirmDelete() {
+    if (!session || !goalId || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const outcome = await runGoalDelete(
+      async () => {
+        const token = await session.getToken();
+        await apiRequest(`/api/goals/${encodeURIComponent(goalId)}`, { method: "DELETE", token });
+      },
+      // the server moved the current learning to a remaining one (or to none): read the list and the current one again
+      () => goalSwitch.reload(),
+      (e) => (e instanceof ApiError ? e.message : DELETE_FAILED),
+    );
+    setDeleting(false);
+    if (outcome.ok) {
+      setConfirmingDelete(false);
+      setSave({ status: "idle", failedKeys: [] }); // a save state of the deleted learning is no news for the next one
+    } else {
+      setDeleteError(outcome.error);
+    }
+  }
+
+  const deleteDialog = confirmingDelete && goal && (
+    <DeleteGoalDialog
+      course={goal.course}
+      counts={deleteCounts(tasks)}
+      busy={deleting}
+      error={deleteError}
+      onCancel={() => setConfirmingDelete(false)}
+      onConfirm={() => void confirmDelete()}
+    />
+  );
+
+  // CR-013: a small status text (a button only after a failed save) and the delete button.
+  const saveView = saveStatusView(save);
+  const headerActions = (
+    <div className="plan-actions">
+      {tasks.length > 0 && (
+        <>
+          <span className={`save-status${saveView.kind === "error" ? " error" : ""}`} aria-live="polite">
+            {saveView.text}
+          </span>
+          {saveView.showRetry && (
+            <button type="button" className="btn secondary small" onClick={() => saverRef.current!.retry()}>
+              다시 시도
+            </button>
+          )}
+        </>
+      )}
+      <button
+        type="button"
+        className="btn danger small"
+        onClick={() => {
+          setDeleteError(null);
+          setConfirmingDelete(true);
+        }}
+        disabled={deleting}
+      >
+        이 학습 삭제
+      </button>
+    </div>
   );
 
   const heading = (
@@ -194,7 +252,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
         <h1>주간 학습 계획</h1>
         <p>전체 학습 계획을 주 단위로 보고, 편한 요일에 학습하세요.</p>
       </div>
-      {status === "ready" && goal && tasks.length > 0 && saveButton}
+      {status === "ready" && goal && headerActions}
     </div>
   );
 
@@ -297,6 +355,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
             학습 경로 설정으로 이동
           </button>
         </section>
+        {deleteDialog}
       </>
     );
   }
@@ -443,6 +502,7 @@ export function WeeklyPlanScreen({ onOpenPath }: { onOpenPath: () => void }) {
           </section>
         </aside>
       </div>
+      {deleteDialog}
     </>
   );
 }

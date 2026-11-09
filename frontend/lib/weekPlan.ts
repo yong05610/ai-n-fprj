@@ -38,6 +38,8 @@ export type PlanTask = {
   order_index: number;
   /** Phase 5F: minutes of the tasks before this one (server-placed; computed for older plans) */
   timeline_start_minutes: number;
+  /** study records of this task (the server derives it; used by the delete confirmation) */
+  record_count?: number;
 };
 
 /** Distinct plan weeks (Monday dates), oldest first. */

@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { useAuth } from "@/components/AuthProvider";
 import { ApiError, apiRequest } from "@/lib/api";
 import { formatPeriod, formatTargetMinutes, levelSummary } from "@/lib/format";
+import { SWITCH_FAILED, goalRowLabel, openGoalExecution } from "@/lib/goalRow";
 import { continuedLabel, dashboardScheduleText } from "@/lib/planText";
 import { todayKSTDateString } from "@/lib/week";
 
@@ -57,11 +58,13 @@ export function Dashboard({
   onOpenAnalysis,
   onOpenTutor,
   onOpenPlan,
+  onOpenExecution,
 }: {
   onCreatePath: () => void;
   onOpenAnalysis: () => void;
   onOpenTutor: () => void;
   onOpenPlan: () => void;
+  onOpenExecution: () => void;
 }) {
   const { session } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -72,6 +75,30 @@ export function Dashboard({
   // refetch lands, summary.today_tasks[].is_completed (now accurate - P5-4) is the source
   // of truth again, so the override is cleared rather than kept forever.
   const [checkedOverride, setCheckedOverride] = useState<Record<string, boolean>>({});
+  // CR-013: a learning row opens that learning's execution record (switching to it first).
+  const [rowBusy, setRowBusy] = useState<string | null>(null);
+  const [rowError, setRowError] = useState<{ goalId: string; message: string } | null>(null);
+
+  async function openExecution(goalId: string) {
+    if (!session || rowBusy) return;
+    setRowBusy(goalId);
+    setRowError(null);
+    const outcome = await openGoalExecution({
+      goalId,
+      getActiveGoalId: async () => {
+        const token = await session.getToken();
+        return (await apiRequest<{ active_goal_id: string | null }>("/api/user/profile", { token })).active_goal_id;
+      },
+      switchGoal: async (id) => {
+        const token = await session.getToken();
+        await apiRequest("/api/user/profile", { method: "PATCH", token, body: { active_goal_id: id } });
+      },
+      errorText: (e) => (e instanceof ApiError ? e.message : SWITCH_FAILED),
+    });
+    setRowBusy(null);
+    if (outcome.ok) onOpenExecution();
+    else setRowError({ goalId, message: outcome.error });
+  }
 
   async function load(opts: { silent?: boolean } = {}) {
     if (!session) return;
@@ -200,20 +227,40 @@ export function Dashboard({
           <p className="description">진행 중인 학습이 없습니다.</p>
         ) : (
           summary.goals_overview.map((g) => (
-            <div key={g.goal_id} className="goal-row">
-              <div>
-                <strong>{g.course}</strong>
-                <p className="small muted" style={{ margin: "2px 0 0" }}>
-                  {formatPeriod(g.start_date, g.target_date, thisYear)}
-                </p>
-              </div>
-              <div>
-                <div className="bar" role="progressbar" aria-valuenow={g.progress_percentage} aria-valuemin={0} aria-valuemax={100}>
-                  <span style={{ width: `${g.progress_percentage}%` }}></span>
+            <Fragment key={g.goal_id}>
+              <div
+                className="goal-row clickable"
+                role="button"
+                tabIndex={0}
+                aria-label={goalRowLabel(g.course)}
+                aria-busy={rowBusy === g.goal_id ? true : undefined}
+                onClick={() => void openExecution(g.goal_id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    void openExecution(g.goal_id);
+                  }
+                }}
+              >
+                <div>
+                  <strong>{g.course}</strong>
+                  <p className="small muted" style={{ margin: "2px 0 0" }}>
+                    {formatPeriod(g.start_date, g.target_date, thisYear)}
+                  </p>
                 </div>
+                <div>
+                  <div className="bar" role="progressbar" aria-valuenow={g.progress_percentage} aria-valuemin={0} aria-valuemax={100}>
+                    <span style={{ width: `${g.progress_percentage}%` }}></span>
+                  </div>
+                </div>
+                <b>{g.progress_percentage}%</b>
               </div>
-              <b>{g.progress_percentage}%</b>
-            </div>
+              {rowError?.goalId === g.goal_id && (
+                <p className="error" role="alert">
+                  {rowError.message}
+                </p>
+              )}
+            </Fragment>
           ))
         )}
       </section>
