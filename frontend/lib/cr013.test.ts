@@ -14,6 +14,7 @@ import {
   deleteBody,
   deleteConfirmButton,
   deleteCounts,
+  isAlreadyDeleted,
   runGoalDelete,
 } from "./goalDelete";
 import { goalRowLabel, openGoalExecution } from "./goalRow";
@@ -87,6 +88,30 @@ test("a failed delete shows the error, reloads nothing and counts as nothing del
   assert.deepEqual(outcome, { ok: false, error: DELETE_FAILED });
   assert.deepEqual(calls, ["delete"]);
   assert.ok(DELETE_FAILED.includes("아무것도 지워지지 않았어요"));
+});
+
+test("a 404 on delete means already deleted: success, and the list is read again; other errors stay failures", async () => {
+  const gone = Object.assign(new Error("not found"), { status: 404 });
+  const calls: string[] = [];
+  const outcome = await runGoalDelete(
+    async () => {
+      calls.push("delete");
+      throw gone;
+    },
+    async () => void calls.push("reload"),
+    () => DELETE_FAILED,
+  );
+  assert.deepEqual(outcome, { ok: true });
+  assert.deepEqual(calls, ["delete", "reload"]);
+  assert.equal(isAlreadyDeleted(gone), true);
+  for (const status of [403, 409, 500, 0]) {
+    const other = Object.assign(new Error("x"), { status });
+    const again = await runGoalDelete(async () => { throw other; }, async () => void calls.push("reload?"), () => DELETE_FAILED);
+    assert.deepEqual(again, { ok: false, error: DELETE_FAILED }, `status ${status}`);
+  }
+  assert.ok(!calls.includes("reload?"), "no reload after a real failure");
+  assert.equal(isAlreadyDeleted(new Error("plain")), false);
+  assert.equal(isAlreadyDeleted(null), false);
 });
 
 test("a failed reload does not turn a successful delete into an error", async () => {

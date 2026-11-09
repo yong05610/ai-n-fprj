@@ -38,10 +38,16 @@ export function deleteConfirmButton(busy: boolean, failed: boolean): { label: st
 
 export type DeleteOutcome = { ok: true } | { ok: false; error: string };
 
+/** "Not found" for the learning being deleted = it is already gone (e.g. the first request got through but its answer was lost). */
+export function isAlreadyDeleted(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { status?: unknown }).status === 404;
+}
+
 /**
  * Delete, then reload the list of learnings and the current learning (the server already moved the current
  * learning to a remaining one, or to none). A failed delete leaves everything as it was; a failed reload does not
- * undo a delete that succeeded.
+ * undo a delete that succeeded. A 404 is "already deleted" and counts as a success (the reload then shows the truth);
+ * any other error (403 ...) stays a failure.
  */
 export async function runGoalDelete(
   remove: () => Promise<void>,
@@ -51,7 +57,7 @@ export async function runGoalDelete(
   try {
     await remove();
   } catch (error) {
-    return { ok: false, error: errorText(error) };
+    if (!isAlreadyDeleted(error)) return { ok: false, error: errorText(error) };
   }
   try {
     await reload();
